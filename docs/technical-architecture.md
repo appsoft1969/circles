@@ -11,6 +11,7 @@ It is intentionally simple:
 - SQLite fallback: `website/data/circles.sqlite`.
 - Runtime API: `http://127.0.0.1:8787`.
 - Local website: `http://127.0.0.1:5174`.
+- Current public HTTPS domain: `https://useincircle.app`, with `.com`, `.info`, and `www` variants redirected by Caddy.
 
 ## Product Architecture
 
@@ -165,6 +166,8 @@ The HTTP routes live in `website/server/index.js`.
 
 Route handlers should not contain raw SQL. Database-specific behavior belongs in `website/server/data/sqliteStore.js` or `website/server/data/postgresStore.js`, selected by `website/server/data/storeFactory.js`.
 
+The current auth scaffold is deliberately narrow: API routes can resolve a demo profile from `x-incircle-profile-id` or `x-incircle-profile-email`. This is only a bridge for private-beta API shape and smoke tests. Real production auth should use a signed session/JWT flow and enforce Postgres RLS or equivalent server-side policy checks.
+
 ## Data Store Selection
 
 The API uses `website/server/data/storeFactory.js`.
@@ -172,8 +175,8 @@ The API uses `website/server/data/storeFactory.js`.
 Supported `DATA_STORE` values:
 
 - `sqlite`: default working MVP runtime.
-- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, and CSV export. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
-- Task announcements and task comments are part of the core task object in both stores. They are the first step toward in-app communication without turning the product into a chat app clone.
+- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, CSV export, membership/permission APIs, and Postgres-backed conversation/message/push-device scaffolding. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
+- Task announcements and task comments are part of the core task object in both stores. Postgres also exposes the first conversation/message/read/notification/device APIs, still tied to circles and tasks.
 
 SQLite environment variables:
 
@@ -187,7 +190,10 @@ Current Postgres store status:
 
 - `GET /api/health`: implemented.
 - `GET /api/bootstrap`: implemented for circles, task templates, tasks, options, responses, and stats.
+- `GET /api/session`: implemented as temporary profile-header auth scaffold.
+- `GET /api/circles/:circleId/members`: implemented with active membership requirement.
 - `GET /api/tasks/:taskId`: implemented.
+- `GET /api/tasks/:taskId/permissions`: implemented for read/respond/manage/announce/close/export flags.
 - `POST /api/tasks`: implemented.
 - `PATCH /api/tasks/:taskId`: implemented for editable task details and active options.
 - `POST /api/tasks/:taskId/convert`: implemented for converting `interest_check` tasks into `activity`, `poll`, or `claim` tasks.
@@ -198,8 +204,24 @@ Current Postgres store status:
 - `POST /api/tasks/:taskId/announcements`: implemented.
 - `POST /api/tasks/:taskId/comments`: implemented.
 - `GET /api/tasks/:taskId/export.csv`: implemented.
+- `GET /api/circles/:circleId/conversations`: implemented in Postgres.
+- `POST /api/circles/:circleId/conversations`: implemented in Postgres.
+- `GET /api/conversations/:conversationId/messages`: implemented in Postgres.
+- `POST /api/conversations/:conversationId/messages`: implemented in Postgres and queues in-app notification rows for other profile-linked members.
+- `POST /api/messages/:messageId/read`: implemented in Postgres with membership check.
+- `POST /api/devices`: implemented in Postgres for push-token registration.
+- `GET /api/notifications`: implemented in Postgres.
+- `PATCH /api/notifications/:notificationId/read`: implemented in Postgres.
 
 Do not treat `DATA_STORE=postgres` as fully production-ready until auth, RLS/access policies, deployment hardening, backups, monitoring, and operational verification are implemented.
+
+### `GET /api/session`
+
+Returns the current temporary profile context and circle memberships. Anonymous calls return `authenticated: false`.
+
+### `GET /api/circles/:circleId/members`
+
+Returns active members for a circle. Requires the temporary profile header to resolve to an active member.
 
 ### `GET /api/health`
 
@@ -212,6 +234,10 @@ Returns circles, tasks, templates, stats, options, and responses.
 ### `GET /api/tasks/:taskId`
 
 Returns one task with options, responses, and stats.
+
+### `GET /api/tasks/:taskId/permissions`
+
+Returns task-level capability flags for the temporary profile context.
 
 ### `POST /api/tasks`
 
@@ -253,6 +279,21 @@ Creates a task-level comment from an organizer or participant.
 
 Exports task responses as CSV.
 
+### Conversation, Notification, And Device APIs
+
+The Postgres store now supports:
+
+- `GET /api/circles/:circleId/conversations`
+- `POST /api/circles/:circleId/conversations`
+- `GET /api/conversations/:conversationId/messages`
+- `POST /api/conversations/:conversationId/messages`
+- `POST /api/messages/:messageId/read`
+- `POST /api/devices`
+- `GET /api/notifications`
+- `PATCH /api/notifications/:notificationId/read`
+
+These are foundations for in-app coordination, not a standalone chat product. SQLite returns `501` for these realtime/push routes.
+
 ## Local Commands
 
 From `website/`:
@@ -265,6 +306,7 @@ npm run dev -- --port 5174
 npm run test:api
 npm run backup:postgres
 npm run backup:postgres:status
+npm run ops:status
 npm run build
 ```
 
@@ -277,6 +319,8 @@ npm run build
 - share-link task read
 - task announcement creation
 - task comment creation
+- session, circle-member, and task-permission scaffolding
+- Postgres-only conversation, message read, notification list, and device-registration scaffolding
 - participant response submission
 - payment and fulfillment status update
 - task close/reopen
@@ -287,6 +331,8 @@ Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailabl
 `npm run backup:postgres` creates a Postgres custom-format dump, restores it into a temporary database to verify core table counts, and copies verified artifacts to iCloud Drive when `OFFSITE_BACKUP_DIR` is set. The public Mac host also runs this check daily through `com.useincircle.postgres-backup`.
 
 `npm run backup:postgres:status` checks backup freshness, local dump integrity, restore-check status, and iCloud copy presence/hash consistency. It writes `website/artifacts/postgres-backup-status.json` and exits non-zero when the backup state is unhealthy.
+
+`npm run ops:status` checks the public site, `.app/.com/.info` redirects, API health, bootstrap data, a live share link, and the current backup status. It writes `website/artifacts/incircle-ops-status.json` and exits non-zero when the public hosting state is unhealthy. The launchd version enables macOS notifications on failure and stores cooldown state in `website/artifacts/incircle-ops-alert-state.json`.
 
 Current local URLs:
 

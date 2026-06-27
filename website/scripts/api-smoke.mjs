@@ -92,12 +92,14 @@ async function request(baseUrl, path, options) {
   return { status: response.status, body };
 }
 
-async function runApiFlow({ label, env, cleanupCreatedTask }) {
+async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushToken }) {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const api = startApi({ HOST: "127.0.0.1", PORT: String(port), ...env });
+  const actorHeaders = { "x-incircle-profile-email": "kevin@example.com" };
   let createdTaskId = null;
   const createdTaskIds = [];
+  const createdPushTokens = [];
 
   try {
     const health = await waitForHealth(baseUrl, api);
@@ -116,8 +118,27 @@ async function runApiFlow({ label, env, cleanupCreatedTask }) {
       `${label}: expected claim template`,
     );
 
+    const anonymousSession = await request(baseUrl, "/api/session");
+    assert.equal(anonymousSession.body.authenticated, false);
+    assert.equal(anonymousSession.body.profile, null);
+
+    const session = await request(baseUrl, "/api/session", { headers: actorHeaders });
+    assert.equal(session.body.authenticated, true);
+    assert.equal(session.body.profile.email, "kevin@example.com");
+    assert.ok(session.body.memberships.length >= 1, `${label}: expected profile memberships`);
+
+    const memberCircleIds = new Set(session.body.memberships.map((membership) => membership.circleId));
     const officeCircle =
-      bootstrap.body.circles.find((circle) => circle.name.includes("辦公室")) ?? bootstrap.body.circles[0];
+      bootstrap.body.circles.find((circle) => circle.name.includes("辦公室") && memberCircleIds.has(circle.id)) ??
+      bootstrap.body.circles.find((circle) => memberCircleIds.has(circle.id)) ??
+      bootstrap.body.circles[0];
+
+    const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: actorHeaders });
+    assert.ok(members.body.members.length >= 1, `${label}: expected circle members`);
+    assert.ok(
+      members.body.members.some((member) => member.role === "owner"),
+      `${label}: expected owner membership`,
+    );
 
     const created = await request(baseUrl, "/api/tasks", {
       method: "POST",
@@ -141,6 +162,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask }) {
     assert.equal(created.body.task.options.length, 2);
     createdTaskId = created.body.task.id;
     createdTaskIds.push(createdTaskId);
+
+    const permissions = await request(baseUrl, `/api/tasks/${createdTaskId}/permissions`, { headers: actorHeaders });
+    assert.equal(permissions.body.permissions.authenticated, true);
+    assert.equal(permissions.body.permissions.canManage, true);
+    assert.equal(permissions.body.permissions.canAnnounce, true);
+    assert.equal(permissions.body.permissions.canExport, true);
 
     const edited = await request(baseUrl, `/api/tasks/${createdTaskId}`, {
       method: "PATCH",
@@ -210,6 +237,73 @@ async function runApiFlow({ label, env, cleanupCreatedTask }) {
     assert.equal(commented.status, 201);
     assert.equal(commented.body.task.comments.length, 1);
     assert.equal(commented.body.task.comments[0].participantName, `${label} 測試成員`);
+
+    if (label === "postgres") {
+      const conversation = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...actorHeaders },
+        body: JSON.stringify({
+          taskId: createdTaskId,
+          title: `${label} API smoke 討論`,
+          metadata: { smoke: true, backend: label },
+        }),
+      });
+      assert.equal(conversation.status, 201);
+      assert.equal(conversation.body.conversation.taskId, createdTaskId);
+
+      const conversations = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations?taskId=${createdTaskId}`, {
+        headers: actorHeaders,
+      });
+      assert.ok(
+        conversations.body.conversations.some((item) => item.id === conversation.body.conversation.id),
+        `${label}: expected created conversation in list`,
+      );
+
+      const message = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...actorHeaders },
+        body: JSON.stringify({
+          body: `${label} 測試訊息：飲料到前台後請自取。`,
+          metadata: { smoke: true },
+        }),
+      });
+      assert.equal(message.status, 201);
+      assert.equal(message.body.message.authorName, "Kevin");
+
+      const messages = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
+        headers: actorHeaders,
+      });
+      assert.ok(
+        messages.body.messages.some((item) => item.id === message.body.message.id),
+        `${label}: expected created message in list`,
+      );
+
+      const receipt = await request(baseUrl, `/api/messages/${message.body.message.id}/read`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...actorHeaders },
+        body: JSON.stringify({}),
+      });
+      assert.equal(receipt.status, 201);
+      assert.equal(receipt.body.receipt.messageId, message.body.message.id);
+
+      const pushToken = `api-smoke-${createdTaskId}`;
+      createdPushTokens.push(pushToken);
+      const device = await request(baseUrl, "/api/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...actorHeaders },
+        body: JSON.stringify({
+          platform: "web",
+          pushToken,
+          appVersion: "smoke",
+          deviceName: "API smoke",
+        }),
+      });
+      assert.equal(device.status, 201);
+      assert.equal(device.body.device.pushToken, pushToken);
+
+      const notifications = await request(baseUrl, "/api/notifications", { headers: actorHeaders });
+      assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
+    }
 
     const response = submitted.body.task.responses.find((item) => item.participantName === `${label} 測試成員`);
     assert.ok(response, `${label}: expected created response`);
@@ -317,6 +411,11 @@ async function runApiFlow({ label, env, cleanupCreatedTask }) {
         await cleanupCreatedTask(taskId);
       }
     }
+    if (cleanupCreatedPushToken) {
+      for (const pushToken of createdPushTokens.toReversed()) {
+        await cleanupCreatedPushToken(pushToken);
+      }
+    }
   }
 }
 
@@ -357,6 +456,16 @@ async function cleanupPostgresTask(taskId) {
   }
 }
 
+async function cleanupPostgresPushToken(pushToken) {
+  if (!pushToken) return;
+  const pool = new Pool({ connectionString: postgresUrl });
+  try {
+    await pool.query("DELETE FROM devices WHERE push_token = $1", [pushToken]);
+  } finally {
+    await pool.end();
+  }
+}
+
 function cleanupSqliteFiles(dbPath) {
   for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
     if (existsSync(path)) rmSync(path, { force: true });
@@ -384,6 +493,7 @@ async function main() {
     label: "postgres",
     env: { DATA_STORE: "postgres", DATABASE_URL: postgresUrl },
     cleanupCreatedTask: cleanupPostgresTask,
+    cleanupCreatedPushToken: cleanupPostgresPushToken,
   });
 
   log("all API smoke tests passed");

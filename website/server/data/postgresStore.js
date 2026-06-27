@@ -147,6 +147,95 @@ function commentFromRow(row) {
   };
 }
 
+function profileFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    displayName: row.display_name,
+    email: row.email,
+    phone: row.phone,
+    avatarUrl: row.avatar_url,
+    locale: row.locale,
+    timezone: row.timezone,
+    status: row.status,
+  };
+}
+
+function membershipFromRow(row) {
+  return {
+    id: row.id,
+    circleId: row.circle_id,
+    circleName: row.circle_name,
+    profileId: row.profile_id,
+    displayName: row.display_name,
+    contactHint: row.contact_hint,
+    role: row.role,
+    status: row.status,
+    joinedAt: toIso(row.joined_at),
+  };
+}
+
+function conversationFromRow(row) {
+  return {
+    id: row.id,
+    circleId: row.circle_id,
+    taskId: row.task_id,
+    type: row.type,
+    title: row.title,
+    metadata: parseJson(row.metadata),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+  };
+}
+
+function messageFromRow(row) {
+  return {
+    id: row.id,
+    conversationId: row.conversation_id,
+    authorProfileId: row.author_profile_id,
+    authorName: row.author_name ?? "",
+    body: row.body,
+    metadata: parseJson(row.metadata),
+    createdAt: toIso(row.created_at),
+    editedAt: toIso(row.edited_at),
+    deletedAt: toIso(row.deleted_at),
+  };
+}
+
+function deviceFromRow(row) {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    platform: row.platform,
+    pushToken: row.push_token,
+    appVersion: row.app_version,
+    deviceName: row.device_name,
+    locale: row.locale,
+    timezone: row.timezone,
+    lastSeenAt: toIso(row.last_seen_at),
+    createdAt: toIso(row.created_at),
+  };
+}
+
+function notificationFromRow(row) {
+  return {
+    id: row.id,
+    recipientProfileId: row.recipient_profile_id,
+    actorProfileId: row.actor_profile_id,
+    circleId: row.circle_id,
+    taskId: row.task_id,
+    announcementId: row.announcement_id,
+    messageId: row.message_id,
+    type: row.type,
+    title: row.title,
+    body: row.body,
+    status: row.status,
+    data: parseJson(row.data),
+    createdAt: toIso(row.created_at),
+    readAt: toIso(row.read_at),
+  };
+}
+
 function summarizeResponses(responses) {
   return responses.reduce(
     (acc, response) => {
@@ -257,6 +346,222 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     } finally {
       client.release();
     }
+  }
+
+  async function resolveProfile(actor = {}, client = pool) {
+    const profileId = actor.profileId ? String(actor.profileId).trim() : "";
+    const email = actor.email ? String(actor.email).trim().toLowerCase() : "";
+    if (!profileId && !email) return null;
+
+    const result = profileId
+      ? await client.query(
+          `
+            SELECT
+              id::text,
+              display_name,
+              email,
+              phone,
+              avatar_url,
+              locale,
+              timezone,
+              status::text
+            FROM profiles
+            WHERE id::text = $1
+              AND deleted_at IS NULL
+              AND status = 'active'
+            LIMIT 1
+          `,
+          [profileId],
+        )
+      : await client.query(
+          `
+            SELECT
+              id::text,
+              display_name,
+              email,
+              phone,
+              avatar_url,
+              locale,
+              timezone,
+              status::text
+            FROM profiles
+            WHERE lower(email) = $1
+              AND deleted_at IS NULL
+              AND status = 'active'
+            LIMIT 1
+          `,
+          [email],
+        );
+
+    return profileFromRow(result.rows[0]);
+  }
+
+  async function requireProfile(actor = {}, client = pool) {
+    const profile = await resolveProfile(actor, client);
+    if (!profile) throw new StoreError(401, "Profile authentication required");
+    return profile;
+  }
+
+  async function getMembership(circleId, profileId, client = pool) {
+    const result = await client.query(
+      `
+        SELECT
+          cm.id::text,
+          cm.circle_id::text,
+          c.name AS circle_name,
+          cm.profile_id::text,
+          cm.display_name,
+          cm.contact_hint,
+          cm.role::text,
+          cm.status::text,
+          cm.joined_at
+        FROM circle_memberships cm
+        JOIN circles c ON c.id = cm.circle_id
+        WHERE cm.circle_id::text = $1
+          AND cm.profile_id::text = $2
+          AND cm.status = 'active'
+          AND c.archived_at IS NULL
+        LIMIT 1
+      `,
+      [circleId, profileId],
+    );
+    return result.rows[0] ? membershipFromRow(result.rows[0]) : null;
+  }
+
+  async function requireCircleMember(circleId, actor = {}, { roles = null, client = pool } = {}) {
+    const profile = await requireProfile(actor, client);
+    const membership = await getMembership(circleId, profile.id, client);
+    if (!membership) throw new StoreError(403, "Circle membership required");
+    if (roles && !roles.includes(membership.role)) {
+      throw new StoreError(403, `Circle role required: ${roles.join(", ")}`);
+    }
+    return { profile, membership };
+  }
+
+  async function getSessionContext(actor = {}) {
+    const profile = await resolveProfile(actor);
+    if (!profile) {
+      return {
+        authenticated: false,
+        profile: null,
+        memberships: [],
+        capabilities: {
+          createTask: false,
+          manageTasks: false,
+          circleChat: false,
+          pushDevices: false,
+        },
+      };
+    }
+
+    const membershipsResult = await pool.query(
+      `
+        SELECT
+          cm.id::text,
+          cm.circle_id::text,
+          c.name AS circle_name,
+          cm.profile_id::text,
+          cm.display_name,
+          cm.contact_hint,
+          cm.role::text,
+          cm.status::text,
+          cm.joined_at
+        FROM circle_memberships cm
+        JOIN circles c ON c.id = cm.circle_id
+        WHERE cm.profile_id::text = $1
+          AND cm.status = 'active'
+          AND c.archived_at IS NULL
+        ORDER BY c.created_at ASC
+      `,
+      [profile.id],
+    );
+    const memberships = membershipsResult.rows.map(membershipFromRow);
+    const canManage = memberships.some((membership) => ["owner", "admin"].includes(membership.role));
+
+    return {
+      authenticated: true,
+      profile,
+      memberships,
+      capabilities: {
+        createTask: canManage,
+        manageTasks: canManage,
+        circleChat: memberships.length > 0,
+        pushDevices: true,
+      },
+    };
+  }
+
+  async function listCircleMembers(circleId, actor = {}) {
+    await requireCircleMember(circleId, actor);
+
+    const result = await pool.query(
+      `
+        SELECT
+          cm.id::text,
+          cm.circle_id::text,
+          c.name AS circle_name,
+          cm.profile_id::text,
+          cm.display_name,
+          cm.contact_hint,
+          cm.role::text,
+          cm.status::text,
+          cm.joined_at
+        FROM circle_memberships cm
+        JOIN circles c ON c.id = cm.circle_id
+        WHERE cm.circle_id::text = $1
+          AND cm.status = 'active'
+        ORDER BY
+          CASE cm.role
+            WHEN 'owner' THEN 1
+            WHEN 'admin' THEN 2
+            WHEN 'member' THEN 3
+            ELSE 4
+          END,
+          cm.created_at ASC
+      `,
+      [circleId],
+    );
+
+    return result.rows.map(membershipFromRow);
+  }
+
+  async function getTaskPermissions(taskId, actor = {}) {
+    const taskResult = await pool.query(
+      `
+        SELECT
+          id::text,
+          circle_id::text,
+          created_by_profile_id::text,
+          status::text
+        FROM tasks
+        WHERE id::text = $1
+          AND archived_at IS NULL
+        LIMIT 1
+      `,
+      [taskId],
+    );
+    const task = taskResult.rows[0];
+    if (!task) return null;
+
+    const profile = await resolveProfile(actor);
+    const membership = profile ? await getMembership(task.circle_id, profile.id) : null;
+    const canManage =
+      Boolean(profile) &&
+      (task.created_by_profile_id === profile.id || ["owner", "admin"].includes(membership?.role));
+
+    return {
+      authenticated: Boolean(profile),
+      profileId: profile?.id ?? null,
+      circleId: task.circle_id,
+      role: membership?.role ?? null,
+      canRead: true,
+      canComment: Boolean(membership) || task.status === "open",
+      canRespond: task.status === "open",
+      canManage,
+      canAnnounce: canManage,
+      canClose: canManage,
+      canExport: canManage,
+    };
   }
 
   async function hydrateTasks(taskRows) {
@@ -1001,6 +1306,14 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       );
       const task = taskResult.rows[0];
       if (!task) return null;
+      let authorProfileId = task.created_by_profile_id;
+      if (body.actor?.profileId || body.actor?.email) {
+        const { profile } = await requireCircleMember(task.circle_id, body.actor, {
+          roles: ["owner", "admin"],
+          client,
+        });
+        authorProfileId = profile.id;
+      }
 
       await client.query(
         `
@@ -1020,7 +1333,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         [
           task.circle_id,
           task.id,
-          task.created_by_profile_id,
+          authorProfileId,
           body.title || "事項公告",
           body.body,
           priority,
@@ -1042,7 +1355,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     const updatedTaskId = await withTransaction(async (client) => {
       const taskResult = await client.query(
         `
-          SELECT id::text
+          SELECT id::text, circle_id::text
           FROM tasks
           WHERE id::text = $1
             AND archived_at IS NULL
@@ -1052,18 +1365,26 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       );
       const task = taskResult.rows[0];
       if (!task) return null;
+      let authorProfileId = null;
+      let participantName = body.participantName || body.authorName || "成員";
+      if (body.actor?.profileId || body.actor?.email) {
+        const { profile } = await requireCircleMember(task.circle_id, body.actor, { client });
+        authorProfileId = profile.id;
+        participantName = profile.displayName;
+      }
 
       await client.query(
         `
           INSERT INTO task_comments (
             task_id,
+            author_profile_id,
             participant_name,
             body,
             metadata
           )
-          VALUES ($1, $2, $3, $4::jsonb)
+          VALUES ($1, $2, $3, $4, $5::jsonb)
         `,
-        [task.id, body.participantName || body.authorName || "成員", body.body, json(body.metadata)],
+        [task.id, authorProfileId, participantName, body.body, json(body.metadata)],
       );
 
       return task.id;
@@ -1073,10 +1394,384 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return getTask(updatedTaskId);
   }
 
+  async function conversationAccess(conversationId, actor = {}, client = pool) {
+    const conversationResult = await client.query(
+      `
+        SELECT
+          id::text,
+          circle_id::text,
+          task_id::text,
+          type::text,
+          title,
+          metadata,
+          created_at,
+          updated_at
+        FROM conversations
+        WHERE id::text = $1
+          AND archived_at IS NULL
+        LIMIT 1
+      `,
+      [conversationId],
+    );
+    const conversation = conversationResult.rows[0];
+    if (!conversation) throw new StoreError(404, "Conversation not found");
+    const access = await requireCircleMember(conversation.circle_id, actor, { client });
+    return { conversation, ...access };
+  }
+
+  async function listConversations(circleId, { taskId = null, actor = {} } = {}) {
+    await requireCircleMember(circleId, actor);
+    const params = [circleId];
+    let filter = "";
+    if (taskId) {
+      params.push(taskId);
+      filter = "AND task_id::text = $2";
+    }
+
+    const result = await pool.query(
+      `
+        SELECT
+          id::text,
+          circle_id::text,
+          task_id::text,
+          type::text,
+          title,
+          metadata,
+          created_at,
+          updated_at
+        FROM conversations
+        WHERE circle_id::text = $1
+          ${filter}
+          AND archived_at IS NULL
+        ORDER BY updated_at DESC, created_at DESC
+      `,
+      params,
+    );
+
+    return result.rows.map(conversationFromRow);
+  }
+
+  async function createConversation(circleId, body = {}) {
+    const { membership } = await requireCircleMember(circleId, body.actor);
+    const type = body.type || (body.taskId ? "task" : "circle");
+    if (!["circle", "task", "support"].includes(type)) throw new StoreError(400, `Invalid conversation type: ${type}`);
+
+    if (body.taskId) {
+      const taskResult = await pool.query(
+        `
+          SELECT id::text
+          FROM tasks
+          WHERE id::text = $1
+            AND circle_id::text = $2
+            AND archived_at IS NULL
+          LIMIT 1
+        `,
+        [body.taskId, circleId],
+      );
+      if (!taskResult.rows[0]) throw new StoreError(400, "Task does not belong to circle");
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO conversations (
+          circle_id,
+          task_id,
+          type,
+          title,
+          metadata
+        )
+        VALUES ($1, $2, $3::conversation_type, $4, $5::jsonb)
+        RETURNING
+          id::text,
+          circle_id::text,
+          task_id::text,
+          type::text,
+          title,
+          metadata,
+          created_at,
+          updated_at
+      `,
+      [
+        circleId,
+        body.taskId || null,
+        type,
+        body.title || (type === "task" ? "事項討論" : "圈內聊天"),
+        json({ ...(body.metadata ?? {}), createdByMembershipId: membership.id }),
+      ],
+    );
+
+    return conversationFromRow(result.rows[0]);
+  }
+
+  async function listConversationMessages(conversationId, { actor = {}, limit = 50 } = {}) {
+    await conversationAccess(conversationId, actor);
+    const result = await pool.query(
+      `
+        SELECT
+          m.id::text,
+          m.conversation_id::text,
+          m.author_profile_id::text,
+          COALESCE(p.display_name, '') AS author_name,
+          m.body,
+          m.metadata,
+          m.created_at,
+          m.edited_at,
+          m.deleted_at
+        FROM messages m
+        LEFT JOIN profiles p ON p.id = m.author_profile_id
+        WHERE m.conversation_id::text = $1
+          AND m.deleted_at IS NULL
+        ORDER BY m.created_at DESC
+        LIMIT $2
+      `,
+      [conversationId, Math.min(100, positiveInteger(limit, 50))],
+    );
+
+    return result.rows.map(messageFromRow).reverse();
+  }
+
+  async function createConversationMessage(conversationId, body = {}) {
+    if (!body.body) throw new StoreError(400, "Message body is required");
+
+    return withTransaction(async (client) => {
+      const { conversation, profile } = await conversationAccess(conversationId, body.actor, client);
+      const messageResult = await client.query(
+        `
+          INSERT INTO messages (
+            conversation_id,
+            author_profile_id,
+            body,
+            metadata
+          )
+          VALUES ($1, $2, $3, $4::jsonb)
+          RETURNING
+            id::text,
+            conversation_id::text,
+            author_profile_id::text,
+            $5::text AS author_name,
+            body,
+            metadata,
+            created_at,
+            edited_at,
+            deleted_at
+        `,
+        [conversation.id, profile.id, body.body, json(body.metadata), profile.displayName],
+      );
+      const message = messageFromRow(messageResult.rows[0]);
+
+      await client.query("UPDATE conversations SET updated_at = now() WHERE id::text = $1", [conversation.id]);
+      await client.query(
+        `
+          INSERT INTO notifications (
+            recipient_profile_id,
+            actor_profile_id,
+            circle_id,
+            task_id,
+            message_id,
+            type,
+            title,
+            body,
+            data
+          )
+          SELECT
+            cm.profile_id,
+            $1::uuid,
+            $2::uuid,
+            $3::uuid,
+            $4::uuid,
+            'message',
+            $5,
+            $6,
+            $7::jsonb
+          FROM circle_memberships cm
+          WHERE cm.circle_id = $2::uuid
+            AND cm.status = 'active'
+            AND cm.profile_id IS NOT NULL
+            AND cm.profile_id <> $1::uuid
+        `,
+        [
+          profile.id,
+          conversation.circle_id,
+          conversation.task_id,
+          message.id,
+          conversation.title || "圈內新訊息",
+          body.body.slice(0, 160),
+          json({ conversationId: conversation.id }),
+        ],
+      );
+
+      return { conversation: conversationFromRow(conversation), message };
+    });
+  }
+
+  async function markMessageRead(messageId, body = {}) {
+    const messageResult = await pool.query(
+      `
+        SELECT
+          m.id::text,
+          c.circle_id::text
+        FROM messages m
+        JOIN conversations c ON c.id = m.conversation_id
+        WHERE m.id::text = $1
+          AND m.deleted_at IS NULL
+          AND c.archived_at IS NULL
+        LIMIT 1
+      `,
+      [messageId],
+    );
+    const message = messageResult.rows[0];
+    if (!message) throw new StoreError(404, "Message not found");
+
+    const { profile } = await requireCircleMember(message.circle_id, body.actor);
+    const result = await pool.query(
+      `
+        INSERT INTO message_reads (message_id, profile_id, read_at)
+        VALUES ($1, $2, now())
+        ON CONFLICT (message_id, profile_id)
+        DO UPDATE SET read_at = EXCLUDED.read_at
+        RETURNING id::text, message_id::text, profile_id::text, read_at
+      `,
+      [messageId, profile.id],
+    );
+
+    return {
+      id: result.rows[0].id,
+      messageId: result.rows[0].message_id,
+      profileId: result.rows[0].profile_id,
+      readAt: toIso(result.rows[0].read_at),
+    };
+  }
+
+  async function registerDevice(body = {}) {
+    const profile = await requireProfile(body.actor);
+    if (!body.pushToken) throw new StoreError(400, "pushToken is required");
+    const platform = body.platform || "unknown";
+    if (!["ios", "android", "web", "unknown"].includes(platform)) {
+      throw new StoreError(400, `Invalid device platform: ${platform}`);
+    }
+
+    const result = await pool.query(
+      `
+        INSERT INTO devices (
+          profile_id,
+          platform,
+          push_token,
+          app_version,
+          device_name,
+          locale,
+          timezone,
+          last_seen_at
+        )
+        VALUES ($1, $2::device_platform, $3, $4, $5, $6, $7, now())
+        ON CONFLICT (push_token)
+        DO UPDATE SET
+          profile_id = EXCLUDED.profile_id,
+          platform = EXCLUDED.platform,
+          app_version = EXCLUDED.app_version,
+          device_name = EXCLUDED.device_name,
+          locale = EXCLUDED.locale,
+          timezone = EXCLUDED.timezone,
+          last_seen_at = now(),
+          revoked_at = NULL
+        RETURNING
+          id::text,
+          profile_id::text,
+          platform::text,
+          push_token,
+          app_version,
+          device_name,
+          locale,
+          timezone,
+          last_seen_at,
+          created_at
+      `,
+      [
+        profile.id,
+        platform,
+        body.pushToken,
+        body.appVersion || null,
+        body.deviceName || null,
+        body.locale || profile.locale,
+        body.timezone || profile.timezone,
+      ],
+    );
+
+    return deviceFromRow(result.rows[0]);
+  }
+
+  async function listNotifications(actor = {}) {
+    const profile = await requireProfile(actor);
+    const result = await pool.query(
+      `
+        SELECT
+          id::text,
+          recipient_profile_id::text,
+          actor_profile_id::text,
+          circle_id::text,
+          task_id::text,
+          announcement_id::text,
+          message_id::text,
+          type,
+          title,
+          body,
+          status::text,
+          data,
+          created_at,
+          read_at
+        FROM notifications
+        WHERE recipient_profile_id::text = $1
+          AND cancelled_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 50
+      `,
+      [profile.id],
+    );
+
+    return result.rows.map(notificationFromRow);
+  }
+
+  async function markNotificationRead(notificationId, actor = {}) {
+    const profile = await requireProfile(actor);
+    const result = await pool.query(
+      `
+        UPDATE notifications
+        SET read_at = COALESCE(read_at, now()),
+            status = CASE
+              WHEN status = 'queued' THEN 'read'::notification_status
+              ELSE status
+            END
+        WHERE id::text = $1
+          AND recipient_profile_id::text = $2
+          AND cancelled_at IS NULL
+        RETURNING
+          id::text,
+          recipient_profile_id::text,
+          actor_profile_id::text,
+          circle_id::text,
+          task_id::text,
+          announcement_id::text,
+          message_id::text,
+          type,
+          title,
+          body,
+          status::text,
+          data,
+          created_at,
+          read_at
+      `,
+      [notificationId, profile.id],
+    );
+
+    return result.rows[0] ? notificationFromRow(result.rows[0]) : null;
+  }
+
   return {
     backend: "postgres",
     connectionString: maskConnectionString(connectionString),
     health,
+    getSessionContext,
+    listCircleMembers,
+    getTaskPermissions,
     getBootstrap,
     getTask,
     getTaskByShareToken,
@@ -1088,6 +1783,14 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     updateTaskStatus,
     createTaskAnnouncement,
     createTaskComment,
+    listConversations,
+    createConversation,
+    listConversationMessages,
+    createConversationMessage,
+    markMessageRead,
+    registerDevice,
+    listNotifications,
+    markNotificationRead,
     buildTaskCsv,
     close: () => pool.end(),
   };

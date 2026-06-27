@@ -19,3 +19,7 @@ useincircle.app {
 www.useincircle.app {
 	redir https://useincircle.app{uri} permanent
 }
+
+useincircle.com, www.useincircle.com, useincircle.info, www.useincircle.info {
+	redir https://useincircle.app{uri} permanent
+}

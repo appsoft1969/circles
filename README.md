@@ -59,7 +59,7 @@ The first database-backed website is implemented as a React/Vite frontend with a
 
 The current public Mac-hosted site at `https://useincircle.app` runs the Express API with `DATA_STORE=postgres` against Homebrew Postgres at `127.0.0.1:5434`. SQLite remains supported for isolated local development and fallback testing through `DATA_STORE=sqlite`.
 
-Postgres/Supabase-oriented schema work lives in `supabase/`. The current Postgres path supports local schema validation, migrated public data, demo seed data, task reads, share-link reads, task creation, task detail/option edits, interest-check conversion, participant responses, task announcements, task comments, status updates, and CSV export.
+Postgres/Supabase-oriented schema work lives in `supabase/`. The current Postgres path supports local schema validation, migrated public data, demo seed data, task reads, share-link reads, task creation, task detail/option edits, interest-check conversion, participant responses, task announcements, task comments, status updates, CSV export, authenticated session/membership scaffolding, task permissions, and Postgres-backed circle/task conversation APIs. Real production auth, RLS policies, push delivery provider integration, and mobile realtime subscriptions are still future work.
 
 Local development URLs:
 
@@ -78,7 +78,7 @@ cd website
 npm run test:api
 ```
 
-This runs the same create-task, task edit, interest-check conversion, announcement, comment, share-response, status-update, and CSV flow against SQLite and local Postgres.
+This runs the same create-task, task edit, interest-check conversion, announcement, comment, share-response, status-update, and CSV flow against SQLite and local Postgres. It also verifies session/membership/permission APIs, plus Postgres-only conversation, message read, notification-list, and device-registration scaffolding.
 
 Postgres backup and restore drill:
 
@@ -86,9 +86,10 @@ Postgres backup and restore drill:
 cd website
 npm run backup:postgres
 npm run backup:postgres:status
+npm run ops:status
 ```
 
-The Mac-hosted public database also has a daily LaunchAgent backup/restore check at `03:20`, with a copy written to iCloud Drive; see [Postgres Backup And Restore Runbook](docs/postgres-backup-restore.md).
+The Mac-hosted public database also has a daily LaunchAgent backup/restore check at `03:20`, with a copy written to iCloud Drive. The public site has a 15-minute operational health check through `com.useincircle.ops-health-check`, with macOS notifications on failure; see [Postgres Backup And Restore Runbook](docs/postgres-backup-restore.md) and [Local Mac Public Hosting](docs/local-mac-public-hosting.md).
 
 ## Key Product Constraint
 

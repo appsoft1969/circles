@@ -16,6 +16,13 @@ if (process.argv.includes("--seed-only")) {
 const app = express();
 app.use(express.json());
 
+function actorFromRequest(req) {
+  return {
+    profileId: req.get("x-incircle-profile-id") || null,
+    email: req.get("x-incircle-profile-email") || null,
+  };
+}
+
 function sendError(res, error) {
   if (error instanceof StoreError) {
     return res.status(error.status).json({ error: error.message });
@@ -36,10 +43,25 @@ app.get("/api/bootstrap", route(async (_req, res) => {
   res.json(await store.getBootstrap());
 }));
 
+app.get("/api/session", route(async (req, res) => {
+  res.json(await store.getSessionContext(actorFromRequest(req)));
+}));
+
+app.get("/api/circles/:circleId/members", route(async (req, res) => {
+  const members = await store.listCircleMembers(req.params.circleId, actorFromRequest(req));
+  res.json({ members });
+}));
+
 app.get("/api/tasks/:taskId", route(async (req, res) => {
   const task = await store.getTask(req.params.taskId);
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.json({ task });
+}));
+
+app.get("/api/tasks/:taskId/permissions", route(async (req, res) => {
+  const permissions = await store.getTaskPermissions(req.params.taskId, actorFromRequest(req));
+  if (!permissions) return res.status(404).json({ error: "Task not found" });
+  res.json({ permissions });
 }));
 
 app.post("/api/tasks", route(async (req, res) => {
@@ -83,15 +105,79 @@ app.patch("/api/tasks/:taskId/status", route(async (req, res) => {
 }));
 
 app.post("/api/tasks/:taskId/announcements", route(async (req, res) => {
-  const task = await store.createTaskAnnouncement(req.params.taskId, req.body ?? {});
+  const task = await store.createTaskAnnouncement(req.params.taskId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.status(201).json({ task });
 }));
 
 app.post("/api/tasks/:taskId/comments", route(async (req, res) => {
-  const task = await store.createTaskComment(req.params.taskId, req.body ?? {});
+  const task = await store.createTaskComment(req.params.taskId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.status(201).json({ task });
+}));
+
+app.get("/api/circles/:circleId/conversations", route(async (req, res) => {
+  const conversations = await store.listConversations(req.params.circleId, {
+    taskId: req.query.taskId || null,
+    actor: actorFromRequest(req),
+  });
+  res.json({ conversations });
+}));
+
+app.post("/api/circles/:circleId/conversations", route(async (req, res) => {
+  const conversation = await store.createConversation(req.params.circleId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ conversation });
+}));
+
+app.get("/api/conversations/:conversationId/messages", route(async (req, res) => {
+  const messages = await store.listConversationMessages(req.params.conversationId, {
+    actor: actorFromRequest(req),
+  });
+  res.json({ messages });
+}));
+
+app.post("/api/conversations/:conversationId/messages", route(async (req, res) => {
+  const result = await store.createConversationMessage(req.params.conversationId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json(result);
+}));
+
+app.post("/api/messages/:messageId/read", route(async (req, res) => {
+  const receipt = await store.markMessageRead(req.params.messageId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ receipt });
+}));
+
+app.post("/api/devices", route(async (req, res) => {
+  const device = await store.registerDevice({
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ device });
+}));
+
+app.get("/api/notifications", route(async (req, res) => {
+  const notifications = await store.listNotifications(actorFromRequest(req));
+  res.json({ notifications });
+}));
+
+app.patch("/api/notifications/:notificationId/read", route(async (req, res) => {
+  const notification = await store.markNotificationRead(req.params.notificationId, actorFromRequest(req));
+  if (!notification) return res.status(404).json({ error: "Notification not found" });
+  res.json({ notification });
 }));
 
 app.get("/api/tasks/:taskId/export.csv", route(async (req, res) => {

@@ -986,6 +986,132 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     return { task, csv: buildCsv(task) };
   }
 
+  function profileFromUser(user) {
+    if (!user) return null;
+    return {
+      id: user.id,
+      displayName: user.display_name,
+      email: user.email,
+      phone: null,
+      avatarUrl: null,
+      locale: "zh-TW",
+      timezone: "Asia/Taipei",
+      status: "active",
+    };
+  }
+
+  function resolveUser(actor = {}) {
+    const profileId = actor.profileId ? String(actor.profileId).trim() : "";
+    const email = actor.email ? String(actor.email).trim().toLowerCase() : "";
+    if (profileId) return db.prepare("SELECT * FROM users WHERE id = ?").get(profileId) ?? null;
+    if (email) return db.prepare("SELECT * FROM users WHERE lower(email) = ?").get(email) ?? null;
+    return null;
+  }
+
+  function requireUser(actor = {}) {
+    const user = resolveUser(actor);
+    if (!user) throw new StoreError(401, "Profile authentication required");
+    return user;
+  }
+
+  function ownerMembershipFromCircle(circle, user) {
+    return {
+      id: `${circle.id}_${user.id}_owner`,
+      circleId: circle.id,
+      circleName: circle.name,
+      profileId: user.id,
+      displayName: user.display_name,
+      contactHint: "圈主",
+      role: "owner",
+      status: "active",
+      joinedAt: circle.created_at,
+    };
+  }
+
+  function memberFromRow(row, circleName) {
+    return {
+      id: row.id,
+      circleId: row.circle_id,
+      circleName,
+      profileId: null,
+      displayName: row.display_name,
+      contactHint: row.contact_hint,
+      role: "member",
+      status: "active",
+      joinedAt: row.created_at,
+    };
+  }
+
+  function getSessionContext(actor = {}) {
+    const user = resolveUser(actor);
+    if (!user) {
+      return {
+        authenticated: false,
+        profile: null,
+        memberships: [],
+        capabilities: {
+          createTask: false,
+          manageTasks: false,
+          circleChat: false,
+          pushDevices: false,
+        },
+      };
+    }
+
+    const circles = db.prepare("SELECT * FROM circles WHERE owner_user_id = ? ORDER BY created_at ASC").all(user.id);
+    const memberships = circles.map((circle) => ownerMembershipFromCircle(circle, user));
+    return {
+      authenticated: true,
+      profile: profileFromUser(user),
+      memberships,
+      capabilities: {
+        createTask: memberships.length > 0,
+        manageTasks: memberships.length > 0,
+        circleChat: false,
+        pushDevices: false,
+      },
+    };
+  }
+
+  function listCircleMembers(circleId, actor = {}) {
+    const user = requireUser(actor);
+    const circle = db.prepare("SELECT * FROM circles WHERE id = ?").get(circleId);
+    if (!circle) throw new StoreError(404, "Circle not found");
+    if (circle.owner_user_id !== user.id) throw new StoreError(403, "Circle membership required");
+
+    const members = db
+      .prepare("SELECT * FROM circle_members WHERE circle_id = ? ORDER BY created_at ASC")
+      .all(circle.id)
+      .map((member) => memberFromRow(member, circle.name));
+    return [ownerMembershipFromCircle(circle, user), ...members];
+  }
+
+  function getTaskPermissions(taskId, actor = {}) {
+    const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!task) return null;
+    const circle = db.prepare("SELECT * FROM circles WHERE id = ?").get(task.circle_id);
+    const user = resolveUser(actor);
+    const canManage = Boolean(user && circle?.owner_user_id === user.id);
+
+    return {
+      authenticated: Boolean(user),
+      profileId: user?.id ?? null,
+      circleId: task.circle_id,
+      role: canManage ? "owner" : null,
+      canRead: true,
+      canComment: task.status === "open" || canManage,
+      canRespond: task.status === "open",
+      canManage,
+      canAnnounce: canManage,
+      canClose: canManage,
+      canExport: canManage,
+    };
+  }
+
+  function postgresOnlyRealtime() {
+    throw new StoreError(501, "Realtime chat and push scaffolding are Postgres-only in this MVP");
+  }
+
   initSchema();
   seed();
   ensureInterestCheckExample();
@@ -996,6 +1122,9 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     backend: "sqlite",
     dbPath,
     health: () => ({ ok: true, backend: "sqlite", dbPath }),
+    getSessionContext,
+    listCircleMembers,
+    getTaskPermissions,
     getBootstrap,
     getTask,
     getTaskByShareToken,
@@ -1007,6 +1136,14 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     updateTaskStatus,
     createTaskAnnouncement,
     createTaskComment,
+    listConversations: postgresOnlyRealtime,
+    createConversation: postgresOnlyRealtime,
+    listConversationMessages: postgresOnlyRealtime,
+    createConversationMessage: postgresOnlyRealtime,
+    markMessageRead: postgresOnlyRealtime,
+    registerDevice: postgresOnlyRealtime,
+    listNotifications: postgresOnlyRealtime,
+    markNotificationRead: postgresOnlyRealtime,
     buildTaskCsv,
     close: () => db.close(),
   };

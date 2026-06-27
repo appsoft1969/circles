@@ -11,6 +11,7 @@
     "migrate:sqlite-to-postgres": "node --no-warnings scripts/migrate-sqlite-to-postgres.mjs",
     "backup:postgres": "node --no-warnings scripts/postgres-backup-restore.mjs",
     "backup:postgres:status": "node --no-warnings scripts/postgres-backup-status.mjs",
+    "ops:status": "node --no-warnings scripts/ops-health-check.mjs",
     "test:api": "node --no-warnings scripts/api-smoke.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"

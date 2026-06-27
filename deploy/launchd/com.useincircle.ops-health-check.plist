@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.useincircle.ops-health-check</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>--no-warnings</string>
+		<string>scripts/ops-health-check.mjs</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>NODE_ENV</key>
+		<string>production</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>PUBLIC_BASE_URL</key>
+		<string>https://useincircle.app</string>
+		<key>EXPECTED_BACKEND</key>
+		<string>postgres</string>
+		<key>BACKUP_STATUS_PATH</key>
+		<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/postgres-backup-status.json</string>
+		<key>OPS_STATUS_PATH</key>
+		<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/incircle-ops-status.json</string>
+		<key>OPS_ALERTS_ENABLED</key>
+		<string>1</string>
+		<key>OPS_ALERT_STATE_PATH</key>
+		<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/incircle-ops-alert-state.json</string>
+		<key>OPS_ALERT_COOLDOWN_MINUTES</key>
+		<string>60</string>
+		<key>MAX_BACKUP_AGE_HOURS</key>
+		<string>36</string>
+	</dict>
+
+	<key>StartInterval</key>
+	<integer>900</integer>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/ops-health.out.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/ops-health.err.log</string>
+</dict>
+</plist>

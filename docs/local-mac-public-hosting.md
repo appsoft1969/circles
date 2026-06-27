@@ -6,7 +6,8 @@ Use this only for early development, demos, and private beta checks. A formal VP
 
 ## Current Shape
 
-- Domain: `useincircle.app`
+- Primary domain: `useincircle.app`
+- Redirect domains: `useincircle.com`, `www.useincircle.com`, `useincircle.info`, `www.useincircle.info`, `www.useincircle.app`
 - Public IPv4: `114.33.179.210`
 - Mac LAN IP: `192.168.1.80`
 - Public entrypoints: `80` and `443`
@@ -17,6 +18,7 @@ Use this only for early development, demos, and private beta checks. A formal VP
 - Reverse proxy / HTTPS: Homebrew Caddy
 - Daily Postgres backup/restore check: LaunchAgent `com.useincircle.postgres-backup`, scheduled at `03:20`
 - Offsite copy target: iCloud Drive folder `InCircle/backups/postgres`
+- Public ops health check: LaunchAgent `com.useincircle.ops-health-check`, scheduled every 15 minutes
 
 ## Router Requirement
 
@@ -27,7 +29,7 @@ The router must forward:
 | `80` | `192.168.1.80:80` |
 | `443` | `192.168.1.80:443` |
 
-`useincircle.app` and `www.useincircle.app` should both resolve to `114.33.179.210`.
+`useincircle.app`, `www.useincircle.app`, `useincircle.com`, `www.useincircle.com`, `useincircle.info`, and `www.useincircle.info` should all resolve to `114.33.179.210` or to a CNAME that ultimately resolves there.
 
 ## Build And Start
 
@@ -88,6 +90,10 @@ curl -I https://useincircle.app
 curl -s https://useincircle.app/api/health
 curl -s https://useincircle.app/api/bootstrap
 curl -I https://www.useincircle.app
+curl -I https://useincircle.com
+curl -I https://www.useincircle.com
+curl -I https://useincircle.info
+curl -I https://www.useincircle.info
 ```
 
 Expected behavior:
@@ -97,6 +103,7 @@ Expected behavior:
 - `https://useincircle.app/api/health` returns API health JSON with `backend` set to `postgres`.
 - `https://useincircle.app/api/bootstrap` returns the current public circles, tasks, templates, stats, options, and responses from Postgres.
 - `https://www.useincircle.app` redirects to `https://useincircle.app`.
+- `https://useincircle.com`, `https://www.useincircle.com`, `https://useincircle.info`, and `https://www.useincircle.info` redirect to `https://useincircle.app`.
 
 Service checks:
 
@@ -107,6 +114,7 @@ lsof -nP -iTCP:80 -sTCP:LISTEN
 lsof -nP -iTCP:443 -sTCP:LISTEN
 lsof -nP -iTCP:8787 -sTCP:LISTEN
 lsof -nP -iTCP:5434 -sTCP:LISTEN
+npm --prefix /Users/kevin_huang/Documents/Projects/circles/website run ops:status
 ```
 
 ## Notes
@@ -119,6 +127,84 @@ lsof -nP -iTCP:5434 -sTCP:LISTEN
 - Stop or remove any other service using ports `80` or `443` before starting Caddy.
 - Keep the Docker dev stack stopped while this Mac is acting as the public HTTPS host.
 - See `docs/postgres-backup-restore.md` for backup, restore-check, and launchd operations.
+
+## Auth, Membership, Chat, And Push Status
+
+The current public API has a first scaffold for account and communication behavior:
+
+- `GET /api/session` resolves a profile from the temporary `x-incircle-profile-id` or `x-incircle-profile-email` header.
+- `GET /api/circles/:circleId/members` requires that profile to be an active circle member.
+- `GET /api/tasks/:taskId/permissions` reports read, respond, manage, announce, close, and export capabilities.
+- Postgres-backed conversation endpoints support circle/task conversations, messages, message read receipts, device registration, and notification listing.
+
+This is not yet a real production login system. Before broad beta or app-store work, replace the temporary profile headers with proper auth tokens, add RLS/access policies, and wire mobile realtime subscriptions plus APNs/FCM push delivery.
+
+## Public Ops Health Check
+
+The current Mac-hosted public site has a lightweight 15-minute health check.
+
+- Script: `website/scripts/ops-health-check.mjs`
+- Command: `npm run ops:status`
+- LaunchAgent: `deploy/launchd/com.useincircle.ops-health-check.plist`
+- Installed symlink: `~/Library/LaunchAgents/com.useincircle.ops-health-check.plist`
+- Schedule: every 15 minutes
+- Logs:
+  - `website/artifacts/ops-health.out.log`
+  - `website/artifacts/ops-health.err.log`
+- Status report: `website/artifacts/incircle-ops-status.json`
+- Alert state: `website/artifacts/incircle-ops-alert-state.json`
+- macOS notifications: enabled on failure, with a 60-minute cooldown for repeated identical failures
+
+It checks:
+
+- `https://useincircle.app` returns HTML.
+- `https://www.useincircle.app`, `https://useincircle.com`, `https://www.useincircle.com`, `https://useincircle.info`, and `https://www.useincircle.info` permanently redirect to `https://useincircle.app`.
+- `/api/health` returns `backend: "postgres"`.
+- `/api/bootstrap` returns at least one circle, one task, and nine templates.
+- A live share link from bootstrap can be read through `/api/share/:token`.
+- `website/artifacts/postgres-backup-status.json` reports a healthy, recent backup.
+
+Manual check:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles/website
+npm run ops:status
+```
+
+LaunchAgent check:
+
+```bash
+launchctl print gui/$(id -u)/com.useincircle.ops-health-check
+tail -n 80 /Users/kevin_huang/Documents/Projects/circles/website/artifacts/ops-health.out.log
+tail -n 80 /Users/kevin_huang/Documents/Projects/circles/website/artifacts/ops-health.err.log
+```
+
+Expected result:
+
+- `last exit code = 0` after a run.
+- `website/artifacts/incircle-ops-status.json` has `ok: true`.
+- `failures` is an empty array.
+- `alert.enabled` is `true`.
+
+Failure-path test without sending a macOS notification:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles/website
+tmp_status="/tmp/incircle-ops-status-failure.json"
+tmp_alert="/tmp/incircle-ops-alert-state-failure.json"
+OPS_ALERTS_ENABLED=0 \
+EXPECTED_BACKEND=bogus \
+OPS_STATUS_PATH="$tmp_status" \
+OPS_ALERT_STATE_PATH="$tmp_alert" \
+npm run ops:status
+```
+
+Expected failure-path result:
+
+- Command exits non-zero.
+- Temporary status JSON has `ok: false`.
+- `failures` includes `api backend is postgres, expected bogus`.
+- `alert.reason` is `alerts disabled`.
 
 ## Daily Postgres Backup And Restore Check
 

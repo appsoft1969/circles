@@ -190,6 +190,16 @@ supabase/
   - iCloud Drive copy: `/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres`.
   - Logs: `website/artifacts/postgres-backup.out.log` and `website/artifacts/postgres-backup.err.log`.
   - Status report: `website/artifacts/postgres-backup-status.json`.
+- Public ops health check:
+  - Script: `website/scripts/ops-health-check.mjs`.
+  - Command: `npm run ops:status`.
+  - LaunchAgent label: `com.useincircle.ops-health-check`.
+  - Config: `deploy/launchd/com.useincircle.ops-health-check.plist`.
+  - Schedule: every 15 minutes.
+  - Logs: `website/artifacts/ops-health.out.log` and `website/artifacts/ops-health.err.log`.
+  - Status report: `website/artifacts/incircle-ops-status.json`.
+  - macOS alert state: `website/artifacts/incircle-ops-alert-state.json`.
+  - macOS failure alerts are enabled in launchd with a 60-minute cooldown for repeated identical failures.
 - SQLite-to-Postgres migration command:
 
 ```bash
@@ -218,6 +228,7 @@ brew services list | rg postgresql@16
   - `useincircle.info`
 - Preferred primary public domain: `https://useincircle.app`.
 - Redirect `useincircle.com`, `www.useincircle.com`, `useincircle.info`, `www.useincircle.info`, and `www.useincircle.app` to `https://useincircle.app`.
+- The current Mac Caddy config `deploy/Caddyfile.local-mac` must include the same `.com`, `.info`, and `www` redirects while this Mac is the public host.
 - Public production must use HTTPS. `.app` requires HTTPS, and InCircle should use HTTPS everywhere for task links, signups, comments, payment status, and future notifications.
 - Prefer Caddy automatic HTTPS for production. Do not require paid SSL certificates for `.com` or `.info` unless a hosting provider specifically requires manual certificates.
 - Keep local development on HTTP at `127.0.0.1` unless explicitly testing production HTTPS behavior.
@@ -303,8 +314,10 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Technical architecture docs if the data model changes.
 - If the production data model changes, update `supabase/migrations/` and `docs/postgres-schema.md`.
 - Do not add database calls directly inside route handlers. Keep runtime database differences behind the store/data-access layer.
-- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, task creation, task detail/option edits, interest-check conversion, share responses, response status updates, task status updates, announcements, comments, and CSV export. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until auth, RLS/access policy, automated backups, monitoring, and operational verification are implemented.
-- Task announcements and task comments are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.
+- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, task creation, task detail/option edits, interest-check conversion, share responses, response status updates, task status updates, announcements, comments, CSV export, temporary session/membership/permission APIs, and Postgres-backed conversation/message/device/notification scaffolding. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real auth, RLS/access policy, automated backups, monitoring, push delivery, and operational verification are implemented.
+- Current session APIs use temporary `x-incircle-profile-id` / `x-incircle-profile-email` headers only as a development scaffold. Do not treat these headers as a production login mechanism.
+- Task announcements, task comments, and Postgres conversations are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.
+- Do not enforce auth on public share-link response submission yet; the participant no-install `/join/:token` flow is still a core MVP constraint.
 - Do not remove or overwrite user-created work.
 - Do not commit, stage, push, or create PRs unless explicitly requested.
 - When the user has already asked to continue autonomously, keep moving to the next concrete artifact instead of repeatedly asking for confirmation.
@@ -330,6 +343,8 @@ curl -s http://127.0.0.1:8787/api/bootstrap
 - Since the InCircle Docker dev stack should normally stay stopped during local public hosting, prefer the Homebrew Postgres path for parity tests. Use Docker Postgres only when explicitly testing the Docker stack.
 - For public hosting checks, verify `https://useincircle.app/api/health` returns `backend: "postgres"` before telling the user the public site is on Postgres.
 - For public Postgres backup checks, run `npm run backup:postgres` from `website/`, then run `OFFSITE_BACKUP_DIR="/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres" npm run backup:postgres:status`. Confirm the status report has `ok: true`, no restore count mismatches, and matching local/iCloud dump SHA-256 values.
+- For public ops checks, run `npm run ops:status` from `website/` and confirm `website/artifacts/incircle-ops-status.json` has `ok: true`.
+- When testing failure paths for ops checks, set `OPS_ALERTS_ENABLED=0` and write to temporary `OPS_STATUS_PATH` / `OPS_ALERT_STATE_PATH` files to avoid sending false macOS notifications.
 
 - If local services are stale, restart the API and Vite dev server rather than leaving the user on an old build.
 - When UI behavior changes, verify in the browser when feasible, especially mobile-width layouts and `/join/:token` flows.

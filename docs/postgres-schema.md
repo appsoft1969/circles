@@ -12,7 +12,7 @@ Current status:
 - API data access layer: `website/server/data/storeFactory.js` selecting `sqliteStore.js` or `postgresStore.js`
 - Postgres demo seed: `supabase/seed.sql`
 - Postgres store: implemented in `website/server/data/postgresStore.js`
-- API migration to Postgres: core MVP task reads/writes, task edits, interest-check conversion, share responses, status updates, and CSV export are implemented
+- API migration to Postgres: core MVP task reads/writes, task edits, interest-check conversion, share responses, status updates, CSV export, session/membership/permission scaffolding, and conversation/message/device/notification scaffolding are implemented
 
 The goal of this schema is to align the product with the future Expo / React Native + Supabase / Postgres architecture while keeping the current website able to run either on Postgres or SQLite through the store layer.
 
@@ -29,7 +29,7 @@ Postgres should be designed now because it affects:
 
 The public Mac-hosted Express API now uses Postgres for early development and private beta checks. This is still a local-hosted public path, not the final production architecture.
 
-`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, status updates, announcements, comments, and CSV validation. It should not be treated as fully production-ready until auth, RLS/access policies, automated backups, monitoring, and deployment operations are implemented.
+`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, status updates, announcements, comments, CSV validation, temporary profile-header session context, membership checks, task permissions, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until real auth, RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
 
 ## Schema Groups
 
@@ -109,6 +109,8 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
+Current API support has started Phase 2 and Phase 3 at the data/API layer: device registration, notification rows, conversations, messages, and read receipts exist in Postgres. Real push delivery, unread badge rules, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
+
 ### Attachments And Audit
 
 Tables:
@@ -185,6 +187,7 @@ The initial migration has been verified locally with:
 - Re-runnable migration behavior.
 - Re-runnable seed behavior.
 - Postgres API task reads through `GET /api/bootstrap`, `GET /api/tasks/:taskId`, and `GET /api/share/:token`.
+- Postgres API session/membership scaffolding through `GET /api/session`, `GET /api/circles/:circleId/members`, and `GET /api/tasks/:taskId/permissions`.
 - Postgres API task creation through `POST /api/tasks`.
 - Postgres API task edits through `PATCH /api/tasks/:taskId`.
 - Postgres API interest-check conversion through `POST /api/tasks/:taskId/convert`.
@@ -192,8 +195,10 @@ The initial migration has been verified locally with:
 - Postgres API status updates through `PATCH /api/responses/:responseId` and `PATCH /api/tasks/:taskId/status`.
 - Postgres API task announcements through `POST /api/tasks/:taskId/announcements`.
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
+- Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
+- Postgres API push scaffolding through device registration, notification listing, and notification read state.
 - Postgres CSV export through `GET /api/tasks/:taskId/export.csv`.
-- Automated API smoke coverage through `npm run test:api`, shared with SQLite, including task edits, conversion, announcements, and comments.
+- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, conversations, message reads, notifications, and devices.
 - SQLite-to-Postgres migration through `website/scripts/migrate-sqlite-to-postgres.mjs`.
 - Daily local backup and restore drill through `website/scripts/postgres-backup-restore.mjs`, with verified artifacts copied to iCloud Drive.
 - Public Mac API health verified with `backend: "postgres"`.
@@ -217,8 +222,9 @@ The initial migration has been verified locally with:
 
 Recommended next steps:
 
-1. Add RLS policy migration after auth decisions are made.
-2. Add offsite backup copy and alerting for the public Mac hosting path.
-3. Add Supabase Realtime subscriptions for announcements, comments, and notifications.
-4. Decide when to move from Mac-hosted Postgres to managed Supabase/Postgres or a VPS-hosted database.
-5. Add CI wiring for `npm run test:api` when the repository is pushed to GitHub.
+1. Replace temporary profile headers with real auth tokens or Supabase Auth.
+2. Add RLS/access-policy migration after auth decisions are made.
+3. Add Supabase Realtime subscriptions for announcements, comments, messages, and notifications.
+4. Add APNs/FCM push delivery workers and delivery-state handling.
+5. Decide when to move from Mac-hosted Postgres to managed Supabase/Postgres or a VPS-hosted database.
+6. Add CI wiring for `npm run test:api` when the repository is pushed to GitHub.
