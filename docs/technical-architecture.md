@@ -196,7 +196,13 @@ Current Postgres store status:
 - `GET|POST /api/auth/:provider/callback`: implemented for provider callbacks and cookie session creation.
 - `POST /api/auth/logout`: implemented.
 - `POST /api/auth/dev-session`: implemented only when `AUTH_DEV_LOGIN_ENABLED=1`.
+- `GET /api/circle-invites/:code`: implemented for public circle-invite preview.
+- `POST /api/circle-invites/:code/join`: implemented for authenticated invite acceptance.
 - `GET /api/circles/:circleId/members`: implemented with active membership requirement.
+- `PATCH /api/circles/:circleId/members/:membershipId`: implemented for owner/admin role and status changes.
+- `GET /api/circles/:circleId/invites`: implemented for owner/admin invite management.
+- `POST /api/circles/:circleId/invites`: implemented for owner/admin invite creation.
+- `PATCH /api/circles/:circleId/invites/:inviteId`: implemented for owner/admin invite revocation.
 - `GET /api/tasks/:taskId`: implemented.
 - `GET /api/tasks/:taskId/permissions`: implemented for read/respond/manage/announce/close/export flags.
 - `POST /api/tasks`: implemented.
@@ -239,6 +245,17 @@ Provider credentials are configured through environment variables documented in 
 ### `GET /api/circles/:circleId/members`
 
 Returns active members for a circle. Requires the temporary profile header to resolve to an active member.
+
+### Circle Invite And Member Management Routes
+
+Circle invite links are separate from task share links. `/invite/:code` is for joining a circle after login; `/join/:token` remains the no-login task response flow.
+
+- `GET /api/circle-invites/:code`: returns public invite preview data if the invite is active, unexpired, and under its usage limit.
+- `POST /api/circle-invites/:code/join`: requires an authenticated profile and creates or reactivates an active circle membership.
+- `GET /api/circles/:circleId/invites`: requires owner/admin membership and returns active invite links.
+- `POST /api/circles/:circleId/invites`: requires owner/admin membership and creates a member/guest invite.
+- `PATCH /api/circles/:circleId/invites/:inviteId`: requires owner/admin membership and revokes an invite with `{ "revoked": true }`.
+- `PATCH /api/circles/:circleId/members/:membershipId`: requires owner/admin membership and updates non-owner member role/status.
 
 ### `GET /api/health`
 

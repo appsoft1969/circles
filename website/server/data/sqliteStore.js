@@ -1116,6 +1116,10 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     throw new StoreError(501, "Official auth sessions are Postgres-only in this MVP");
   }
 
+  function postgresOnlyCircleInvites() {
+    throw new StoreError(501, "Circle invites and member management are Postgres-only in this MVP");
+  }
+
   initSchema();
   seed();
   ensureInterestCheckExample();
@@ -1128,6 +1132,12 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     health: () => ({ ok: true, backend: "sqlite", dbPath }),
     getSessionContext,
     listCircleMembers,
+    getCircleInvite: postgresOnlyCircleInvites,
+    listCircleInvites: postgresOnlyCircleInvites,
+    createCircleInvite: postgresOnlyCircleInvites,
+    revokeCircleInvite: postgresOnlyCircleInvites,
+    acceptCircleInvite: postgresOnlyCircleInvites,
+    updateCircleMember: postgresOnlyCircleInvites,
     getTaskPermissions,
     createOAuthState: postgresOnlyAuth,
     consumeOAuthState: postgresOnlyAuth,

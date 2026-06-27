@@ -270,6 +270,211 @@ a {
   color: #11965a;
 }
 
+.membership-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.membership-chip {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  color: #2b2c31;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.membership-chip small {
+  color: #74767c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.membership-chip.more {
+  color: #74767c;
+  background: #f5f5f3;
+}
+
+.auth-note {
+  margin: 10px 0 0;
+  color: #74767c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.member-hero {
+  padding: 18px 20px;
+  border-bottom: 1px solid #dededb;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.member-hero-icon,
+.member-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #e9f2ff;
+  color: #2e62d4;
+}
+
+.member-hero h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.25;
+  font-weight: 950;
+}
+
+.member-hero p {
+  margin: 6px 0 0;
+  color: #62646b;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.invite-manager,
+.member-list-section {
+  display: grid;
+  gap: 14px;
+}
+
+.invite-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.invite-form label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.invite-form label:first-child,
+.invite-form .primary-button {
+  grid-column: 1 / -1;
+}
+
+.invite-list,
+.member-list {
+  display: grid;
+  gap: 10px;
+}
+
+.invite-row,
+.member-row {
+  border: 1px solid #d6d6d1;
+  background: #fff;
+  border-radius: 8px;
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+}
+
+.invite-row {
+  grid-template-columns: 1fr auto auto;
+}
+
+.invite-row strong,
+.member-main strong {
+  display: block;
+  font-weight: 900;
+}
+
+.invite-row small,
+.member-main small {
+  display: block;
+  margin-top: 3px;
+  color: #74767c;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.member-row {
+  grid-template-columns: auto 1fr auto;
+}
+
+.member-row select {
+  width: auto;
+  min-width: 90px;
+  min-height: 38px;
+}
+
+.member-row .secondary-button {
+  grid-column: 2 / -1;
+  min-height: 36px;
+}
+
+.role-badge {
+  min-height: 30px;
+  border: 1px solid #d6d6d1;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  color: #62646b;
+  background: #f5f5f3;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.secondary-button.danger {
+  color: #c73a2f;
+  border-color: #efb8b1;
+  background: #fff8f7;
+}
+
+.invite-join-hero h1 {
+  margin-top: 12px;
+}
+
+.invite-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.invite-summary div {
+  min-height: 68px;
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  padding: 10px;
+  min-width: 0;
+}
+
+.invite-summary strong {
+  color: #2b2c31;
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.invite-summary small {
+  color: #74767c;
+  font-size: 12px;
+}
+
 .provider-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

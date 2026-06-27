@@ -180,9 +180,47 @@ app.post("/api/auth/dev-session", route(async (req, res) => {
   });
 }));
 
+app.get("/api/circle-invites/:code", route(async (req, res) => {
+  const invite = await store.getCircleInvite(req.params.code);
+  res.json({ invite });
+}));
+
+app.post("/api/circle-invites/:code/join", route(async (req, res) => {
+  const result = await store.acceptCircleInvite(req.params.code, actorFromRequest(req));
+  res.status(result.joined ? 201 : 200).json(result);
+}));
+
 app.get("/api/circles/:circleId/members", route(async (req, res) => {
   const members = await store.listCircleMembers(req.params.circleId, actorFromRequest(req));
   res.json({ members });
+}));
+
+app.patch("/api/circles/:circleId/members/:membershipId", route(async (req, res) => {
+  const member = await store.updateCircleMember(req.params.circleId, req.params.membershipId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json({ member });
+}));
+
+app.get("/api/circles/:circleId/invites", route(async (req, res) => {
+  const invites = await store.listCircleInvites(req.params.circleId, actorFromRequest(req));
+  res.json({ invites });
+}));
+
+app.post("/api/circles/:circleId/invites", route(async (req, res) => {
+  const invite = await store.createCircleInvite(req.params.circleId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ invite });
+}));
+
+app.patch("/api/circles/:circleId/invites/:inviteId", route(async (req, res) => {
+  if (req.body?.revoked !== true) throw new StoreError(400, "Only invite revocation is supported");
+  const invite = await store.revokeCircleInvite(req.params.circleId, req.params.inviteId, actorFromRequest(req));
+  if (!invite) return res.status(404).json({ error: "Invite not found" });
+  res.json({ invite });
 }));
 
 app.get("/api/tasks/:taskId", route(async (req, res) => {

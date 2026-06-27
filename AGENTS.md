@@ -175,6 +175,10 @@ supabase/
 - API runtime:
   - macOS LaunchAgent label: `com.useincircle.api`.
   - LaunchAgent config: `deploy/launchd/com.useincircle.api.plist`.
+  - Local private OAuth/API env file: `.env.production.local` at the repository root.
+  - Local private LaunchAgent install command: `cd website && npm run launchd:api:reload`.
+  - Do not commit Apple / Google / LINE OAuth secrets. Keep real provider credentials out of `deploy/launchd/com.useincircle.api.plist`; use the local ignored env file and generated `~/Library/LaunchAgents/com.useincircle.api.plist` for this Mac.
+  - Local private-beta membership grant command: `cd website && npm run membership:grant -- --email <oauth-profile-email> --dry-run`, then rerun without `--dry-run` after verifying the planned circle roles.
   - API stays bound to `127.0.0.1`; do not expose the Express server directly to the internet.
 - Data store for this local public phase is Homebrew PostgreSQL 16 at `127.0.0.1:5434`.
 - Local Postgres database: `incircle_local`; local app user: `incircle`.
@@ -215,7 +219,7 @@ DATABASE_URL=postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle
 ```bash
 curl -I https://useincircle.app
 curl -s https://useincircle.app/api/health
-launchctl print gui/$(id -u)/com.useincircle.api
+launchctl print gui/$(id -u)/com.useincircle.api | rg 'state =|path =|pid ='
 brew services list | rg caddy
 brew services list | rg postgresql@16
 ```
@@ -261,6 +265,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Devices for push notifications.
   - Circle records.
   - Circle memberships.
+  - Circle invites / invite codes.
   - Tasks.
   - Task templates.
   - Task options/items.
@@ -299,7 +304,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - `建立事項` for template selection.
   - `成員填單` for participant submission.
   - `管理統計` for organizer operations.
-  - `複製分享連結` for external sharing.
+  - `分享連結` / `分享填單連結` / `分享邀請連結` for external sharing. Link sharing should copy the URL as a fallback, then open the native share sheet when supported.
 
 ## Engineering Workflow
 
@@ -314,7 +319,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Technical architecture docs if the data model changes.
 - If the production data model changes, update `supabase/migrations/` and `docs/postgres-schema.md`.
 - Do not add database calls directly inside route handlers. Keep runtime database differences behind the store/data-access layer.
-- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, task creation, task detail/option edits, interest-check conversion, share responses, response status updates, task status updates, announcements, comments, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, membership/permission APIs, and Postgres-backed conversation/message/device/notification scaffolding. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real provider credentials, RLS/access policy, automated backups, monitoring, push delivery, and operational verification are implemented.
+- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, task creation, task detail/option edits, interest-check conversion, share responses, response status updates, task status updates, announcements, comments, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, circle invite/member-management APIs, membership/permission APIs, and Postgres-backed conversation/message/device/notification scaffolding. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real provider credentials, RLS/access policy, automated backups, monitoring, push delivery, and operational verification are implemented.
 - Current session APIs support cookie sessions. Temporary `x-incircle-profile-id` / `x-incircle-profile-email` headers remain only as a development scaffold. Do not treat these headers as a production login mechanism.
 - Do not enable `AUTH_DEV_LOGIN_ENABLED=1` in production launchd.
 - Task announcements, task comments, and Postgres conversations are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.

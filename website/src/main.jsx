@@ -7,7 +7,6 @@ import {
   ChevronRight,
   ClipboardList,
   Coffee,
-  Copy,
   Download,
   ExternalLink,
   Filter,
@@ -24,11 +23,13 @@ import {
   ReceiptText,
   Search,
   Send,
+  Share2,
   ShieldCheck,
   Split,
   Store,
   Smartphone,
   UserCircle,
+  UserPlus,
   Users,
   Utensils,
 } from "lucide-react";
@@ -67,6 +68,13 @@ const fulfillmentLabels = {
   completed: "完成",
 };
 
+const membershipRoleLabels = {
+  owner: "圈主",
+  admin: "管理",
+  member: "成員",
+  guest: "訪客",
+};
+
 function money(value) {
   return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
 }
@@ -87,6 +95,61 @@ async function api(path, options) {
     throw new Error(error.error || response.statusText);
   }
   return response.json();
+}
+
+function canUseNativeShare(shareData) {
+  if (!navigator.share) return false;
+  if (!navigator.canShare) return true;
+  try {
+    return navigator.canShare(shareData);
+  } catch {
+    return true;
+  }
+}
+
+async function shareLinkWithFallback({ url, title, text, linkLabel, setToast }) {
+  const shareData = {
+    title,
+    text,
+    url,
+  };
+
+  await navigator.clipboard?.writeText(url).catch(() => {});
+
+  if (canUseNativeShare(shareData)) {
+    try {
+      await navigator.share(shareData);
+      setToast(`已開啟分享選單，${linkLabel}也已複製`);
+      return;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        setToast(`${linkLabel}已複製`);
+        return;
+      }
+    }
+  }
+
+  setToast(`${linkLabel}已複製，可貼到聊天群`);
+}
+
+function shareTaskLink(task, setToast) {
+  return shareLinkWithFallback({
+    url: `${window.location.origin}/join/${task.shareToken}`,
+    title: `填寫 ${task.title} | 圈內 InCircle`,
+    text: `請填寫「${task.title}」，圈內會自動整理名單與統計。`,
+    linkLabel: "填單連結",
+    setToast,
+  });
+}
+
+function shareCircleInvite(invite, setToast) {
+  return shareLinkWithFallback({
+    url: `${window.location.origin}/invite/${invite.code}`,
+    title: `加入 ${invite.circleName} | 圈內 InCircle`,
+    text: `邀請你加入「${invite.circleName}」，之後圈內事項、統計與公告都會放在這裡。`,
+    linkLabel: "邀請連結",
+    setToast,
+  });
 }
 
 function App() {
@@ -124,6 +187,12 @@ function App() {
         setRoute({ name: "join", taskId: shared.task.id });
         return;
       }
+      const inviteMatch = window.location.pathname.match(/^\/invite\/([^/]+)/);
+      if (inviteMatch) {
+        setState(data);
+        setRoute({ name: "circleInvite", inviteCode: inviteMatch[1] });
+        return;
+      }
       setState(data);
     }
 
@@ -147,10 +216,8 @@ function App() {
     }));
   }
 
-  async function copyShare(task) {
-    const url = `${window.location.origin}/join/${task.shareToken}`;
-    await navigator.clipboard?.writeText(url);
-    setToast("已複製，可貼回聊天群");
+  async function shareTask(task) {
+    await shareTaskLink(task, setToast);
   }
 
   if (state.loading) {
@@ -182,7 +249,7 @@ function App() {
         session={state.session}
         authProviders={state.authProviders}
         go={go}
-        copyShare={copyShare}
+        shareTask={shareTask}
         refresh={refresh}
         setToast={setToast}
       />
@@ -200,7 +267,7 @@ function App() {
       <TaskManage
         task={selectedTask}
         go={go}
-        copyShare={copyShare}
+        shareTask={shareTask}
         setToast={setToast}
         updateTask={updateTask}
       />
@@ -214,6 +281,26 @@ function App() {
         updateTask={updateTask}
       />
     ) : null,
+    members: (
+      <CircleMembers
+        circle={state.circles.find((circle) => circle.id === route.circleId)}
+        circleId={route.circleId}
+        session={state.session}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
+    circleInvite: (
+      <CircleInviteJoin
+        code={route.inviteCode}
+        session={state.session}
+        providers={state.authProviders}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
   };
 
   return (
@@ -266,7 +353,7 @@ function Topbar({ title, subtitle, onBack, action }) {
   );
 }
 
-function Dashboard({ circles, tasks, session, authProviders, go, copyShare, refresh, setToast }) {
+function Dashboard({ circles, tasks, session, authProviders, go, shareTask, refresh, setToast }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   const templates = Object.entries(templateMeta);
@@ -290,6 +377,7 @@ function Dashboard({ circles, tasks, session, authProviders, go, copyShare, refr
       <AuthPanel
         session={session}
         providers={authProviders}
+        go={go}
         refresh={refresh}
         setToast={setToast}
       />
@@ -318,7 +406,7 @@ function Dashboard({ circles, tasks, session, authProviders, go, copyShare, refr
         <SectionTitle title="進行中的事項" />
         <div className="task-list">
           {activeTasks.map((task) => (
-            <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => copyShare(task)} />
+            <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
           ))}
         </div>
       </section>
@@ -334,7 +422,11 @@ function AuthStatusButton({ session }) {
   );
 }
 
-function AuthPanel({ session, providers, refresh, setToast }) {
+function AuthPanel({ session, providers, go, refresh, setToast }) {
+  const memberships = session?.memberships ?? [];
+  const visibleMemberships = memberships.slice(0, 3);
+  const extraMemberships = Math.max(0, memberships.length - visibleMemberships.length);
+
   async function logout() {
     try {
       await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
@@ -358,6 +450,24 @@ function AuthPanel({ session, providers, refresh, setToast }) {
             <LogOut size={19} />
           </button>
         </div>
+        {memberships.length > 0 ? (
+          <div className="membership-chip-list" aria-label="已加入的圈子">
+            {visibleMemberships.map((membership) => (
+              <button
+                className="membership-chip"
+                type="button"
+                key={membership.id}
+                onClick={() => go("members", { circleId: membership.circleId })}
+              >
+                {membership.circleName}
+                <small>{membershipRoleLabels[membership.role] ?? membership.role}</small>
+              </button>
+            ))}
+            {extraMemberships > 0 ? <span className="membership-chip more">+{extraMemberships}</span> : null}
+          </div>
+        ) : (
+          <p className="auth-note">尚未加入圈子。可透過邀請連結加入，或由圈主管理成員。</p>
+        )}
       </section>
     );
   }
@@ -387,6 +497,327 @@ function AuthPanel({ session, providers, refresh, setToast }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
+  const currentMembership = session?.memberships?.find((membership) => membership.circleId === circleId);
+  const canManage = ["owner", "admin"].includes(currentMembership?.role);
+  const [members, setMembers] = useState([]);
+  const [invites, setInvites] = useState([]);
+  const [inviteRole, setInviteRole] = useState("member");
+  const [maxUses, setMaxUses] = useState(30);
+  const [expireDays, setExpireDays] = useState(30);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const circleName = circle?.name ?? currentMembership?.circleName ?? "圈子成員";
+
+  async function loadMembers() {
+    if (!circleId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const memberData = await api(`/api/circles/${circleId}/members`);
+      setMembers(memberData.members ?? []);
+      if (canManage) {
+        const inviteData = await api(`/api/circles/${circleId}/invites`);
+        setInvites(inviteData.invites ?? []);
+      } else {
+        setInvites([]);
+      }
+    } catch (loadError) {
+      setError(loadError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadMembers();
+  }, [circleId, canManage]);
+
+  async function createInvite() {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const expiresAt = new Date(Date.now() + Math.max(1, Number(expireDays || 30)) * 24 * 60 * 60 * 1000).toISOString();
+      const data = await api(`/api/circles/${circleId}/invites`, {
+        method: "POST",
+        body: JSON.stringify({
+          role: inviteRole,
+          maxUses: Math.max(1, Number(maxUses || 30)),
+          expiresAt,
+        }),
+      });
+      setInvites((current) => [data.invite, ...current]);
+      await shareCircleInvite(data.invite, setToast);
+    } catch (createError) {
+      setToast(createError.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function shareInvite(invite) {
+    await shareCircleInvite(invite, setToast);
+  }
+
+  async function revokeInvite(invite) {
+    try {
+      const data = await api(`/api/circles/${circleId}/invites/${invite.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ revoked: true }),
+      });
+      setInvites((current) => current.filter((item) => item.id !== data.invite.id));
+      setToast("邀請連結已停用");
+    } catch (revokeError) {
+      setToast(revokeError.message);
+    }
+  }
+
+  async function updateMember(member, patch) {
+    try {
+      const data = await api(`/api/circles/${circleId}/members/${member.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      if (data.member.status === "active") {
+        setMembers((current) => current.map((item) => (item.id === data.member.id ? data.member : item)));
+      } else {
+        setMembers((current) => current.filter((item) => item.id !== data.member.id));
+      }
+      await refresh();
+      setToast("成員設定已更新");
+    } catch (updateError) {
+      setToast(updateError.message);
+    }
+  }
+
+  function canEdit(member) {
+    if (!canManage || member.role === "owner") return false;
+    if (member.profileId === session?.profile?.id) return false;
+    if (currentMembership?.role !== "owner" && member.role === "admin") return false;
+    return true;
+  }
+
+  return (
+    <>
+      <Topbar title="圈子成員" subtitle={circleName} onBack={() => go("dashboard")} />
+      <section className="member-hero">
+        <span className="member-hero-icon"><Users size={22} /></span>
+        <div>
+          <h1>{circleName}</h1>
+          <p>{canManage ? "建立邀請連結、確認誰在圈內，必要時調整成員角色。" : "你可以查看目前圈內成員，邀請與角色調整由圈主管理。"}</p>
+        </div>
+      </section>
+
+      {loading ? (
+        <section className="section"><p className="empty-note">讀取成員資料...</p></section>
+      ) : error ? (
+        <section className="section"><p className="empty-note">無法讀取成員：{error}</p></section>
+      ) : (
+        <>
+          {canManage ? (
+            <section className="section invite-manager">
+              <SectionTitle title="邀請新成員" />
+              <div className="invite-form">
+                <label>
+                  加入後角色
+                  <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+                    <option value="member">成員</option>
+                    <option value="guest">訪客</option>
+                  </select>
+                </label>
+                <label>
+                  可使用次數
+                  <input type="number" min="1" max="500" value={maxUses} onChange={(event) => setMaxUses(event.target.value)} />
+                </label>
+                <label>
+                  有效天數
+                  <input type="number" min="1" max="365" value={expireDays} onChange={(event) => setExpireDays(event.target.value)} />
+                </label>
+                <button className="primary-button" type="button" onClick={createInvite} disabled={busy}>
+                  {busy ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
+                  建立並分享邀請
+                </button>
+              </div>
+              <div className="invite-list">
+                {invites.length === 0 ? <p className="empty-note">目前沒有可用的邀請連結。</p> : null}
+                {invites.map((invite) => (
+                  <article className="invite-row" key={invite.id}>
+                    <div>
+                      <strong>{membershipRoleLabels[invite.role] ?? invite.role}邀請</strong>
+                      <small>
+                        {invite.usedCount}/{invite.maxUses ?? "不限"} 次 · 到期 {invite.expiresAt ? formatDateTime(invite.expiresAt) : "未設定"}
+                      </small>
+                    </div>
+                    <button className="icon-button" type="button" aria-label="分享邀請連結" onClick={() => shareInvite(invite)}>
+                      <Share2 size={18} />
+                    </button>
+                    <button className="secondary-button compact" type="button" onClick={() => revokeInvite(invite)}>
+                      停用
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="section member-list-section">
+            <SectionTitle title={`成員名單 (${members.length})`} />
+            <div className="member-list">
+              {members.map((member) => {
+                const editable = canEdit(member);
+                return (
+                  <article className="member-row" key={member.id}>
+                    <span className="member-avatar"><UserCircle size={22} /></span>
+                    <div className="member-main">
+                      <strong>{member.displayName}</strong>
+                      <small>{member.contactHint || member.circleName}</small>
+                    </div>
+                    {editable ? (
+                      <select
+                        value={member.role}
+                        aria-label={`${member.displayName} 角色`}
+                        onChange={(event) => updateMember(member, { role: event.target.value })}
+                      >
+                        {currentMembership?.role === "owner" ? <option value="admin">管理</option> : null}
+                        <option value="member">成員</option>
+                        <option value="guest">訪客</option>
+                      </select>
+                    ) : (
+                      <span className="role-badge">{membershipRoleLabels[member.role] ?? member.role}</span>
+                    )}
+                    {editable ? (
+                      <button
+                        className="secondary-button compact danger"
+                        type="button"
+                        onClick={() => updateMember(member, { status: "removed" })}
+                      >
+                        移除
+                      </button>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
+function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
+  const [invite, setInvite] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function loadInvite() {
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api(`/api/circle-invites/${code}`);
+        setInvite(data.invite);
+      } catch (loadError) {
+        setError(loadError.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadInvite();
+  }, [code]);
+
+  async function joinCircle() {
+    if (joining) return;
+    setJoining(true);
+    try {
+      const data = await api(`/api/circle-invites/${code}/join`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      await refresh();
+      setToast(data.alreadyMember ? "你已經在這個圈子內" : "已加入圈子");
+      window.history.replaceState(null, "", "/");
+      go("dashboard");
+    } catch (joinError) {
+      setToast(joinError.message);
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  const alreadyMember = invite && session?.memberships?.some((membership) => membership.circleId === invite.circleId);
+  const redirectAfter = encodeURIComponent(`/invite/${code}`);
+
+  return (
+    <>
+      <Topbar title="圈子邀請" subtitle="加入圈內" onBack={() => go("dashboard")} />
+      {loading ? (
+        <section className="section"><p className="empty-note">讀取邀請連結...</p></section>
+      ) : error ? (
+        <section className="section"><p className="empty-note">邀請連結無法使用：{error}</p></section>
+      ) : (
+        <>
+          <section className="join-hero invite-join-hero">
+            <span className="status open">邀請中</span>
+            <h1>{invite.circleName}</h1>
+            <p>{invite.circleDescription || "這是一個熟人圈的生活辦事空間，加入後可以一起看事項、統計、公告與討論。"}</p>
+          </section>
+          <section className="section invite-summary">
+            <div>
+              <strong>{membershipRoleLabels[invite.role] ?? invite.role}</strong>
+              <small>加入後角色</small>
+            </div>
+            <div>
+              <strong>{invite.maxUses ? `${invite.usedCount}/${invite.maxUses}` : `${invite.usedCount}`}</strong>
+              <small>使用次數</small>
+            </div>
+            <div>
+              <strong>{invite.expiresAt ? formatDateTime(invite.expiresAt) : "未設定"}</strong>
+              <small>到期時間</small>
+            </div>
+          </section>
+          {!session?.authenticated ? (
+            <section className="section auth-section">
+              <div className="auth-heading">
+                <Smartphone size={22} />
+                <span>
+                  <strong>先登入，再加入圈子</strong>
+                  <small>用手機常用帳號登入後，就能把你加入這個圈子。</small>
+                </span>
+              </div>
+              <div className="provider-list">
+                {providers.map((provider) => (
+                  provider.configured ? (
+                    <a className="provider-button" href={`${provider.startUrl}?redirectAfter=${redirectAfter}`} key={provider.id}>
+                      <span>{provider.shortLabel}</span>
+                      <small>{provider.platformHint}</small>
+                    </a>
+                  ) : (
+                    <button className="provider-button disabled" type="button" key={provider.id} disabled>
+                      <span>{provider.shortLabel}</span>
+                      <small>待設定</small>
+                    </button>
+                  )
+                ))}
+              </div>
+            </section>
+          ) : (
+            <div className="sticky-actions">
+              <button className="primary-button green" type="button" onClick={joinCircle} disabled={joining || alreadyMember}>
+                {joining ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
+                {alreadyMember ? "已在圈內" : "加入這個圈子"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </>
   );
 }
 
@@ -424,8 +855,8 @@ function TaskRow({ task, onOpen, onShare }) {
         <b>{money(task.stats.totalAmount)}</b>
         <span>{task.stats.unpaid + task.stats.review} 待付款</span>
       </div>
-    <button className="icon-button" type="button" aria-label="複製分享連結" onClick={onShare}>
-        <Link size={19} />
+      <button className="icon-button" type="button" aria-label="分享填單連結" onClick={onShare}>
+        <Share2 size={19} />
       </button>
     </article>
   );
@@ -1016,7 +1447,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
   );
 }
 
-function TaskManage({ task, go, copyShare, setToast, updateTask }) {
+function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
@@ -1075,7 +1506,7 @@ function TaskManage({ task, go, copyShare, setToast, updateTask }) {
         <span>截止 {task.deadlineAt ? new Date(task.deadlineAt).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未設定"}</span>
       </section>
       <section className="action-row">
-        <button type="button" onClick={() => copyShare(task)}><Copy size={18} />複製分享連結</button>
+        <button type="button" onClick={() => shareTask(task)}><Share2 size={18} />分享填單連結</button>
         <a href={`/api/tasks/${task.id}/export.csv`}><Download size={18} />匯出 CSV</a>
         <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />預覽填單</button>
       </section>

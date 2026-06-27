@@ -208,4 +208,4 @@ Recommended generic wording:
 - `建立團購` inside the group-buy template.
 - `成員填單` for participant submission.
 - `管理統計` for organizer operations.
-- `複製分享連結` for distribution.
+- `分享連結` for distribution. Copy the URL as a fallback, then open the native share sheet when supported.

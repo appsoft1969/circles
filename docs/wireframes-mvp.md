@@ -406,7 +406,7 @@ Give the organizer one clear operating table for all orders, totals, payment sta
    - Unpaid count.
    - Pending pickup count.
 3. Action bar
-   - Copy share link.
+   - Share link.
    - Export CSV.
    - Close group buy.
    - Duplicate.
@@ -428,7 +428,7 @@ Give the organizer one clear operating table for all orders, totals, payment sta
 
 ### Main Actions
 
-- Copy share link.
+- Share link.
 - Change payment status.
 - Change pickup status.
 - Export CSV.
@@ -510,7 +510,7 @@ Use plain operational language.
 Good labels:
 
 - Create group buy.
-- Copy share link.
+- Share link.
 - Submit order.
 - Mark as paid.
 - Confirm payment.

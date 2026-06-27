@@ -299,7 +299,7 @@ Required content:
 - Payment status.
 - Pickup status.
 - Export CSV action.
-- Copy share link action.
+- Share link action: copy the URL as fallback, then open the native share sheet when supported.
 - Close group buy action.
 - Duplicate group buy action.
 

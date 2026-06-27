@@ -92,7 +92,7 @@ async function request(baseUrl, path, options) {
   return { status: response.status, body, headers: response.headers };
 }
 
-async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushToken }) {
+async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushToken, cleanupCreatedInviteData }) {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const api = startApi({ HOST: "127.0.0.1", PORT: String(port), ...env });
@@ -100,6 +100,8 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
   let createdTaskId = null;
   const createdTaskIds = [];
   const createdPushTokens = [];
+  const createdInviteIds = [];
+  let inviteSmokeProfileId = null;
 
   try {
     const health = await waitForHealth(baseUrl, api);
@@ -161,6 +163,71 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       members.body.members.some((member) => member.role === "owner"),
       `${label}: expected owner membership`,
     );
+
+    if (label === "postgres") {
+      const invite = await request(baseUrl, `/api/circles/${officeCircle.id}/invites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({
+          role: "member",
+          maxUses: 2,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        }),
+      });
+      assert.equal(invite.status, 201);
+      assert.equal(invite.body.invite.circleId, officeCircle.id);
+      assert.equal(invite.body.invite.role, "member");
+      assert.equal(invite.body.invite.usedCount, 0);
+      createdInviteIds.push(invite.body.invite.id);
+
+      const inviteList = await request(baseUrl, `/api/circles/${officeCircle.id}/invites`, { headers: sessionHeaders });
+      assert.ok(
+        inviteList.body.invites.some((item) => item.id === invite.body.invite.id),
+        `${label}: expected created invite in invite list`,
+      );
+
+      const invitePreview = await request(baseUrl, `/api/circle-invites/${invite.body.invite.code}`);
+      assert.equal(invitePreview.body.invite.circleId, officeCircle.id);
+      assert.equal(invitePreview.body.invite.available, true);
+
+      const inviteProfile = await ensurePostgresProfile("invite-smoke@example.com", "邀請測試成員");
+      inviteSmokeProfileId = inviteProfile.id;
+      const joinerSession = await request(baseUrl, "/api/auth/dev-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "invite-smoke@example.com" }),
+      });
+      const joinerCookie = joinerSession.headers.get("set-cookie")?.split(";")[0];
+      assert.ok(joinerCookie, `${label}: expected invite joiner Set-Cookie`);
+      const joinerHeaders = { Cookie: joinerCookie };
+
+      const accepted = await request(baseUrl, `/api/circle-invites/${invite.body.invite.code}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...joinerHeaders },
+        body: JSON.stringify({}),
+      });
+      assert.equal(accepted.status, 201);
+      assert.equal(accepted.body.joined, true);
+      assert.equal(accepted.body.membership.circleId, officeCircle.id);
+      assert.equal(accepted.body.membership.role, "member");
+
+      const joinerContext = await request(baseUrl, "/api/session", { headers: joinerHeaders });
+      assert.ok(
+        joinerContext.body.memberships.some((membership) => membership.circleId === officeCircle.id),
+        `${label}: expected invite joiner circle membership`,
+      );
+
+      const membersAfterInvite = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });
+      const joinedMember = membersAfterInvite.body.members.find((member) => member.profileId === inviteSmokeProfileId);
+      assert.ok(joinedMember, `${label}: expected invited member in owner member list`);
+
+      const updatedMember = await request(baseUrl, `/api/circles/${officeCircle.id}/members/${joinedMember.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({ role: "guest" }),
+      });
+      assert.equal(updatedMember.body.member.role, "guest");
+    }
 
     const created = await request(baseUrl, "/api/tasks", {
       method: "POST",
@@ -448,6 +515,9 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         await cleanupCreatedPushToken(pushToken);
       }
     }
+    if (cleanupCreatedInviteData) {
+      await cleanupCreatedInviteData({ profileId: inviteSmokeProfileId, inviteIds: createdInviteIds });
+    }
   }
 }
 
@@ -498,6 +568,68 @@ async function cleanupPostgresPushToken(pushToken) {
   }
 }
 
+async function ensurePostgresProfile(email, displayName) {
+  const pool = new Pool({ connectionString: postgresUrl });
+  try {
+    const existing = await pool.query(
+      `
+        SELECT id::text
+        FROM profiles
+        WHERE lower(email) = lower($1)
+        LIMIT 1
+      `,
+      [email],
+    );
+    if (existing.rows[0]) {
+      await pool.query(
+        `
+          UPDATE profiles
+          SET display_name = $2,
+              status = 'active',
+              deleted_at = NULL
+          WHERE id::text = $1
+        `,
+        [existing.rows[0].id, displayName],
+      );
+      return { id: existing.rows[0].id };
+    }
+
+    const created = await pool.query(
+      `
+        INSERT INTO profiles (display_name, email, locale, timezone, metadata)
+        VALUES ($1, $2, 'zh-TW', 'Asia/Taipei', $3::jsonb)
+        RETURNING id::text
+      `,
+      [displayName, email, JSON.stringify({ smoke: true })],
+    );
+    return { id: created.rows[0].id };
+  } finally {
+    await pool.end();
+  }
+}
+
+async function cleanupPostgresInviteData({ profileId, inviteIds }) {
+  const pool = new Pool({ connectionString: postgresUrl });
+  try {
+    await pool.query("BEGIN");
+    if (inviteIds.length > 0) {
+      await pool.query("DELETE FROM circle_invites WHERE id = ANY($1::uuid[])", [inviteIds]);
+    }
+    if (profileId) {
+      await pool.query("DELETE FROM auth_sessions WHERE profile_id::text = $1", [profileId]);
+      await pool.query("DELETE FROM circle_memberships WHERE profile_id::text = $1", [profileId]);
+      await pool.query("DELETE FROM auth_identities WHERE profile_id::text = $1", [profileId]);
+      await pool.query("DELETE FROM profiles WHERE id::text = $1", [profileId]);
+    }
+    await pool.query("COMMIT");
+  } catch (error) {
+    await pool.query("ROLLBACK");
+    throw error;
+  } finally {
+    await pool.end();
+  }
+}
+
 function cleanupSqliteFiles(dbPath) {
   for (const path of [dbPath, `${dbPath}-wal`, `${dbPath}-shm`]) {
     if (existsSync(path)) rmSync(path, { force: true });
@@ -526,6 +658,7 @@ async function main() {
     env: { DATA_STORE: "postgres", DATABASE_URL: postgresUrl, AUTH_DEV_LOGIN_ENABLED: "1", AUTH_COOKIE_SECURE: "0" },
     cleanupCreatedTask: cleanupPostgresTask,
     cleanupCreatedPushToken: cleanupPostgresPushToken,
+    cleanupCreatedInviteData: cleanupPostgresInviteData,
   });
 
   log("all API smoke tests passed");

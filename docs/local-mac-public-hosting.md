@@ -109,7 +109,7 @@ Service checks:
 
 ```bash
 brew services list | rg caddy
-launchctl print gui/$(id -u)/com.useincircle.api
+launchctl print gui/$(id -u)/com.useincircle.api | rg 'state =|path =|pid ='
 lsof -nP -iTCP:80 -sTCP:LISTEN
 lsof -nP -iTCP:443 -sTCP:LISTEN
 lsof -nP -iTCP:8787 -sTCP:LISTEN

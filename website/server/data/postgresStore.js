@@ -69,6 +69,9 @@ const taskStatuses = new Set(["draft", "open", "closed", "completed", "cancelled
 const paymentStatuses = new Set(["not_required", "unpaid", "review", "paid", "refunded", "cancelled", "failed"]);
 const fulfillmentStatuses = new Set(["pending", "picked_up", "attending", "maybe", "completed", "cancelled", "no_show"]);
 const announcementPriorities = new Set(["normal", "important", "urgent"]);
+const inviteRoles = new Set(["member", "guest"]);
+const memberRoles = new Set(["admin", "member", "guest"]);
+const membershipStatuses = new Set(["active", "muted", "left", "removed"]);
 
 function groupBy(rows, key) {
   return rows.reduce((groups, row) => {
@@ -180,6 +183,25 @@ function membershipFromRow(row) {
     role: row.role,
     status: row.status,
     joinedAt: toIso(row.joined_at),
+  };
+}
+
+function inviteFromRow(row) {
+  return {
+    id: row.id,
+    circleId: row.circle_id,
+    circleName: row.circle_name,
+    circleDescription: row.circle_description,
+    code: row.code,
+    role: row.role,
+    maxUses: row.max_uses,
+    usedCount: row.used_count,
+    expiresAt: toIso(row.expires_at),
+    createdByProfileId: row.created_by_profile_id,
+    createdByName: row.created_by_name,
+    createdAt: toIso(row.created_at),
+    revokedAt: toIso(row.revoked_at),
+    available: row.available,
   };
 }
 
@@ -732,6 +754,95 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return { profile, membership };
   }
 
+  function normalizeInviteCode(code) {
+    const cleaned = String(code || "").trim();
+    if (!cleaned) throw new StoreError(400, "Invite code is required");
+    return cleaned;
+  }
+
+  function normalizeInviteRole(role = "member") {
+    const value = String(role || "member").trim();
+    if (!inviteRoles.has(value)) {
+      throw new StoreError(400, "Invite role must be member or guest");
+    }
+    return value;
+  }
+
+  function normalizeMemberRole(role) {
+    const value = String(role || "").trim();
+    if (!memberRoles.has(value)) {
+      throw new StoreError(400, "Member role must be admin, member, or guest");
+    }
+    return value;
+  }
+
+  function normalizeMembershipStatus(status) {
+    const value = String(status || "").trim();
+    if (!membershipStatuses.has(value)) {
+      throw new StoreError(400, "Membership status must be active, muted, left, or removed");
+    }
+    return value;
+  }
+
+  function normalizeInviteExpiresAt(value) {
+    if (value === null) return null;
+    const source = value || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const date = new Date(source);
+    if (Number.isNaN(date.getTime())) throw new StoreError(400, "Invite expiration is invalid");
+    if (date.getTime() <= Date.now()) throw new StoreError(400, "Invite expiration must be in the future");
+    return date.toISOString();
+  }
+
+  const inviteSelect = `
+    SELECT
+      ci.id::text,
+      ci.circle_id::text,
+      c.name AS circle_name,
+      c.description AS circle_description,
+      ci.code,
+      ci.role::text,
+      ci.max_uses,
+      ci.used_count,
+      ci.expires_at,
+      ci.created_by_profile_id::text,
+      creator.display_name AS created_by_name,
+      ci.created_at,
+      ci.revoked_at,
+      (
+        ci.revoked_at IS NULL
+        AND c.archived_at IS NULL
+        AND (ci.expires_at IS NULL OR ci.expires_at > now())
+        AND (ci.max_uses IS NULL OR ci.used_count < ci.max_uses)
+      ) AS available
+    FROM circle_invites ci
+    JOIN circles c ON c.id = ci.circle_id
+    LEFT JOIN profiles creator ON creator.id = ci.created_by_profile_id
+  `;
+
+  async function loadCircleInvite(code, client = pool, { lock = false } = {}) {
+    const result = await client.query(
+      `
+        ${inviteSelect}
+        WHERE ci.code = $1
+        LIMIT 1
+        ${lock ? "FOR UPDATE OF ci" : ""}
+      `,
+      [normalizeInviteCode(code)],
+    );
+    return result.rows[0] ?? null;
+  }
+
+  function assertAvailableInvite(row) {
+    if (!row || row.revoked_at) throw new StoreError(404, "Invite link not found");
+    if (row.expires_at && new Date(row.expires_at).getTime() <= Date.now()) {
+      throw new StoreError(410, "Invite link has expired");
+    }
+    if (row.max_uses != null && row.used_count >= row.max_uses) {
+      throw new StoreError(409, "Invite link has reached its usage limit");
+    }
+    if (!row.available) throw new StoreError(404, "Invite link is not available");
+  }
+
   async function getSessionContext(actor = {}) {
     const profile = await resolveProfile(actor);
     if (!profile) {
@@ -817,6 +928,258 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     );
 
     return result.rows.map(membershipFromRow);
+  }
+
+  async function getCircleInvite(code) {
+    const row = await loadCircleInvite(code);
+    assertAvailableInvite(row);
+    return inviteFromRow(row);
+  }
+
+  async function listCircleInvites(circleId, actor = {}) {
+    await requireCircleMember(circleId, actor, { roles: ["owner", "admin"] });
+    const result = await pool.query(
+      `
+        ${inviteSelect}
+        WHERE ci.circle_id::text = $1
+          AND ci.revoked_at IS NULL
+        ORDER BY ci.created_at DESC
+        LIMIT 20
+      `,
+      [circleId],
+    );
+    return result.rows.map(inviteFromRow);
+  }
+
+  async function createCircleInvite(circleId, body = {}) {
+    const { profile } = await requireCircleMember(circleId, body.actor, { roles: ["owner", "admin"] });
+    const role = normalizeInviteRole(body.role);
+    const maxUses = positiveInteger(body.maxUses, 30);
+    const expiresAt = normalizeInviteExpiresAt(body.expiresAt);
+
+    const result = await pool.query(
+      `
+        WITH inserted AS (
+          INSERT INTO circle_invites (
+            circle_id,
+            role,
+            max_uses,
+            expires_at,
+            created_by_profile_id
+          )
+          VALUES ($1, $2::circle_role, $3, $4::timestamptz, $5)
+          RETURNING *
+        )
+        ${inviteSelect.replace("FROM circle_invites ci", "FROM inserted ci")}
+      `,
+      [circleId, role, maxUses, expiresAt, profile.id],
+    );
+    return inviteFromRow(result.rows[0]);
+  }
+
+  async function revokeCircleInvite(circleId, inviteId, actor = {}) {
+    await requireCircleMember(circleId, actor, { roles: ["owner", "admin"] });
+    const result = await pool.query(
+      `
+        WITH revoked AS (
+          UPDATE circle_invites
+          SET revoked_at = now()
+          WHERE circle_id::text = $1
+            AND id::text = $2
+            AND revoked_at IS NULL
+          RETURNING *
+        )
+        ${inviteSelect.replace("FROM circle_invites ci", "FROM revoked ci")}
+      `,
+      [circleId, inviteId],
+    );
+    return result.rows[0] ? inviteFromRow(result.rows[0]) : null;
+  }
+
+  async function acceptCircleInvite(code, actor = {}) {
+    return withTransaction(async (client) => {
+      const profile = await requireProfile(actor, client);
+      const inviteRow = await loadCircleInvite(code, client, { lock: true });
+      assertAvailableInvite(inviteRow);
+
+      const existingResult = await client.query(
+        `
+          SELECT
+            cm.id::text,
+            cm.circle_id::text,
+            c.name AS circle_name,
+            cm.profile_id::text,
+            cm.display_name,
+            cm.contact_hint,
+            cm.role::text,
+            cm.status::text,
+            cm.joined_at
+          FROM circle_memberships cm
+          JOIN circles c ON c.id = cm.circle_id
+          WHERE cm.circle_id::text = $1
+            AND cm.profile_id::text = $2
+          LIMIT 1
+          FOR UPDATE OF cm
+        `,
+        [inviteRow.circle_id, profile.id],
+      );
+
+      const existing = existingResult.rows[0] ?? null;
+      if (existing?.status === "active") {
+        return {
+          invite: inviteFromRow(inviteRow),
+          membership: membershipFromRow(existing),
+          joined: false,
+          alreadyMember: true,
+        };
+      }
+
+      const nextRole = existing && ["owner", "admin"].includes(existing.role) ? existing.role : inviteRow.role;
+      const contactHint = "透過邀請連結加入";
+      const membershipResult = existing
+        ? await client.query(
+            `
+              UPDATE circle_memberships
+              SET display_name = $2,
+                  contact_hint = COALESCE(NULLIF(contact_hint, ''), $3),
+                  role = $4::circle_role,
+                  status = 'active',
+                  invited_by_profile_id = COALESCE(invited_by_profile_id, $5),
+                  joined_at = COALESCE(joined_at, now()),
+                  removed_at = NULL
+              WHERE id::text = $1
+              RETURNING
+                id::text,
+                circle_id::text,
+                $6::text AS circle_name,
+                profile_id::text,
+                display_name,
+                contact_hint,
+                role::text,
+                status::text,
+                joined_at
+            `,
+            [existing.id, profile.displayName, contactHint, nextRole, inviteRow.created_by_profile_id, inviteRow.circle_name],
+          )
+        : await client.query(
+            `
+              INSERT INTO circle_memberships (
+                circle_id,
+                profile_id,
+                display_name,
+                contact_hint,
+                role,
+                status,
+                invited_by_profile_id,
+                joined_at
+              )
+              VALUES ($1, $2, $3, $4, $5::circle_role, 'active', $6, now())
+              RETURNING
+                id::text,
+                circle_id::text,
+                $7::text AS circle_name,
+                profile_id::text,
+                display_name,
+                contact_hint,
+                role::text,
+                status::text,
+                joined_at
+            `,
+            [
+              inviteRow.circle_id,
+              profile.id,
+              profile.displayName,
+              contactHint,
+              nextRole,
+              inviteRow.created_by_profile_id,
+              inviteRow.circle_name,
+            ],
+          );
+
+      await client.query("UPDATE circle_invites SET used_count = used_count + 1 WHERE id::text = $1", [inviteRow.id]);
+      return {
+        invite: inviteFromRow({ ...inviteRow, used_count: inviteRow.used_count + 1 }),
+        membership: membershipFromRow(membershipResult.rows[0]),
+        joined: true,
+        alreadyMember: false,
+      };
+    });
+  }
+
+  async function updateCircleMember(circleId, membershipId, body = {}) {
+    return withTransaction(async (client) => {
+      const { profile, membership: actorMembership } = await requireCircleMember(circleId, body.actor, {
+        roles: ["owner", "admin"],
+        client,
+      });
+      const targetResult = await client.query(
+        `
+          SELECT
+            cm.id::text,
+            cm.circle_id::text,
+            c.name AS circle_name,
+            cm.profile_id::text,
+            cm.display_name,
+            cm.contact_hint,
+            cm.role::text,
+            cm.status::text,
+            cm.joined_at
+          FROM circle_memberships cm
+          JOIN circles c ON c.id = cm.circle_id
+          WHERE cm.circle_id::text = $1
+            AND cm.id::text = $2
+          LIMIT 1
+          FOR UPDATE OF cm
+        `,
+        [circleId, membershipId],
+      );
+      const target = targetResult.rows[0] ? membershipFromRow(targetResult.rows[0]) : null;
+      if (!target) throw new StoreError(404, "Circle member not found");
+      if (target.role === "owner") {
+        throw new StoreError(400, "Owner membership cannot be changed from member management");
+      }
+
+      const nextRole = body.role == null ? target.role : normalizeMemberRole(body.role);
+      const nextStatus = body.status == null ? target.status : normalizeMembershipStatus(body.status);
+
+      if (target.profileId === profile.id && ["left", "removed"].includes(nextStatus)) {
+        throw new StoreError(400, "You cannot remove your own active membership");
+      }
+      if (actorMembership.role !== "owner" && (target.role === "admin" || nextRole === "admin")) {
+        throw new StoreError(403, "Only circle owners can manage admins");
+      }
+
+      const result = await client.query(
+        `
+          UPDATE circle_memberships
+          SET role = $3::circle_role,
+              status = $4::membership_status,
+              joined_at = CASE
+                WHEN $4::membership_status = 'active' THEN COALESCE(joined_at, now())
+                ELSE joined_at
+              END,
+              removed_at = CASE
+                WHEN $4::membership_status = 'removed' THEN now()
+                WHEN $4::membership_status = 'active' THEN NULL
+                ELSE removed_at
+              END
+          WHERE circle_id::text = $1
+            AND id::text = $2
+          RETURNING
+            id::text,
+            circle_id::text,
+            $5::text AS circle_name,
+            profile_id::text,
+            display_name,
+            contact_hint,
+            role::text,
+            status::text,
+            joined_at
+        `,
+        [circleId, membershipId, nextRole, nextStatus, target.circleName],
+      );
+      return membershipFromRow(result.rows[0]);
+    });
   }
 
   async function getTaskPermissions(taskId, actor = {}) {
@@ -2065,6 +2428,12 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     health,
     getSessionContext,
     listCircleMembers,
+    getCircleInvite,
+    listCircleInvites,
+    createCircleInvite,
+    revokeCircleInvite,
+    acceptCircleInvite,
+    updateCircleMember,
     getTaskPermissions,
     createOAuthState,
     consumeOAuthState,
