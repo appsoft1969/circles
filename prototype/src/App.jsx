@@ -33,7 +33,7 @@ const initialOrders = [
     quantity: 2,
     amount: 960,
     payment: "paid",
-    paymentMethod: "LINE Pay",
+    paymentMethod: "行動支付",
     paidAt: "06/28 12:40",
     pickup: "picked",
     pickupAt: "06/30 18:20",
@@ -89,7 +89,7 @@ const initialOrders = [
     quantity: 1,
     amount: 480,
     payment: "paid",
-    paymentMethod: "LINE Pay",
+    paymentMethod: "行動支付",
     paidAt: "06/27 19:33",
     pickup: "picked",
     pickupAt: "06/29 17:10",
@@ -208,7 +208,7 @@ function Dashboard({ go, toastAction }) {
   return (
     <>
       <TopBar
-        title="小圈子 / Circles"
+        title="圈內 InCircle"
         action={
           <IconButton label="通知">
             <Bell size={22} />
@@ -219,7 +219,7 @@ function Dashboard({ go, toastAction }) {
       <section className="hero-section">
         <div>
           <h1>早安，圈主！</h1>
-          <p>補上 LINE 裡的登記、統計、付款狀態。</p>
+          <p>把群裡的 +1，變成清楚的名單與統計。</p>
         </div>
         <button className="select-button" type="button">
           全部圈子
@@ -287,7 +287,7 @@ function Dashboard({ go, toastAction }) {
         </button>
         <button className="secondary-button" type="button" onClick={toastAction}>
           <Link size={19} />
-          複製 LINE 連結
+          複製分享連結
         </button>
       </div>
 
@@ -360,7 +360,7 @@ function CircleHome({ go }) {
       />
 
       <section className="circle-intro">
-        <p>每月一起買單品咖啡豆，接單後新鮮烘焙。聊天仍然回 LINE，小圈子只補上填單、統計、付款與取貨狀態。</p>
+        <p>每月一起買單品咖啡豆，接單後新鮮烘焙。聊天可以留在原本的群組，圈內只補上填單、統計、付款與取貨狀態。</p>
         <div className="split-actions">
           <button className="primary-button" type="button" onClick={() => go("create")}>
             <Plus size={18} />
@@ -417,7 +417,7 @@ function CreateGroupBuy({ go, setToast }) {
   const [title, setTitle] = useState("7月咖啡豆團購");
 
   function publish() {
-    setToast("團購已發布，LINE 連結已可複製");
+    setToast("團購已發布，分享連結已可複製");
     go("manage");
   }
 
@@ -495,7 +495,7 @@ function CreateGroupBuy({ go, setToast }) {
           <h2>付款與取貨</h2>
           <label>
             付款方式
-            <textarea defaultValue="轉帳或 LINE Pay。團主確認後會標記付款狀態。" />
+            <textarea defaultValue="轉帳或行動支付。團主確認後會標記付款狀態。" />
           </label>
           <label>
             取貨方式
@@ -543,7 +543,7 @@ function ParticipantOrder({ go, addOrder }) {
 
   return (
     <>
-      <TopBar title="小圈子 / Circles" eyebrow="團購訂單" onBack={() => go("manage")} />
+      <TopBar title="圈內 InCircle" eyebrow="團購訂單" onBack={() => go("manage")} />
 
       <section className="participant-hero">
         <div>
@@ -649,7 +649,7 @@ function Confirmation({ go, order }) {
           <Check size={38} />
         </div>
         <h1>已送出訂單</h1>
-        <p>團主會在結單後確認付款與取貨方式。你可以將摘要複製回 LINE，方便自己留存。</p>
+        <p>團主會在結單後確認付款與取貨方式。你可以將摘要複製回聊天群，方便自己留存。</p>
         <div className="receipt">
           <span>7月咖啡豆團購</span>
           <strong>
@@ -749,9 +749,9 @@ function Management({ go, orders, setOrders, setToast }) {
       </section>
 
       <section className="management-actions">
-        <button type="button" onClick={() => setToast("已複製 LINE 分享連結")}>
+        <button type="button" onClick={() => setToast("已複製分享連結")}>
           <Link size={20} />
-          複製 LINE 連結
+          複製分享連結
         </button>
         <button type="button" onClick={exportCsv}>
           <Download size={20} />
@@ -858,7 +858,7 @@ function Management({ go, orders, setOrders, setToast }) {
           <strong>{formatMoney(orders.filter((order) => order.payment === "unpaid").reduce((sum, order) => sum + order.amount, 0))}</strong>
           <span>（{totals.unpaid} 筆）</span>
         </div>
-        <button type="button" onClick={() => setToast("已產生提醒文字，可貼回 LINE")}>
+        <button type="button" onClick={() => setToast("已產生提醒文字，可貼回聊天群")}>
           <Bell size={18} />
           提醒未付款成員
         </button>
@@ -897,7 +897,7 @@ export function App() {
 
   function copyLineLink() {
     navigator.clipboard?.writeText("https://circles.local/join/coffee-july");
-    setToast("已複製 LINE 分享連結");
+    setToast("已複製分享連結");
   }
 
   const screenMap = {

@@ -5,7 +5,7 @@ This document turns the MVP PRD into a low-fidelity product flow. It is intentio
 ## Design Principles
 
 - Mobile first.
-- LINE-link friendly.
+- Chat-link friendly.
 - Organizer-first management experience.
 - Participant submission without app install.
 - Task-first, not social-first.
@@ -16,10 +16,10 @@ This document turns the MVP PRD into a low-fidelity product flow. It is intentio
 
 ```mermaid
 flowchart TD
-  A["Organizer opens My Circles"] --> B["Selects or creates a circle"]
+  A["Organizer opens My Circle List"] --> B["Selects or creates a circle"]
   B --> C["Creates a group buy"]
   C --> D["Copies share link"]
-  D --> E["Posts link to LINE group"]
+  D --> E["Posts link to chat group"]
   E --> F["Participant opens order page"]
   F --> G["Participant submits order"]
   G --> H["Organizer reviews management table"]
@@ -34,13 +34,13 @@ The same flow can later support a circle-only member sale by replacing "group bu
 
 | Screen | User | Route Suggestion | Primary Job |
 |---|---|---|---|
-| My Circles | Organizer | `/circles` | See circles and active work |
+| My Circle List | Organizer | `/circles` | See circles and active work |
 | Circle Home | Organizer | `/circles/:circleId` | See active and past group buys |
 | Create Group Buy | Organizer | `/circles/:circleId/group-buys/new` | Configure a group buy |
 | Participant Order Page | Participant | `/join/:shareToken` | Submit an order from shared link |
 | Group Buy Management | Organizer | `/group-buys/:groupBuyId/manage` | Track orders, payment, pickup, export |
 
-## 1. My Circles
+## 1. My Circle List
 
 ### Purpose
 
@@ -70,7 +70,7 @@ Give the organizer a quick overview of all circles and unfinished work.
    - Pending payment count.
    - Last activity.
 5. Empty state
-   - Explain that the organizer can create a circle and share group-buy links to LINE.
+   - Explain that the organizer can create a circle and share group-buy links to a chat group.
    - Primary action: Create first circle.
 
 ### Main Actions
@@ -116,7 +116,7 @@ Let the organizer manage one circle and start a new group buy quickly.
 
 ### Entry Points
 
-- From My Circles.
+- From My Circle List.
 - From a completed group-buy record.
 - From a duplicated group buy.
 
@@ -163,7 +163,7 @@ Let the organizer manage one circle and start a new group buy quickly.
 
 Top:
 
-- Back to My Circles.
+- Back to My Circle List.
 - Circle name.
 - Circle meta.
 
@@ -288,11 +288,11 @@ The form must stay short enough for mobile use. A circle-only member sale may ad
 
 ### Purpose
 
-Let a participant submit an order from a shared LINE link without creating an account.
+Let a participant submit an order from a shared chat-group link without creating an account.
 
 ### Entry Points
 
-- LINE group link.
+- Chat-group link.
 - Direct share link.
 - Browser history after opening link.
 
@@ -390,7 +390,7 @@ Give the organizer one clear operating table for all orders, totals, payment sta
 
 - From Circle Home active group buy.
 - From publish success.
-- From My Circles attention summary.
+- From My Circle List attention summary.
 
 ### Content Hierarchy
 
@@ -485,7 +485,7 @@ Organizer navigation:
 
 ```mermaid
 flowchart LR
-  A["My Circles"] --> B["Circle Home"]
+  A["My Circle List"] --> B["Circle Home"]
   B --> C["Create Group Buy"]
   C --> D["Publish Success"]
   D --> E["Group Buy Management"]
@@ -498,7 +498,7 @@ Participant navigation:
 
 ```mermaid
 flowchart LR
-  A["LINE Link"] --> B["Participant Order Page"]
+  A["Chat Link"] --> B["Participant Order Page"]
   B --> C["Submit"]
   C --> D["Confirmation"]
 ```
@@ -510,7 +510,7 @@ Use plain operational language.
 Good labels:
 
 - Create group buy.
-- Copy LINE link.
+- Copy share link.
 - Submit order.
 - Mark as paid.
 - Confirm payment.

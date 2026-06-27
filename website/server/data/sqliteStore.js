@@ -199,7 +199,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
           id: `${circleId}_member_${index + 1}`,
           circle_id: circleId,
           display_name: name,
-          contact_hint: index % 2 === 0 ? "LINE 群成員" : "",
+          contact_hint: index % 2 === 0 ? "聊天群成員" : "",
           created_at: createdAt,
         });
       });
@@ -212,7 +212,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
       title: "7月咖啡豆團購",
       description: "精選單品咖啡豆，接單後新鮮烘焙。請在結單前完成下單。",
       deadlineAt: "2026-07-05T23:59:00+08:00",
-      payment: "轉帳或 LINE Pay。團主確認後會標記付款狀態。",
+      payment: "轉帳或行動支付。團主確認後會標記付款狀態。",
       pickup: "面交取貨，地點由團主另行通知。",
       metadata: { purpose: "group_buy", lineCompanion: true },
       options: [

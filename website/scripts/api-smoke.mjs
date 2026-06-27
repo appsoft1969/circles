@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const websiteDir = dirname(__dirname);
 const serverEntry = join(websiteDir, "server", "index.js");
 const postgresUrl =
-  process.env.API_SMOKE_DATABASE_URL || "postgres://circles:circles_dev_password@127.0.0.1:5433/circles_dev";
+  process.env.API_SMOKE_DATABASE_URL || "postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local";
 
 function log(message) {
   console.log(`[api-smoke] ${message}`);
@@ -327,7 +327,7 @@ async function assertPostgresReady() {
     assert.ok(result.rows[0]?.database, "Postgres connection did not return a database");
   } catch (error) {
     throw new Error(
-      `Postgres smoke requires local Postgres at ${postgresUrl}. Start it with docker compose --profile postgres up -d postgres adminer, then apply the migration and seed.\n${error.message}`,
+      `Postgres smoke requires local Postgres at ${postgresUrl}. Start Homebrew PostgreSQL with brew services start postgresql@16, then apply the migration and seed. For Docker Postgres parity, set API_SMOKE_DATABASE_URL explicitly.\n${error.message}`,
     );
   } finally {
     await pool.end();

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.useincircle.api</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>--no-warnings</string>
+		<string>server/index.js</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>NODE_ENV</key>
+		<string>production</string>
+		<key>DATA_STORE</key>
+		<string>sqlite</string>
+		<key>HOST</key>
+		<string>127.0.0.1</string>
+		<key>PORT</key>
+		<string>8787</string>
+	</dict>
+
+	<key>KeepAlive</key>
+	<true/>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/incircle-api.out.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/incircle-api.err.log</string>
+</dict>
+</plist>

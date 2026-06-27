@@ -13,7 +13,7 @@ It is intentionally simple:
 
 ## Product Architecture
 
-Circles is built as a structured task layer that complements LINE.
+InCircle is built as a structured task layer that complements existing chat groups.
 
 The core entity is `task`, not only `group_buy`.
 
@@ -33,7 +33,7 @@ Every template shares the same core flow:
 
 1. Organizer creates a task.
 2. App creates a share token.
-3. Organizer copies the `/join/:token` URL into LINE.
+3. Organizer copies the `/join/:token` URL into a chat group.
 4. Participants submit responses without installing an app.
 5. Organizer manages counts, payment status, and completion status.
 
@@ -171,8 +171,8 @@ The API uses `website/server/data/storeFactory.js`.
 Supported `DATA_STORE` values:
 
 - `sqlite`: default working MVP runtime.
-- `postgres`: local runtime for validating Postgres connectivity, seeded demo data, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, and CSV export.
-- Task announcements and task comments are part of the core task object in both stores. They are the first step toward in-app communication without turning the product into a LINE clone.
+- `postgres`: local runtime for validating Postgres connectivity, seeded demo data, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, and CSV export. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
+- Task announcements and task comments are part of the core task object in both stores. They are the first step toward in-app communication without turning the product into a chat app clone.
 
 SQLite environment variables:
 
@@ -265,7 +265,7 @@ npm run test:api
 npm run build
 ```
 
-`npm run test:api` starts temporary API servers on free ports and verifies the core task workflow against both SQLite and local Docker Postgres:
+`npm run test:api` starts temporary API servers on free ports and verifies the core task workflow against both SQLite and local Postgres:
 
 - bootstrap data
 - task creation
@@ -279,7 +279,7 @@ npm run build
 - task close/reopen
 - CSV export
 
-Set `SKIP_POSTGRES_SMOKE=1` only when Docker Postgres is intentionally unavailable.
+Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailable. For Docker Postgres parity, set `API_SMOKE_DATABASE_URL` explicitly.
 
 Current local URLs:
 
@@ -325,6 +325,6 @@ Supporting docs:
 
 - [Postgres Schema Plan](postgres-schema.md)
 
-This schema has been verified against Docker Postgres and includes identity, circles, memberships, tasks, responses, payment records, announcements, comments, lightweight chat foundations, notifications, attachments, and audit events.
+This schema has been verified against Homebrew Postgres and Docker Postgres. It includes identity, circles, memberships, tasks, responses, payment records, announcements, comments, lightweight chat foundations, notifications, attachments, and audit events.
 
 The current website has not been switched to Postgres yet. Keep SQLite for the working local MVP until the editable task workflow and auth decisions are stable enough to introduce a Postgres data access layer.

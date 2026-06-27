@@ -19,7 +19,7 @@
 
 - P3: Consider making the sample data exactly match the generated management mock if a more literal visual fidelity pass is needed.
 - P3: Consider adding a true order detail drawer for the row chevron.
-- P3: Consider adding a copied-link preview after "複製 LINE 連結".
+- P3: Consider adding a copied-link preview after "複製分享連結".
 
 **QA Artifacts**
 
@@ -38,7 +38,7 @@
 - Spacing and layout rhythm: mobile frame, separators, summary metric row, action buttons, filter tabs, and order rows follow the reference density. Sticky actions are functional and visible.
 - Colors and visual tokens: grayscale base with restrained blue, green, orange, and red semantic accents. State chips use consistent payment and pickup colors.
 - Image quality and asset fidelity: the reference contains no product imagery. Icons use `lucide-react`, matching the thin-outline operational icon style without custom inline SVG assets.
-- Copy and content: Traditional Chinese labels match the workflow: `複製 LINE 連結`, `匯出 CSV`, `未付款`, `待確認`, `已付款`, `待取貨`, `送出訂單`. Sample numbers differ from the generated mock where needed to support interactive state changes.
+- Copy and content: Traditional Chinese labels match the workflow: `複製分享連結`, `匯出 CSV`, `未付款`, `待確認`, `已付款`, `待取貨`, `送出訂單`. Sample numbers differ from the generated mock where needed to support interactive state changes.
 
 **Patches Made Since Previous QA Pass**
 

@@ -1,15 +1,16 @@
-# Circles MVP PRD
+# InCircle MVP PRD
 
 ## 1. Product Summary
 
-**Working Chinese name:** 小圈子  
-**Working English name:** Circles / pending rename
+**Chinese name:** 圈內  
+**English name:** InCircle  
+**Positioning:** 熟人圈的生活辦事空間
 
-Circles is a lightweight tool for people who already have small real-life groups and need to get things done together. The product is designed to complement LINE: LINE remains the conversation layer, while Circles handles structured signup, counting, payment status, and reusable records.
+InCircle is a lightweight tool for people who already have small real-life groups and need to get things done together. The product is designed to complement existing chat groups: conversation can stay where it already happens, while InCircle handles structured signup, counting, payment status, and reusable records.
 
-The first version focuses on group-buy workflows that usually happen inside LINE groups, but the product should eventually support other familiar-circle tasks such as interest checks, claim registration for free tickets or perks, circle-only member sales, office meal orders, drink orders, KTV signups, activity planning, polls, and expense splits.
+The first version focuses on group-buy workflows that usually happen inside chat groups, but the product should eventually support other familiar-circle tasks such as interest checks, claim registration for free tickets or perks, circle-only member sales, office meal orders, drink orders, KTV signups, activity planning, polls, and expense splits.
 
-The product should not start as a social network. It should work as an external helper for existing chat groups, especially LINE.
+The product should not start as a social network. It should work as an external helper for existing chat groups.
 
 ## 2. Positioning
 
@@ -19,11 +20,19 @@ The product should not start as a social network. It should work as an external 
 
 **Chinese positioning:**
 
-> 給熟人圈主使用的揪團辦事工具，補上 LINE 群裡容易混亂的登記、統計、付款狀態與完成紀錄。
+> 給熟人圈主使用的揪團辦事工具，補上聊天群裡容易混亂的登記、統計、付款狀態與完成紀錄。
+
+**Hero copy:**
+
+> 把群裡的 +1，變成清楚的名單與統計。
+
+**Supporting copy:**
+
+> 訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。
 
 ## 3. Problem
 
-Small groups already coordinate through LINE, but operational details are fragile:
+Small groups already coordinate through chat, but operational details are fragile:
 
 - "+1" messages are scattered across chat.
 - Quantities and variants are easy to miscount.
@@ -49,7 +58,7 @@ Examples:
 
 ### Secondary User: Participant
 
-The participant joins through a shared link, usually from LINE. They should be able to submit an order without installing an app.
+The participant joins through a shared link, usually from a chat group. They should be able to submit an order without installing an app.
 
 ## 5. MVP Primary Scenario
 
@@ -61,7 +70,7 @@ Example flow:
 2. Organizer creates a group buy: "7 月咖啡豆團購".
 3. Organizer enters product name, price, variants, deadline, pickup note, and payment instructions.
 4. App generates a share link.
-5. Organizer posts the link to a LINE group.
+5. Organizer posts the link to a chat group.
 6. Participants open the link and submit name, quantity, variant, and note.
 7. Organizer sees total quantity, total amount, individual orders, payment status, and pickup status.
 8. Organizer marks payment and pickup manually.
@@ -74,7 +83,7 @@ Example flow:
 - Let participants submit without signup for the first version.
 - Give organizers a clear management table.
 - Support reuse by duplicating a previous group buy.
-- Prove that a LINE-link companion workflow feels natural before adding broader templates.
+- Prove that a chat-link companion workflow feels natural before adding broader templates.
 
 ## 7. Non-Goals
 
@@ -206,7 +215,7 @@ This template should feel like a private task inside a trusted circle, not like 
 
 ## 9. Required Screens
 
-### 9.1 My Circles
+### 9.1 My Circle List
 
 Purpose:
 
@@ -258,7 +267,7 @@ Start with one or multiple simple item rows. Avoid inventory, SKU, discounts, sh
 
 Purpose:
 
-Let a participant submit from a LINE link without installing the app.
+Let a participant submit from a chat-group link without installing the app.
 
 Required fields:
 
@@ -325,7 +334,7 @@ MVP should use a pragmatic access model:
 - Each public group buy link should use an unguessable token.
 - Organizer pages require authentication.
 
-This avoids onboarding friction for participants and supports LINE-first distribution.
+This avoids onboarding friction for participants and supports chat-group-first distribution.
 
 ## 12. Success Metrics
 
@@ -343,7 +352,7 @@ Primary metrics:
 
 Qualitative validation:
 
-- Organizer says it was easier than LINE-only tracking.
+- Organizer says it was easier than chat-only tracking.
 - Participants complete submission without instruction.
 - Organizer is willing to use it again for the next group buy.
 
@@ -361,7 +370,7 @@ Each test should use a real upcoming group buy. Avoid hypothetical interviews on
 
 Questions after usage:
 
-- Did posting the link to LINE feel acceptable?
+- Did posting the link to a chat group feel acceptable?
 - Did participants understand the form?
 - Did the table reduce manual work?
 - What did you still track outside the app?
@@ -374,4 +383,4 @@ Questions after usage:
 - Should organizer confirmation be separate from participant self-marked paid status?
 - Should the app support multiple currencies later?
 - What is the final English name?
-- Should the Chinese name remain "小圈子" despite existing nearby naming conflicts?
+- Should the Chinese name remain "圈內" despite existing nearby naming conflicts?

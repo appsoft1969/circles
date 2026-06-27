@@ -1,0 +1,21 @@
+{
+	email {$CADDY_ACME_EMAIL}
+}
+
+useincircle.app {
+	encode zstd gzip
+	root * /srv/incircle
+
+	handle /api/* {
+		reverse_proxy api:8787
+	}
+
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+www.useincircle.app, useincircle.com, www.useincircle.com, useincircle.info, www.useincircle.info {
+	redir https://useincircle.app{uri} permanent
+}

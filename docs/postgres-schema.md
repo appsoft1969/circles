@@ -1,11 +1,12 @@
 # Postgres Schema Plan
 
-This document describes the first production-oriented Postgres schema for `小圈子 / Circles`.
+This document describes the first production-oriented Postgres schema for `圈內 / InCircle`.
 
 Current status:
 
 - Migration file: `supabase/migrations/202606270001_initial_schema.sql`
-- Verified against Docker Postgres: yes
+- Verified against Homebrew Postgres: yes, at `127.0.0.1:5434`
+- Verified against Docker Postgres: yes, as an optional parity path
 - Current website runtime database: still SQLite
 - API data access layer: started with `website/server/data/sqliteStore.js`
 - Postgres demo seed: `supabase/seed.sql`
@@ -89,7 +90,7 @@ Current direction:
 
 - The MVP should keep manual payment tracking.
 - `payment_records` supports later payment proof, transfer last-five-digits, confirmation, and refunds.
-- Do not hold user money in Circles until the legal/accounting/payment process is deliberately designed.
+- Do not hold user money in InCircle until the legal/accounting/payment process is deliberately designed.
 
 ### Announcements, Comments, Chat, And Notifications
 
@@ -110,7 +111,7 @@ Phased product mapping:
 - Phase 2: `notifications`, `notification_deliveries`, `devices`
 - Phase 3: `conversations`, `messages`, `message_reads`
 
-This keeps the product from becoming a LINE clone while still supporting in-app circle communication.
+This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
 ### Attachments And Audit
 
@@ -133,40 +134,46 @@ Audit use cases:
 - Task closing/reopening.
 - Invite or membership changes.
 
-## Local Docker Commands
+## Local Homebrew Postgres Commands
 
 Start Postgres:
 
 ```bash
-docker compose --profile postgres up -d postgres adminer
+brew services start postgresql@16
 ```
 
 Apply the migration:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -v ON_ERROR_STOP=1 < supabase/migrations/202606270001_initial_schema.sql
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local -v ON_ERROR_STOP=1 \
+  < supabase/migrations/202606270001_initial_schema.sql
 ```
 
 Apply demo seed data:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -v ON_ERROR_STOP=1 < supabase/seed.sql
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local -v ON_ERROR_STOP=1 \
+  < supabase/seed.sql
 ```
 
 Inspect template data:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -c "select id, display_name, sort_order from task_templates order by sort_order;"
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local \
+  -c "select id, display_name, sort_order from task_templates order by sort_order;"
 ```
 
-Adminer:
+Current local connection:
 
-- URL: `http://127.0.0.1:8081/`
-- System: `PostgreSQL`
-- Server: `postgres`
-- Username: `circles`
-- Password: `circles_dev_password`
-- Database: `circles_dev`
+- Host: `127.0.0.1`
+- Port: `5434`
+- Username: `incircle`
+- Password: `incircle_local_password`
+- Database: `incircle_local`
+- URL: `postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local`
 
 ## Verified Result
 

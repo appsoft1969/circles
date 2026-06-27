@@ -1,35 +1,39 @@
 # Competitive Positioning
 
-This document summarizes the practical alternatives users already use for the same job. The goal is to clarify where Circles should compete and where it should avoid direct fights.
+This document summarizes the practical alternatives users already use for the same job. The goal is to clarify where InCircle should compete and where it should avoid direct fights.
 
 ## Positioning Principle
 
-Circles should not try to replace LINE, Facebook groups, or full commerce platforms.
+InCircle should not try to replace chat apps, Facebook groups, or full commerce platforms.
 
 The first product wedge should be:
 
-> Use LINE for conversation. Use Circles to fill the gaps: signup, counting, payment status, and reusable records.
+> Turn scattered +1 messages into clear names, counts, payment status, and reusable records.
 
 In Chinese:
 
-> LINE 負責聊天，小圈子補上登記、統計、付款狀態與完成紀錄。
+> 把群裡的 +1，變成清楚的名單與統計。
+
+Supporting copy:
+
+> 訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。
 
 ## Competitive Map
 
-### LINE And Chat Groups
+### Chat Groups
 
 Examples:
 
-- LINE groups.
-- LINE OpenChat.
-- LINE 揪團.
+- Private chat groups.
+- Open chat groups.
+- Built-in group coordination features.
 
 Strengths:
 
 - Users already live there.
 - Sharing is natural.
 - Group members do not need a new app.
-- LINE already supports some group-buy and payment workflows.
+- Major chat apps already support some group-buy and payment workflows.
 
 Weaknesses:
 
@@ -40,9 +44,9 @@ Weaknesses:
 
 Implication:
 
-Circles should integrate with LINE behavior instead of competing for conversation. Every group buy should produce a clean share link that works well inside LINE.
+InCircle should integrate with chat-group behavior instead of competing for conversation. Every group buy should produce a clean share link that works well inside a chat group.
 
-The product should treat LINE as the distribution and conversation layer. Circles should own only the structured task layer.
+The product should treat existing chat groups as the distribution and conversation layer. InCircle should own only the structured task layer.
 
 ### Social Group Buy Tools
 
@@ -50,14 +54,14 @@ Examples:
 
 - Buy+1.
 - 飛比+1.
-- EasyStore LINE group order tools.
-- SHOPLINE-style social commerce workflows.
+- Chat-group order tools.
+- Social commerce workflows.
 
 Strengths:
 
 - Good for sellers and professional group-buy hosts.
 - Stronger order management.
-- Often supports Facebook or LINE comment-to-order workflows.
+- Often supports social or chat comment-to-order workflows.
 - May support payment and logistics workflows.
 
 Weaknesses:
@@ -68,7 +72,7 @@ Weaknesses:
 
 Implication:
 
-Circles should not start as a seller platform. Its first users are casual organizers, not merchants.
+InCircle should not start as a seller platform. Its first users are casual organizers, not merchants.
 
 Circle-only member sales are a narrow exception: a known member may occasionally sell self-grown produce, handmade goods, or small-batch items to people inside an existing circle. This should still behave like a private task with a share link, response list, payment status, and pickup status, not like a public storefront.
 
@@ -96,7 +100,7 @@ Weaknesses:
 
 Implication:
 
-Circles can learn from event RSVP flows but should stay broader: group buy, signup, payment status, and reusable circle records.
+InCircle can learn from event RSVP flows but should stay broader: group buy, signup, payment status, and reusable circle records.
 
 ### Expense And Payment Tools
 
@@ -121,7 +125,7 @@ Weaknesses:
 
 Implication:
 
-Circles should treat payment tracking as one step inside a group task. Do not start as a pure payment app.
+InCircle should treat payment tracking as one step inside a group task. Do not start as a pure payment app.
 
 ### Private Community Platforms
 
@@ -146,20 +150,20 @@ Weaknesses:
 
 Implication:
 
-Circles should avoid becoming a full community platform early.
+InCircle should avoid becoming a full community platform early.
 
 ## Strategic Differentiation
 
-Circles should be:
+InCircle should be:
 
 - Lightweight.
-- LINE-link friendly.
+- Chat-link friendly.
 - Organizer-first.
 - Usable without participant signup.
 - Focused on completing a shared task.
 - Reusable for recurring small-circle workflows.
 
-Circles should not be:
+InCircle should not be:
 
 - A public social network.
 - A public marketplace.
@@ -172,25 +176,21 @@ Circles should not be:
 
 The recommended first wedge is:
 
-> Casual group buys for known groups that already coordinate in LINE.
+> Casual group buys for known groups that already coordinate in chat groups.
 
 This wedge has a clear pain, a clear workflow, and a clear success moment:
 
 > The organizer can see who ordered what and who has paid, without reading through chat history.
 
-## Naming Notes
+## Naming Decision
 
-"Circles" is conceptually aligned but generic. It overlaps with existing community and finance products. "小圈子" is also conceptually strong but may face naming conflicts in Taiwan.
+The selected product name is:
 
-Better naming directions should preserve the circle idea while adding action:
+- Chinese: 圈內
+- English: InCircle
+- Full positioning: 圈內 InCircle，熟人圈的生活辦事空間。
 
-- CircleUp
-- Loopin
-- GatherLoop
-- CircleMate
-- 圈內事
-- 揪圈
-- 圈辦
+This name preserves the circle idea while making the boundary clear: this is for people already inside the same real-life circle, not public social discovery.
 
 The final name should be checked against:
 
@@ -198,5 +198,5 @@ The final name should be checked against:
 - Google Play.
 - Taiwan trademark database.
 - Domain availability.
-- LINE official account name availability.
+- Chat-platform account name availability.
 - Major social handles.

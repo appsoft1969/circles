@@ -131,7 +131,7 @@ function App() {
   async function copyShare(task) {
     const url = `${window.location.origin}/join/${task.shareToken}`;
     await navigator.clipboard?.writeText(url);
-    setToast("已複製，可貼回 LINE 群");
+    setToast("已複製，可貼回聊天群");
   }
 
   if (state.loading) {
@@ -139,7 +139,7 @@ function App() {
       <Shell>
         <div className="loading">
           <Loader2 className="spin" />
-          <p>載入小圈子資料庫...</p>
+          <p>載入圈內資料庫...</p>
         </div>
       </Shell>
     );
@@ -251,13 +251,13 @@ function Dashboard({ circles, tasks, go, copyShare }) {
   return (
     <>
       <Topbar
-        title="小圈子 / Circles"
-        subtitle="補 LINE 的辦事工具"
+        title="圈內 InCircle"
+        subtitle="熟人圈的生活辦事空間"
         action={<MessageCircle size={22} />}
       />
       <section className="hero">
-        <h1>LINE 負責聊天，小圈子負責統計。</h1>
-        <p>把訂餐、飲料、團購、圈內小市集、KTV 揪團變成可填、可統計、可追付款的連結。</p>
+        <h1>把群裡的 +1，變成清楚的名單與統計。</h1>
+        <p>訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。</p>
         <button className="primary-button" type="button" onClick={() => go("templates")}>
           <Plus size={18} />
           建立事項
@@ -265,7 +265,7 @@ function Dashboard({ circles, tasks, go, copyShare }) {
       </section>
 
       <section className="metric-grid">
-        <Metric value={circles.length} label="小圈子" />
+        <Metric value={circles.length} label="圈子" />
         <Metric value={activeTasks.length} label="進行中" />
         <Metric value={unpaid} label="待付款/確認" alert />
         <Metric value={tasks.length} label="事項紀錄" />
@@ -330,7 +330,7 @@ function TaskRow({ task, onOpen, onShare }) {
         <b>{money(task.stats.totalAmount)}</b>
         <span>{task.stats.unpaid + task.stats.review} 待付款</span>
       </div>
-      <button className="icon-button" type="button" aria-label="複製 LINE 連結" onClick={onShare}>
+    <button className="icon-button" type="button" aria-label="複製分享連結" onClick={onShare}>
         <Link size={19} />
       </button>
     </article>
@@ -356,7 +356,7 @@ function TemplatePicker({ circles, go, refresh, setToast, selectedTemplate = "gr
 
   return (
     <>
-      <Topbar title="建立事項" subtitle="選一個 LINE 群最常卡住的流程" onBack={() => go("dashboard")} />
+      <Topbar title="建立事項" subtitle="選一個聊天群最常卡住的流程" onBack={() => go("dashboard")} />
       <section className="section">
         <div className="template-list">
           {Object.entries(templateMeta).map(([key, item]) => (
@@ -378,7 +378,7 @@ function TemplatePicker({ circles, go, refresh, setToast, selectedTemplate = "gr
       </section>
 
       <section className="section">
-        <h2>放在哪個小圈子？</h2>
+        <h2>放在哪個圈子？</h2>
         <div className="circle-choice-list">
           {circles.map((circle) => (
             <label key={circle.id} className="radio-row">
@@ -491,7 +491,7 @@ function getTemplateDefaults(template) {
       description: "先統計參加人數，滿 6 人就訂包廂。",
       deadlineAt: deadline,
       paymentInstructions: "現場 AA 或另收訂金。",
-      pickupInstructions: "地點確認後貼回 LINE。",
+      pickupInstructions: "地點確認後貼回聊天群。",
       options: [
         { title: "我要參加", subtitle: "可備註可到時間", unitPrice: 0 },
         { title: "先暫定", subtitle: "晚點確認", unitPrice: 0 },
@@ -499,7 +499,7 @@ function getTemplateDefaults(template) {
     },
     poll: {
       title: "時間地點投票",
-      description: "把 LINE 裡的意見集中統計。",
+      description: "把群裡的意見集中統計。",
       deadlineAt: deadline,
       options: [
         { title: "選項 A", subtitle: "", unitPrice: 0 },
@@ -981,7 +981,7 @@ function TaskManage({ task, go, copyShare, setToast, updateTask }) {
         <span>截止 {task.deadlineAt ? new Date(task.deadlineAt).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未設定"}</span>
       </section>
       <section className="action-row">
-        <button type="button" onClick={() => copyShare(task)}><Copy size={18} />複製 LINE 連結</button>
+        <button type="button" onClick={() => copyShare(task)}><Copy size={18} />複製分享連結</button>
         <a href={`/api/tasks/${task.id}/export.csv`}><Download size={18} />匯出 CSV</a>
         <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />預覽填單</button>
       </section>
@@ -1142,7 +1142,7 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
       }),
     });
     await refresh();
-    setToast("已送出，團主會在小圈子看到統計");
+    setToast("已送出，團主會在圈內看到統計");
     go("manage", { taskId: task.id });
   }
 
@@ -1166,7 +1166,7 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
       <section className="join-hero">
         <span className="status open">進行中</span>
         <h1>{task.title}</h1>
-        <p>由 {task.circleName} 發起。這個連結可以貼在 LINE 群，大家填完就會自動統計。</p>
+        <p>由 {task.circleName} 發起。這個連結可以貼在聊天群，大家填完就會自動統計。</p>
       </section>
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />

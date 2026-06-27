@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-27
 
-This document estimates the expected costs for `小圈子 / Circles`.
+This document estimates the expected costs for `圈內 / InCircle`.
 
 Planning exchange rate:
 
@@ -196,7 +196,7 @@ Start with manual payment tracking:
 - User writes payment instructions.
 - Participant submits order or signup.
 - Organizer marks `未付款`, `待確認`, `已付款`.
-- No money flows through Circles.
+- No money flows through InCircle.
 
 This keeps cost and regulation low.
 
@@ -212,7 +212,7 @@ Likely Taiwan payment gateway costs:
 
 Important product rule:
 
-If Circles collects money from participants and pays organizers/sellers later, the product becomes much more complex. It may trigger:
+If InCircle collects money from participants and pays organizers/sellers later, the product becomes much more complex. It may trigger:
 
 - Refund process.
 - Dispute process.
@@ -238,7 +238,7 @@ For this product, most payments are for physical goods or real-world services:
 
 These should generally be handled outside in-app purchase.
 
-If Circles later sells digital features, subscriptions, premium tools, or digital content inside the app, revisit Apple and Google billing rules. Small businesses may qualify for lower 15% platform fees for digital goods, but rules vary by platform and program.
+If InCircle later sells digital features, subscriptions, premium tools, or digital content inside the app, revisit Apple and Google billing rules. Small businesses may qualify for lower 15% platform fees for digital goods, but rules vary by platform and program.
 
 ## Suggested Budget By Phase
 
@@ -291,7 +291,7 @@ Success gate:
 - 10 completed tasks.
 - At least 30% of organizers create a second task.
 - Participants can submit without explanation.
-- Organizers say payment/status tracking is better than LINE-only.
+- Organizers say payment/status tracking is better than chat-only.
 
 ### Phase 2: Native App MVP
 
@@ -319,7 +319,7 @@ Success gate:
 
 - Push notification actually improves response rate.
 - Organizers still create repeated tasks.
-- Members understand why Circles is useful even if LINE exists.
+- Members understand why InCircle is useful even if they already have chat groups.
 
 ### Phase 3: Public Launch
 
@@ -365,7 +365,7 @@ Priority order:
 - Seller storefronts.
 - Logistics integration.
 - Complex coupons.
-- Full chat replacement for LINE.
+- Full chat app replacement.
 - Expensive agency branding.
 - Large marketing spend before retention is proven.
 

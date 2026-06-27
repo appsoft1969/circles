@@ -1,0 +1,21 @@
+{
+	email admin@useincircle.app
+}
+
+useincircle.app {
+	encode zstd gzip
+
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8787
+	}
+
+	handle {
+		root * /Users/kevin_huang/Documents/Projects/circles/website/dist
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+www.useincircle.app {
+	redir https://useincircle.app{uri} permanent
+}

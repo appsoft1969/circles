@@ -1,22 +1,26 @@
-# Circles Project Instructions
+# InCircle Project Instructions
 
 These rules apply to the whole repository unless a nested `AGENTS.md` adds more specific instructions.
 
 ## Product Identity
 
-- Chinese product name: `小圈子`.
-- Current English working name: `Circles`. Do not rename the product without explicit user direction.
+- Chinese product name: `圈內`.
+- English product name: `InCircle`.
+- The product was renamed from `小圈子 / Circles` to `圈內 / InCircle` by explicit user direction on 2026-06-27.
 - User-facing writing should default to Traditional Chinese for Taiwan users.
 - The core product sentence is:
-  - `小圈子是熟人圈的辦事空間：可以揪團、填單、統計、付款，也能在圈內即時通知與討論。`
+  - `圈內 InCircle 是熟人圈的生活辦事空間：可以揪團、填單、統計、付款，也能在圈內即時通知與討論。`
+- Public-facing copy should not name a specific chat platform. Use implicit language such as `群組`, `聊天群`, `群裡`, `+1`, `誰要`, `幾份`, and `誰付了`.
 - The product is for people who already know each other or already share a real-life circle. It is not for public stranger discovery.
 
 ## Product Positioning
 
-- Treat Circles as a LINE companion, not a LINE replacement.
+- Treat InCircle as a chat-group companion, not a chat app replacement.
 - Stable principle:
-  - `LINE 負責聊天，小圈子補上登記、統計、付款狀態與完成紀錄。`
-- Circles owns structured task workflows:
+  - `把群裡的 +1，變成清楚的名單與統計。`
+- Supporting copy:
+  - `訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。`
+- InCircle owns structured task workflows:
   - Signup.
   - Order or item selection.
   - Quantity counting.
@@ -25,13 +29,13 @@ These rules apply to the whole repository unless a nested `AGENTS.md` adds more 
   - Pickup, attendance, or completion status.
   - Exportable records.
   - Reusing or duplicating previous tasks.
-- LINE can remain a distribution and conversation channel, but Circles must also support in-app task announcements, task discussion, and later lightweight real-time circle chat because members may not be LINE friends.
+- External chat groups can remain a distribution and conversation channel, but InCircle must also support in-app task announcements, task discussion, and later lightweight real-time circle chat because members may not be connected on the same chat platform.
 
 ## Product Boundaries
 
-- Do not turn Circles into a public social network.
+- Do not turn InCircle into a public social network.
 - Do not add a public feed, follower graph, friend graph, public group discovery, or creator/community platform features unless explicitly requested.
-- Do not turn Circles into a public marketplace or professional seller backend.
+- Do not turn InCircle into a public marketplace or professional seller backend.
 - Circle-only member sales are allowed when they behave like a private task inside a trusted circle.
 - Do not start with full e-commerce complexity:
   - Seller storefronts.
@@ -63,7 +67,7 @@ Every template should share the same core flow:
 
 1. Organizer creates a task inside a circle.
 2. App creates a share token and `/join/:token` link.
-3. Organizer shares the link to LINE or inside Circles.
+3. Organizer shares the link to a chat group or inside InCircle.
 4. Participants submit without app installation when possible.
 5. Organizer manages counts, payment status, and completion status.
 6. The task remains reusable as a record.
@@ -103,13 +107,13 @@ Every template should share the same core flow:
 
 ## Chat And Notification Direction
 
-- MVP should not clone LINE.
+- MVP should not clone chat apps.
 - Preferred phased direction:
   - Phase 1: circle announcements and task-level comments.
   - Phase 2: real-time notifications, read/confirmation state, and push notifications.
   - Phase 3: lightweight circle chat where it supports task coordination.
 - Chat features must remain tied to circle/task operations. Avoid a standalone social chat product.
-- Important notifications should not require members to leave Circles for LINE.
+- Important notifications should not require members to leave InCircle for an external chat app.
 
 ## Mobile And App Direction
 
@@ -157,13 +161,75 @@ supabase/
 - Current prototype: `prototype/`, usually served at `http://127.0.0.1:5173/`.
 - The SQLite implementation is for local validation. For production, move to a stable managed database layer, preferably Postgres/Supabase unless a later decision changes this.
 
+## Local Mac Public Hosting
+
+- As of 2026-06-27, `https://useincircle.app` is served directly from this Mac Studio for early development and private beta checks.
+- The current public hosting shape is documented in `docs/local-mac-public-hosting.md`.
+- Public HTTPS entrypoint:
+  - Homebrew Caddy listens on `80` and `443`.
+  - Caddy config: `deploy/Caddyfile.local-mac`.
+  - Static app root: `website/dist`.
+  - API proxy: `/api/*` -> `127.0.0.1:8787`.
+- API runtime:
+  - macOS LaunchAgent label: `com.useincircle.api`.
+  - LaunchAgent config: `deploy/launchd/com.useincircle.api.plist`.
+  - API stays bound to `127.0.0.1`; do not expose the Express server directly to the internet.
+- Data store for this local public phase remains SQLite at `website/data/circles.sqlite` unless explicitly changed.
+- Homebrew PostgreSQL 16 is installed for local Postgres validation at `127.0.0.1:5434`.
+- Local Postgres database: `incircle_local`; local app user: `incircle`.
+- Local Postgres connection string: `postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local`.
+- Do not expose the Vite dev server (`5174`) publicly. Public traffic should enter through Caddy only.
+- Do not expose local Postgres publicly. Keep it bound to `127.0.0.1`.
+- When deploying a public website update on this Mac, run `npm run build` in `website/` so Caddy serves the refreshed `website/dist` build.
+- Check current public hosting with:
+
+```bash
+curl -I https://useincircle.app
+curl -s https://useincircle.app/api/health
+launchctl print gui/$(id -u)/com.useincircle.api
+brew services list | rg caddy
+brew services list | rg postgresql@16
+```
+
+## Domain And HTTPS Direction
+
+- Purchased domains:
+  - `useincircle.app`
+  - `useincircle.com`
+  - `useincircle.info`
+- Preferred primary public domain: `https://useincircle.app`.
+- Redirect `useincircle.com`, `www.useincircle.com`, `useincircle.info`, `www.useincircle.info`, and `www.useincircle.app` to `https://useincircle.app`.
+- Public production must use HTTPS. `.app` requires HTTPS, and InCircle should use HTTPS everywhere for task links, signups, comments, payment status, and future notifications.
+- Prefer Caddy automatic HTTPS for production. Do not require paid SSL certificates for `.com` or `.info` unless a hosting provider specifically requires manual certificates.
+- Keep local development on HTTP at `127.0.0.1` unless explicitly testing production HTTPS behavior.
+
+## Docker Usage Rules
+
+- Docker Desktop is no longer required for the current public `useincircle.app` runtime on this Mac.
+- Keep the InCircle Docker dev stack stopped while this Mac is acting as the public HTTPS host, unless actively doing Docker/Postgres parity work.
+- Do not delete Docker volumes by default. Use `stop`, not `down -v`, unless the user explicitly requests cleanup.
+- Stop the InCircle Docker dev stack without deleting data:
+
+```bash
+docker compose --profile postgres --profile tools --profile storage stop
+```
+
+- Start it only when needed for local parity work:
+
+```bash
+docker compose --profile postgres --profile tools --profile storage up -d
+```
+
+- The InCircle Docker dev stack exposes ports such as `5175`, `8788`, `5433`, `8081`, `6380`, `8025`, `9000`, and `9001`; avoid leaving these running on a machine with a public IP.
+- `postgres-restaurant` on Docker port `5432` belongs to a separate local database context. Do not stop, remove, or modify it as part of InCircle work unless the user explicitly asks.
+
 ## Data Model Rules
 
 - Preserve structured records. Do not bury important operational state in free-form chat text.
 - Keep these concepts explicit:
   - Users/profiles.
   - Devices for push notifications.
-  - Circles.
+  - Circle records.
   - Circle memberships.
   - Tasks.
   - Task templates.
@@ -203,7 +269,7 @@ supabase/
   - `建立事項` for template selection.
   - `成員填單` for participant submission.
   - `管理統計` for organizer operations.
-  - `複製 LINE 連結` for external sharing.
+  - `複製分享連結` for external sharing.
 
 ## Engineering Workflow
 
@@ -241,7 +307,8 @@ curl -s http://127.0.0.1:8787/api/health
 curl -s http://127.0.0.1:8787/api/bootstrap
 ```
 
-- `npm run test:api` expects local Docker Postgres at `127.0.0.1:5433` unless `SKIP_POSTGRES_SMOKE=1` is explicitly set.
+- `npm run test:api` expects local Homebrew Postgres at `127.0.0.1:5434` unless `API_SMOKE_DATABASE_URL` overrides it or `SKIP_POSTGRES_SMOKE=1` is explicitly set.
+- Since the InCircle Docker dev stack should normally stay stopped during local public hosting, prefer the Homebrew Postgres path for parity tests. Use Docker Postgres only when explicitly testing the Docker stack.
 
 - If local services are stale, restart the API and Vite dev server rather than leaving the user on an old build.
 - When UI behavior changes, verify in the browser when feasible, especially mobile-width layouts and `/join/:token` flows.

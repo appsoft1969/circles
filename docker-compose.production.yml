@@ -1,0 +1,78 @@
+name: incircle-production
+
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: website/Dockerfile.web
+    environment:
+      CADDY_ACME_EMAIL: ${CADDY_ACME_EMAIL:?set CADDY_ACME_EMAIL in .env.production}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: website/Dockerfile.api
+    environment:
+      NODE_ENV: production
+      DATA_STORE: postgres
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env.production}
+      HOST: 0.0.0.0
+      PORT: 8787
+    expose:
+      - "8787"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-incircle}
+      POSTGRES_USER: ${POSTGRES_USER:-incircle}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-incircle} -d ${POSTGRES_DB:-incircle}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  db-migrate:
+    image: postgres:16-alpine
+    profiles: ["migrate"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-incircle}
+      POSTGRES_USER: ${POSTGRES_USER:-incircle}
+    volumes:
+      - ./supabase:/supabase:ro
+    command: >
+      sh -c "psql -h postgres -U $$POSTGRES_USER -d $$POSTGRES_DB -v ON_ERROR_STOP=1
+      < /supabase/migrations/202606270001_initial_schema.sql"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:

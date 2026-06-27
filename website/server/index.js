@@ -106,7 +106,7 @@ app.get("/api/tasks/:taskId/export.csv", route(async (req, res) => {
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || "127.0.0.1";
 app.listen(port, host, () => {
-  console.log(`Circles API listening on http://${host}:${port}`);
+  console.log(`InCircle API listening on http://${host}:${port}`);
   console.log(`Data store: ${store.backend}`);
   if (store.dbPath) console.log(`SQLite database: ${store.dbPath}`);
   if (store.connectionString) console.log(`Postgres: ${store.connectionString}`);

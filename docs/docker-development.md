@@ -195,7 +195,13 @@ Run SQLite and Postgres API smoke tests from `website/`:
 npm run test:api
 ```
 
-The Postgres portion expects Docker Postgres on `127.0.0.1:5433` with the migration and `supabase/seed.sql` already applied. It creates a temporary task, announcement, comment, and response through the API and removes that task data afterward.
+The default Postgres smoke path expects Homebrew Postgres on `127.0.0.1:5434`. To test Docker Postgres instead, run:
+
+```bash
+API_SMOKE_DATABASE_URL=postgres://circles:circles_dev_password@127.0.0.1:5433/circles_dev npm run test:api
+```
+
+The Postgres database must have the migration and `supabase/seed.sql` already applied. The smoke test creates a temporary task, announcement, comment, and response through the API and removes that task data afterward.
 
 View logs:
 

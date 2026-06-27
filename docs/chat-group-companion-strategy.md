@@ -1,31 +1,35 @@
-# LINE Companion Strategy
+# Chat Group Companion Strategy
 
-Circles should be designed as a companion to LINE, not a replacement for LINE.
+InCircle should be designed as a companion to existing chat groups, not a replacement for chat apps.
 
 ## Core Principle
 
-> LINE is where people talk. Circles is where the group task gets organized.
+> Chat groups are where people talk. InCircle is where the group task gets organized.
 
 In Chinese:
 
-> LINE 負責聊天，小圈子補上登記、統計、付款狀態與完成紀錄。
+> 把群裡的 +1，變成清楚的名單與統計。
+
+Supporting copy:
+
+> 訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。
 
 ## Why This Matters
 
-Most target users already have their real groups in LINE. Asking them to move the whole group into a new app creates too much friction.
+Most target users already have their real groups in a chat app. Asking them to move the whole group into a new app creates too much friction.
 
-Circles should succeed by fitting into the existing behavior:
+InCircle should succeed by fitting into the existing behavior:
 
-1. Organizer creates a task in Circles.
-2. Circles generates a link.
-3. Organizer posts the link to LINE.
+1. Organizer creates a task in InCircle.
+2. InCircle generates a link.
+3. Organizer posts the link to the chat group.
 4. Participants submit through the link.
-5. Organizer manages the structured result in Circles.
-6. Conversation continues in LINE.
+5. Organizer manages the structured result in InCircle.
+6. Conversation continues in the original chat group.
 
-## What LINE Should Keep Doing
+## What Chat Apps Should Keep Doing
 
-Circles should not compete with LINE on:
+InCircle should not compete with chat apps on:
 
 - Casual chat.
 - Relationship maintenance.
@@ -35,9 +39,9 @@ Circles should not compete with LINE on:
 - Existing contact graph.
 - Daily notifications and habit.
 
-## What Circles Should Do Better
+## What InCircle Should Do Better
 
-Circles should focus on the parts LINE is not structurally good at:
+InCircle should focus on the parts chat is not structurally good at:
 
 - Structured signup.
 - Item or option selection.
@@ -188,11 +192,11 @@ Key fields:
 
 ## Product Boundary
 
-Circles should not become a full chat app, social feed, public community platform, public marketplace, or seller backend.
+InCircle should not become a full chat app, social feed, public community platform, public marketplace, or seller backend.
 
 The long-term product should be:
 
-> A structured task layer for small real-life circles that already live in LINE.
+> A structured task layer for small real-life circles that already live in chat groups.
 
 ## MVP Implication
 
@@ -204,4 +208,4 @@ Recommended generic wording:
 - `建立團購` inside the group-buy template.
 - `成員填單` for participant submission.
 - `管理統計` for organizer operations.
-- `複製 LINE 連結` for distribution.
+- `複製分享連結` for distribution.

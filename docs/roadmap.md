@@ -2,13 +2,13 @@
 
 ## Product Thesis
 
-Circles should start as a narrow utility for known-group coordination. If it earns repeated organizer usage, it can expand into a broader small-circle operations platform.
+InCircle should start as a narrow utility for known-group coordination. If it earns repeated organizer usage, it can expand into a broader small-circle operations platform.
 
 ## Phase 0: Concept Validation
 
 Goal:
 
-Validate that organizers want a LINE-link-based tool before building a full native app.
+Validate that organizers want a chat-link-based tool before building a full native app.
 
 Deliverables:
 
@@ -71,7 +71,7 @@ Possible features:
 - Payment reminder messages.
 - Better export.
 - Group buy templates.
-- Template picker for common LINE group tasks.
+- Template picker for common chat-group tasks.
 - Seller/member label for circle-only sales.
 - Optional available quantity field.
 
@@ -146,7 +146,7 @@ Build native only when repeat usage justifies the cost. The participant flow sho
 
 ## Long-Term Possibility
 
-If the product works, Circles can become:
+If the product works, InCircle can become:
 
 > A lightweight operating system for small real-life circles.
 

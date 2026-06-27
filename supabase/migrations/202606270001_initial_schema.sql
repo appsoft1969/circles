@@ -1,5 +1,5 @@
--- Circles initial Postgres schema.
--- This migration is designed for local Docker Postgres and future Supabase/Postgres.
+-- InCircle initial Postgres schema.
+-- This migration is designed for local Postgres and future Supabase/Postgres.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 

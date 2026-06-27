@@ -1,50 +1,60 @@
 # Supabase / Postgres
 
-This folder contains Postgres assets intended to align Circles with the future Supabase backend.
+This folder contains Postgres assets intended to align InCircle with the future Supabase backend.
 
 Current state:
 
 - `migrations/202606270001_initial_schema.sql` defines the first production-oriented schema.
 - `seed.sql` adds re-runnable local demo circles, tasks, options, responses, and response items.
-- The current website still runs on SQLite.
-- The migration and seed have been tested against Docker Postgres.
+- The current public website still runs on SQLite.
+- The migration and seed have been tested against Homebrew Postgres at `127.0.0.1:5434` and Docker Postgres.
 
 ## Apply Locally
 
-Start Docker Postgres:
+Homebrew Postgres is the current local default on this Mac:
 
 ```bash
-docker compose --profile postgres up -d postgres adminer
+brew services start postgresql@16
 ```
 
 Apply the schema:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -v ON_ERROR_STOP=1 < supabase/migrations/202606270001_initial_schema.sql
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local -v ON_ERROR_STOP=1 \
+  < supabase/migrations/202606270001_initial_schema.sql
 ```
 
 Apply demo data:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -v ON_ERROR_STOP=1 < supabase/seed.sql
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local -v ON_ERROR_STOP=1 \
+  < supabase/seed.sql
 ```
 
 Inspect tables:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -c "select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE';"
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local \
+  -c "select count(*) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE';"
 ```
 
 Inspect task templates:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -c "select id, display_name from task_templates order by sort_order;"
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local \
+  -c "select id, display_name from task_templates order by sort_order;"
 ```
 
 Inspect seeded tasks:
 
 ```bash
-docker compose exec -T postgres psql -U circles -d circles_dev -c "select title, template_id, share_token from tasks order by created_at desc;"
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local \
+  -c "select title, template_id, share_token from tasks order by created_at desc;"
 ```
 
 ## Design Notes
