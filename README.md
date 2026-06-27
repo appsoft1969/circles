@@ -41,6 +41,7 @@ The first version should focus on casual group-buy management for known groups, 
 - [Domain And Production Deployment](docs/domain-and-production-deployment.md)
 - [Local Mac Public Hosting](docs/local-mac-public-hosting.md)
 - [Postgres Schema Plan](docs/postgres-schema.md)
+- [Postgres Backup And Restore Runbook](docs/postgres-backup-restore.md)
 
 ## Prototype
 
@@ -54,9 +55,11 @@ The current prototype direction combines the group-buy management workbench with
 - [Website App](website/)
 - [Technical Architecture](docs/technical-architecture.md)
 
-The first database-backed website is implemented as a React/Vite frontend with an Express API and a local SQLite database. It supports multiple chat-group companion templates: group buy, interest check, claim/registration, circle-only member sale, office meal order, drink order, activity/KTV signup, poll, and expense split.
+The first database-backed website is implemented as a React/Vite frontend with an Express API. It supports multiple chat-group companion templates: group buy, interest check, claim/registration, circle-only member sale, office meal order, drink order, activity/KTV signup, poll, and expense split.
 
-Postgres/Supabase-oriented schema work lives in `supabase/`. The current Postgres path supports local schema validation, demo seed data, task reads, share-link reads, task creation, task detail/option edits, interest-check conversion, participant responses, task announcements, task comments, status updates, and CSV export. SQLite remains the default local runtime unless `DATA_STORE=postgres` is explicitly enabled.
+The current public Mac-hosted site at `https://useincircle.app` runs the Express API with `DATA_STORE=postgres` against Homebrew Postgres at `127.0.0.1:5434`. SQLite remains supported for isolated local development and fallback testing through `DATA_STORE=sqlite`.
+
+Postgres/Supabase-oriented schema work lives in `supabase/`. The current Postgres path supports local schema validation, migrated public data, demo seed data, task reads, share-link reads, task creation, task detail/option edits, interest-check conversion, participant responses, task announcements, task comments, status updates, and CSV export.
 
 Local development URLs:
 
@@ -76,6 +79,16 @@ npm run test:api
 ```
 
 This runs the same create-task, task edit, interest-check conversion, announcement, comment, share-response, status-update, and CSV flow against SQLite and local Postgres.
+
+Postgres backup and restore drill:
+
+```bash
+cd website
+npm run backup:postgres
+npm run backup:postgres:status
+```
+
+The Mac-hosted public database also has a daily LaunchAgent backup/restore check at `03:20`, with a copy written to iCloud Drive; see [Postgres Backup And Restore Runbook](docs/postgres-backup-restore.md).
 
 ## Key Product Constraint
 

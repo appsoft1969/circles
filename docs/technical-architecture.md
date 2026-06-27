@@ -6,8 +6,9 @@ It is intentionally simple:
 
 - Frontend: React + Vite.
 - Backend: Express.
-- Data access: SQLite store module at `website/server/data/sqliteStore.js`.
-- Database: SQLite file at `website/data/circles.sqlite`.
+- Data access: `website/server/data/storeFactory.js`, with SQLite and Postgres store implementations.
+- Current public Mac database: Homebrew Postgres at `127.0.0.1:5434`, database `incircle_local`.
+- SQLite fallback: `website/data/circles.sqlite`.
 - Runtime API: `http://127.0.0.1:8787`.
 - Local website: `http://127.0.0.1:5174`.
 
@@ -162,7 +163,7 @@ Key columns:
 
 The HTTP routes live in `website/server/index.js`.
 
-Route handlers should not contain raw SQL. Current SQLite access is isolated in `website/server/data/sqliteStore.js`; future Postgres work should add a separate store or repository implementation behind the same API-facing behavior.
+Route handlers should not contain raw SQL. Database-specific behavior belongs in `website/server/data/sqliteStore.js` or `website/server/data/postgresStore.js`, selected by `website/server/data/storeFactory.js`.
 
 ## Data Store Selection
 
@@ -171,7 +172,7 @@ The API uses `website/server/data/storeFactory.js`.
 Supported `DATA_STORE` values:
 
 - `sqlite`: default working MVP runtime.
-- `postgres`: local runtime for validating Postgres connectivity, seeded demo data, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, and CSV export. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
+- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, and CSV export. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
 - Task announcements and task comments are part of the core task object in both stores. They are the first step toward in-app communication without turning the product into a chat app clone.
 
 SQLite environment variables:
@@ -198,7 +199,7 @@ Current Postgres store status:
 - `POST /api/tasks/:taskId/comments`: implemented.
 - `GET /api/tasks/:taskId/export.csv`: implemented.
 
-Do not treat `DATA_STORE=postgres` as production-ready until auth, RLS, deployment, backups, and operational verification are implemented.
+Do not treat `DATA_STORE=postgres` as fully production-ready until auth, RLS/access policies, deployment hardening, backups, monitoring, and operational verification are implemented.
 
 ### `GET /api/health`
 
@@ -262,6 +263,8 @@ npm run seed
 npm run api
 npm run dev -- --port 5174
 npm run test:api
+npm run backup:postgres
+npm run backup:postgres:status
 npm run build
 ```
 
@@ -280,6 +283,10 @@ npm run build
 - CSV export
 
 Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailable. For Docker Postgres parity, set `API_SMOKE_DATABASE_URL` explicitly.
+
+`npm run backup:postgres` creates a Postgres custom-format dump, restores it into a temporary database to verify core table counts, and copies verified artifacts to iCloud Drive when `OFFSITE_BACKUP_DIR` is set. The public Mac host also runs this check daily through `com.useincircle.postgres-backup`.
+
+`npm run backup:postgres:status` checks backup freshness, local dump integrity, restore-check status, and iCloud copy presence/hash consistency. It writes `website/artifacts/postgres-backup-status.json` and exits non-zero when the backup state is unhealthy.
 
 Current local URLs:
 
@@ -313,7 +320,9 @@ See [Docker Development Environment](docker-development.md).
 
 ## Current Technical Tradeoff
 
-The backend uses Node's built-in SQLite support through `node:sqlite`. This keeps the MVP dependency-light and easy to run locally. It is acceptable for local product validation, but a production build should later move to a stable database layer such as Postgres/Supabase, Turso/libSQL, or a managed SQLite-compatible service.
+The backend can run on SQLite or Postgres. SQLite keeps isolated local validation simple, while the current public Mac-hosted site uses Homebrew Postgres so the product is closer to the future Supabase/Postgres direction.
+
+The current Mac-hosted Postgres path is useful for early public testing, but it still needs real production hardening: auth, RLS/access policies, monitored provider-side backups, monitoring, and a formal deployment target. The current iCloud Drive copy is a useful early off-machine backup, not the final production backup architecture.
 
 ## Production Database Direction
 
@@ -327,4 +336,4 @@ Supporting docs:
 
 This schema has been verified against Homebrew Postgres and Docker Postgres. It includes identity, circles, memberships, tasks, responses, payment records, announcements, comments, lightweight chat foundations, notifications, attachments, and audit events.
 
-The current website has not been switched to Postgres yet. Keep SQLite for the working local MVP until the editable task workflow and auth decisions are stable enough to introduce a Postgres data access layer.
+The current public Mac-hosted website has been switched to Postgres. Keep SQLite support available for isolated tests and fallback development, but do not let new database behavior bypass the store layer.

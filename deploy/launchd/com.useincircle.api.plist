@@ -20,7 +20,9 @@
 		<key>NODE_ENV</key>
 		<string>production</string>
 		<key>DATA_STORE</key>
-		<string>sqlite</string>
+		<string>postgres</string>
+		<key>DATABASE_URL</key>
+		<string>postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local</string>
 		<key>HOST</key>
 		<string>127.0.0.1</string>
 		<key>PORT</key>

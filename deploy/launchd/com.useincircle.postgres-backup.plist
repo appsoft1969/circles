@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.useincircle.postgres-backup</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>--no-warnings</string>
+		<string>scripts/postgres-backup-restore.mjs</string>
+	</array>
+
+	<key>WorkingDirectory</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>NODE_ENV</key>
+		<string>production</string>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+		<key>DATABASE_URL</key>
+		<string>postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local</string>
+		<key>MAINTENANCE_DATABASE_URL</key>
+		<string>postgres://kevin_huang@127.0.0.1:5434/postgres</string>
+		<key>BACKUP_DIR</key>
+		<string>/Users/kevin_huang/Documents/Projects/circles/website/data/backups/postgres</string>
+		<key>OFFSITE_BACKUP_DIR</key>
+		<string>/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres</string>
+		<key>BACKUP_RETENTION_DAYS</key>
+		<string>30</string>
+	</dict>
+
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>3</integer>
+		<key>Minute</key>
+		<integer>20</integer>
+	</dict>
+
+	<key>StandardOutPath</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/postgres-backup.out.log</string>
+
+	<key>StandardErrorPath</key>
+	<string>/Users/kevin_huang/Documents/Projects/circles/website/artifacts/postgres-backup.err.log</string>
+</dict>
+</plist>

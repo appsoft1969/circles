@@ -7,15 +7,16 @@ Current status:
 - Migration file: `supabase/migrations/202606270001_initial_schema.sql`
 - Verified against Homebrew Postgres: yes, at `127.0.0.1:5434`
 - Verified against Docker Postgres: yes, as an optional parity path
-- Current website runtime database: still SQLite
-- API data access layer: started with `website/server/data/sqliteStore.js`
+- Current public Mac website runtime database: Homebrew Postgres at `127.0.0.1:5434`
+- SQLite support: still available for isolated local development and fallback tests
+- API data access layer: `website/server/data/storeFactory.js` selecting `sqliteStore.js` or `postgresStore.js`
 - Postgres demo seed: `supabase/seed.sql`
 - Postgres store: implemented in `website/server/data/postgresStore.js`
 - API migration to Postgres: core MVP task reads/writes, task edits, interest-check conversion, share responses, status updates, and CSV export are implemented
 
-The goal of this schema is to align the product with the future Expo / React Native + Supabase / Postgres architecture without forcing the current working website to change databases too early.
+The goal of this schema is to align the product with the future Expo / React Native + Supabase / Postgres architecture while keeping the current website able to run either on Postgres or SQLite through the store layer.
 
-## Why Postgres Now, But Not Runtime Yet
+## Why Postgres Now
 
 Postgres should be designed now because it affects:
 
@@ -26,14 +27,9 @@ Postgres should be designed now because it affects:
 - Attachment and payment proof storage.
 - Auditability.
 
-The current Express API should keep using SQLite until:
+The public Mac-hosted Express API now uses Postgres for early development and private beta checks. This is still a local-hosted public path, not the final production architecture.
 
-- The editable task creation workflow is more complete.
-- The main fields are stable.
-- Login/member identity requirements are clearer.
-- The Postgres access layer can be introduced deliberately.
-
-`DATA_STORE=postgres` is currently useful for connectivity, seeded demo data, task reads, task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, status updates, and CSV validation. It should not be treated as production-ready until auth, RLS, backups, and deployment operations are implemented.
+`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, status updates, announcements, comments, and CSV validation. It should not be treated as fully production-ready until auth, RLS/access policies, automated backups, monitoring, and deployment operations are implemented.
 
 ## Schema Groups
 
@@ -198,6 +194,9 @@ The initial migration has been verified locally with:
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
 - Postgres CSV export through `GET /api/tasks/:taskId/export.csv`.
 - Automated API smoke coverage through `npm run test:api`, shared with SQLite, including task edits, conversion, announcements, and comments.
+- SQLite-to-Postgres migration through `website/scripts/migrate-sqlite-to-postgres.mjs`.
+- Daily local backup and restore drill through `website/scripts/postgres-backup-restore.mjs`, with verified artifacts copied to iCloud Drive.
+- Public Mac API health verified with `backend: "postgres"`.
 - A transaction-only smoke test that creates and rolls back:
   - profile
   - circle
@@ -219,7 +218,7 @@ The initial migration has been verified locally with:
 Recommended next steps:
 
 1. Add RLS policy migration after auth decisions are made.
-2. Migrate current SQLite task data into Postgres once the editable task workflow is stable.
+2. Add offsite backup copy and alerting for the public Mac hosting path.
 3. Add Supabase Realtime subscriptions for announcements, comments, and notifications.
-4. Add backup/restore and deployment runbook checks before any beta user data enters Postgres.
+4. Decide when to move from Mac-hosted Postgres to managed Supabase/Postgres or a VPS-hosted database.
 5. Add CI wiring for `npm run test:api` when the repository is pushed to GitHub.

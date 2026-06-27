@@ -12,9 +12,11 @@ Use this only for early development, demos, and private beta checks. A formal VP
 - Public entrypoints: `80` and `443`
 - Static website build: `website/dist`
 - API: `127.0.0.1:8787`
-- Data store for the public API in this phase: local SQLite at `website/data/circles.sqlite`
-- Local Postgres validation database: Homebrew PostgreSQL at `127.0.0.1:5434`, database `incircle_local`, user `incircle`
+- Data store for the public API in this phase: Homebrew PostgreSQL at `127.0.0.1:5434`, database `incircle_local`, user `incircle`
+- SQLite fallback/source backup: `website/data/circles.sqlite`
 - Reverse proxy / HTTPS: Homebrew Caddy
+- Daily Postgres backup/restore check: LaunchAgent `com.useincircle.postgres-backup`, scheduled at `03:20`
+- Offsite copy target: iCloud Drive folder `InCircle/backups/postgres`
 
 ## Router Requirement
 
@@ -40,6 +42,8 @@ Start the API:
 
 ```bash
 cd /Users/kevin_huang/Documents/Projects/circles/website
+DATA_STORE=postgres \
+DATABASE_URL=postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local \
 npm run api
 ```
 
@@ -81,7 +85,8 @@ brew services start caddy
 ```bash
 curl -I http://useincircle.app
 curl -I https://useincircle.app
-curl https://useincircle.app/api/health
+curl -s https://useincircle.app/api/health
+curl -s https://useincircle.app/api/bootstrap
 curl -I https://www.useincircle.app
 ```
 
@@ -89,7 +94,8 @@ Expected behavior:
 
 - `http://useincircle.app` redirects to HTTPS.
 - `https://useincircle.app` serves the InCircle website.
-- `https://useincircle.app/api/health` returns API health JSON.
+- `https://useincircle.app/api/health` returns API health JSON with `backend` set to `postgres`.
+- `https://useincircle.app/api/bootstrap` returns the current public circles, tasks, templates, stats, options, and responses from Postgres.
 - `https://www.useincircle.app` redirects to `https://useincircle.app`.
 
 Service checks:
@@ -107,10 +113,98 @@ lsof -nP -iTCP:5434 -sTCP:LISTEN
 
 - Do not expose the Vite dev server directly to the internet.
 - Keep the API bound to `127.0.0.1`; Caddy is the public entrypoint.
-- Keep daily copies of `website/data/circles.sqlite` if this path is used for real beta data.
+- Keep daily Postgres dumps once this path is used for real beta data.
+- Keep `website/data/circles.sqlite` as a fallback/source backup after the public Postgres switch.
 - Keep Homebrew PostgreSQL on `127.0.0.1:5434`; do not expose it to the internet.
 - Stop or remove any other service using ports `80` or `443` before starting Caddy.
 - Keep the Docker dev stack stopped while this Mac is acting as the public HTTPS host.
+- See `docs/postgres-backup-restore.md` for backup, restore-check, and launchd operations.
+
+## Daily Postgres Backup And Restore Check
+
+The current Mac-hosted public database has a local daily backup and restore drill.
+
+- Script: `website/scripts/postgres-backup-restore.mjs`
+- Command: `npm run backup:postgres`
+- Status command: `npm run backup:postgres:status`
+- LaunchAgent: `deploy/launchd/com.useincircle.postgres-backup.plist`
+- Installed symlink: `~/Library/LaunchAgents/com.useincircle.postgres-backup.plist`
+- Schedule: daily at `03:20`
+- Backup directory: `website/data/backups/postgres`
+- iCloud copy: `/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres`
+- Retention: 30 days
+- Logs:
+  - `website/artifacts/postgres-backup.out.log`
+  - `website/artifacts/postgres-backup.err.log`
+- Status report: `website/artifacts/postgres-backup-status.json`
+
+Manual check:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles/website
+npm run backup:postgres
+```
+
+LaunchAgent check:
+
+```bash
+launchctl print gui/$(id -u)/com.useincircle.postgres-backup
+tail -n 80 /Users/kevin_huang/Documents/Projects/circles/website/artifacts/postgres-backup.out.log
+tail -n 80 /Users/kevin_huang/Documents/Projects/circles/website/artifacts/postgres-backup.err.log
+```
+
+Backup health check:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles/website
+OFFSITE_BACKUP_DIR="/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres" npm run backup:postgres:status
+```
+
+Expected result:
+
+- `last exit code = 0` after a run.
+- A `.dump`, `.json`, and `.restore-check.json` file are created.
+- The same three files are copied to iCloud Drive.
+- The restore check report has `mismatches: []`.
+- No database matching `incircle_restore_%` remains after the run.
+- The status check exits `0` and writes `ok: true` to `website/artifacts/postgres-backup-status.json`.
+
+## SQLite To Postgres Switch
+
+The public Mac API was switched to Postgres on 2026-06-27.
+
+Before migrating, stop the API and checkpoint SQLite so the main database file includes WAL data:
+
+```bash
+launchctl bootout gui/$(id -u)/com.useincircle.api
+sqlite3 /Users/kevin_huang/Documents/Projects/circles/website/data/circles.sqlite "PRAGMA wal_checkpoint(TRUNCATE);"
+```
+
+Create backups before replacing public data:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles
+backup_dir="website/data/backups/$(date +%Y%m%d%H%M%S)"
+mkdir -p "$backup_dir"
+cp website/data/circles.sqlite "$backup_dir/circles.sqlite"
+PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/pg_dump \
+  -h 127.0.0.1 -p 5434 -U incircle -d incircle_local -Fc \
+  -f "$backup_dir/incircle_local.before-switch.dump"
+```
+
+Migrate SQLite data into Postgres:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles/website
+DATABASE_URL=postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local npm run migrate:sqlite-to-postgres
+```
+
+The migration truncates business data in Postgres, preserves `task_templates`, and migrates users, circles, memberships, tasks, task options, responses, response items, announcements, and task comments. Share tokens are preserved, so existing `/join/:token` links continue to work.
+
+Current switch backup:
+
+- `website/data/backups/20260627155509/circles.sqlite`
+- `website/data/backups/20260627155509/incircle_local.before-switch.dump`
 
 Native Postgres checks:
 

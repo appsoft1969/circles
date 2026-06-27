@@ -6,8 +6,10 @@ Current state:
 
 - `migrations/202606270001_initial_schema.sql` defines the first production-oriented schema.
 - `seed.sql` adds re-runnable local demo circles, tasks, options, responses, and response items.
-- The current public website still runs on SQLite.
+- The current public Mac-hosted website runs on Homebrew Postgres through `DATA_STORE=postgres`.
+- SQLite remains available as a local fallback/test data store.
 - The migration and seed have been tested against Homebrew Postgres at `127.0.0.1:5434` and Docker Postgres.
+- Daily local backup and restore checks are handled by `website/scripts/postgres-backup-restore.mjs`, with a verified copy written to iCloud Drive. Health checks are handled by `website/scripts/postgres-backup-status.mjs`; see `docs/postgres-backup-restore.md`.
 
 ## Apply Locally
 

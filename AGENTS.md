@@ -155,11 +155,13 @@ supabase/
 - Current working website: `website/`.
 - Current frontend: React + Vite.
 - Current backend: Express.
-- Current local database: SQLite via Node `node:sqlite`, stored at `website/data/circles.sqlite`.
+- Current API data access is selected by `DATA_STORE` through `website/server/data/storeFactory.js`.
+- Current public Mac API database: Homebrew Postgres at `127.0.0.1:5434`, database `incircle_local`, user `incircle`.
+- SQLite via Node `node:sqlite` is still supported for isolated local development and test fallback, stored at `website/data/circles.sqlite`.
 - Current local website URL: `http://127.0.0.1:5174/`.
 - Current local API URL: `http://127.0.0.1:8787/`.
 - Current prototype: `prototype/`, usually served at `http://127.0.0.1:5173/`.
-- The SQLite implementation is for local validation. For production, move to a stable managed database layer, preferably Postgres/Supabase unless a later decision changes this.
+- The current public Postgres-on-Mac setup is for early development and private beta validation. Before real production scale, move to a hardened VPS or managed platform with backups, monitoring, auth, and access policies.
 
 ## Local Mac Public Hosting
 
@@ -174,10 +176,27 @@ supabase/
   - macOS LaunchAgent label: `com.useincircle.api`.
   - LaunchAgent config: `deploy/launchd/com.useincircle.api.plist`.
   - API stays bound to `127.0.0.1`; do not expose the Express server directly to the internet.
-- Data store for this local public phase remains SQLite at `website/data/circles.sqlite` unless explicitly changed.
-- Homebrew PostgreSQL 16 is installed for local Postgres validation at `127.0.0.1:5434`.
+- Data store for this local public phase is Homebrew PostgreSQL 16 at `127.0.0.1:5434`.
 - Local Postgres database: `incircle_local`; local app user: `incircle`.
 - Local Postgres connection string: `postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local`.
+- The LaunchAgent should run with `DATA_STORE=postgres` and the Postgres `DATABASE_URL`.
+- The previous SQLite public data file is kept at `website/data/circles.sqlite` as a fallback/source backup. Current switch backup files live under `website/data/backups/`.
+- Current Postgres backup/restore runbook: `docs/postgres-backup-restore.md`.
+- Daily Postgres backup LaunchAgent:
+  - Label: `com.useincircle.postgres-backup`.
+  - Config: `deploy/launchd/com.useincircle.postgres-backup.plist`.
+  - Schedule: daily at `03:20`.
+  - Backup directory: `website/data/backups/postgres`.
+  - iCloud Drive copy: `/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres`.
+  - Logs: `website/artifacts/postgres-backup.out.log` and `website/artifacts/postgres-backup.err.log`.
+  - Status report: `website/artifacts/postgres-backup-status.json`.
+- SQLite-to-Postgres migration command:
+
+```bash
+cd /Users/kevin_huang/Documents/Projects/circles/website
+DATABASE_URL=postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local npm run migrate:sqlite-to-postgres
+```
+
 - Do not expose the Vite dev server (`5174`) publicly. Public traffic should enter through Caddy only.
 - Do not expose local Postgres publicly. Keep it bound to `127.0.0.1`.
 - When deploying a public website update on this Mac, run `npm run build` in `website/` so Caddy serves the refreshed `website/dist` build.
@@ -283,8 +302,8 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Seed data when useful.
   - Technical architecture docs if the data model changes.
 - If the production data model changes, update `supabase/migrations/` and `docs/postgres-schema.md`.
-- Do not switch the runtime API from SQLite to Postgres by sprinkling database calls through route handlers. Introduce a clear data access layer first.
-- `DATA_STORE=postgres` currently supports health, seeded demo reads, share-link reads, task creation, task detail/option edits, interest-check conversion, share responses, response status updates, task status updates, announcements, comments, and CSV export. Do not present it as production-ready until auth, RLS, deployment, backups, and operational verification are implemented.
+- Do not add database calls directly inside route handlers. Keep runtime database differences behind the store/data-access layer.
+- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, task creation, task detail/option edits, interest-check conversion, share responses, response status updates, task status updates, announcements, comments, and CSV export. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until auth, RLS/access policy, automated backups, monitoring, and operational verification are implemented.
 - Task announcements and task comments are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.
 - Do not remove or overwrite user-created work.
 - Do not commit, stage, push, or create PRs unless explicitly requested.
@@ -309,6 +328,8 @@ curl -s http://127.0.0.1:8787/api/bootstrap
 
 - `npm run test:api` expects local Homebrew Postgres at `127.0.0.1:5434` unless `API_SMOKE_DATABASE_URL` overrides it or `SKIP_POSTGRES_SMOKE=1` is explicitly set.
 - Since the InCircle Docker dev stack should normally stay stopped during local public hosting, prefer the Homebrew Postgres path for parity tests. Use Docker Postgres only when explicitly testing the Docker stack.
+- For public hosting checks, verify `https://useincircle.app/api/health` returns `backend: "postgres"` before telling the user the public site is on Postgres.
+- For public Postgres backup checks, run `npm run backup:postgres` from `website/`, then run `OFFSITE_BACKUP_DIR="/Users/kevin_huang/Library/Mobile Documents/com~apple~CloudDocs/InCircle/backups/postgres" npm run backup:postgres:status`. Confirm the status report has `ok: true`, no restore count mismatches, and matching local/iCloud dump SHA-256 values.
 
 - If local services are stale, restart the API and Vite dev server rather than leaving the user on an old build.
 - When UI behavior changes, verify in the browser when feasible, especially mobile-width layouts and `/join/:token` flows.
