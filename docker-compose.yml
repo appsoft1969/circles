@@ -1,0 +1,101 @@
+name: circles-dev
+
+services:
+  api:
+    image: node:22-bookworm-slim
+    working_dir: /workspace/website
+    command: sh -c "npm ci && npm run seed && npm run api"
+    environment:
+      DATA_STORE: ${DATA_STORE:-sqlite}
+      DATABASE_URL: ${API_DATABASE_URL:-postgres://circles:circles_dev_password@postgres:5432/circles_dev}
+      HOST: 0.0.0.0
+      PORT: 8787
+    ports:
+      - "${API_HOST_PORT:-8788}:8787"
+    volumes:
+      - .:/workspace
+      - website_api_node_modules:/workspace/website/node_modules
+      - website_sqlite_data:/workspace/website/data
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8787/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    image: node:22-bookworm-slim
+    working_dir: /workspace/website
+    command: sh -c "npm ci && npm run dev:docker"
+    environment:
+      VITE_API_PROXY_TARGET: http://api:8787
+    ports:
+      - "${WEB_HOST_PORT:-5175}:5174"
+    volumes:
+      - .:/workspace
+      - website_web_node_modules:/workspace/website/node_modules
+    depends_on:
+      api:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["postgres"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-circles_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-circles}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-circles_dev_password}
+    ports:
+      - "${POSTGRES_HOST_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-circles} -d ${POSTGRES_DB:-circles_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  adminer:
+    image: adminer:4
+    profiles: ["postgres"]
+    ports:
+      - "${ADMINER_HOST_PORT:-8081}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    profiles: ["tools"]
+    ports:
+      - "${REDIS_HOST_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+
+  mailpit:
+    image: axllent/mailpit:latest
+    profiles: ["tools"]
+    ports:
+      - "${MAILPIT_SMTP_HOST_PORT:-1025}:1025"
+      - "${MAILPIT_WEB_HOST_PORT:-8025}:8025"
+
+  minio:
+    image: minio/minio:latest
+    profiles: ["storage"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-circles}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-circles_minio_password}
+    ports:
+      - "${MINIO_API_HOST_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_HOST_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  website_api_node_modules:
+  website_web_node_modules:
+  website_sqlite_data:
+  postgres_data:
+  redis_data:
+  minio_data:

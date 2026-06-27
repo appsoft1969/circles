@@ -1,0 +1,20 @@
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+# Prototype dependencies and build output
+prototype/.npm-cache/
+prototype/.npmrc
+prototype/node_modules/
+prototype/dist/
+
+# Local QA captures
+prototype/artifacts/
+prototype/public/qa/
+
+# Website runtime data and builds
+website/node_modules/
+website/dist/
+website/data/
+website/artifacts/
