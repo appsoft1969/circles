@@ -13,6 +13,7 @@ import {
   Filter,
   Gift,
   Link,
+  LogOut,
   Loader2,
   Megaphone,
   MessageCircle,
@@ -23,8 +24,11 @@ import {
   ReceiptText,
   Search,
   Send,
+  ShieldCheck,
   Split,
   Store,
+  Smartphone,
+  UserCircle,
   Users,
   Utensils,
 } from "lucide-react";
@@ -74,8 +78,9 @@ function formatDateTime(value) {
 
 async function api(path, options) {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
     ...options,
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: response.statusText }));
@@ -85,27 +90,41 @@ async function api(path, options) {
 }
 
 function App() {
-  const [state, setState] = useState({ loading: true, circles: [], tasks: [] });
+  const [state, setState] = useState({ loading: true, circles: [], tasks: [], session: null, authProviders: [] });
   const [route, setRoute] = useState({ name: "dashboard" });
   const [toast, setToast] = useState("");
 
+  async function loadAppData() {
+    const [data, session, auth] = await Promise.all([
+      api("/api/bootstrap"),
+      api("/api/session"),
+      api("/api/auth/providers"),
+    ]);
+    return {
+      ...data,
+      session,
+      authProviders: auth.providers ?? [],
+      loading: false,
+    };
+  }
+
   async function refresh() {
-    const data = await api("/api/bootstrap");
-    setState({ ...data, loading: false });
+    const data = await loadAppData();
+    setState(data);
   }
 
   useEffect(() => {
     async function load() {
-      const data = await api("/api/bootstrap");
+      const data = await loadAppData();
       const joinMatch = window.location.pathname.match(/^\/join\/([^/]+)/);
       if (joinMatch) {
         const shared = await api(`/api/share/${joinMatch[1]}`);
         const tasks = upsertTask(data.tasks, shared.task);
-        setState({ ...data, tasks, loading: false });
+        setState({ ...data, tasks });
         setRoute({ name: "join", taskId: shared.task.id });
         return;
       }
-      setState({ ...data, loading: false });
+      setState(data);
     }
 
     load().catch((error) => setState((current) => ({ ...current, loading: false, error: error.message })));
@@ -160,8 +179,12 @@ function App() {
       <Dashboard
         circles={state.circles}
         tasks={state.tasks}
+        session={state.session}
+        authProviders={state.authProviders}
         go={go}
         copyShare={copyShare}
+        refresh={refresh}
+        setToast={setToast}
       />
     ),
     templates: (
@@ -243,7 +266,7 @@ function Topbar({ title, subtitle, onBack, action }) {
   );
 }
 
-function Dashboard({ circles, tasks, go, copyShare }) {
+function Dashboard({ circles, tasks, session, authProviders, go, copyShare, refresh, setToast }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   const templates = Object.entries(templateMeta);
@@ -253,7 +276,7 @@ function Dashboard({ circles, tasks, go, copyShare }) {
       <Topbar
         title="圈內 InCircle"
         subtitle="熟人圈的生活辦事空間"
-        action={<MessageCircle size={22} />}
+        action={<AuthStatusButton session={session} />}
       />
       <section className="hero">
         <h1>把群裡的 +1，變成清楚的名單與統計。</h1>
@@ -263,6 +286,13 @@ function Dashboard({ circles, tasks, go, copyShare }) {
           建立事項
         </button>
       </section>
+
+      <AuthPanel
+        session={session}
+        providers={authProviders}
+        refresh={refresh}
+        setToast={setToast}
+      />
 
       <section className="metric-grid">
         <Metric value={circles.length} label="圈子" />
@@ -293,6 +323,70 @@ function Dashboard({ circles, tasks, go, copyShare }) {
         </div>
       </section>
     </>
+  );
+}
+
+function AuthStatusButton({ session }) {
+  return (
+    <span className={`auth-status ${session?.authenticated ? "signed-in" : ""}`} title={session?.authenticated ? "已登入" : "未登入"}>
+      {session?.authenticated ? <ShieldCheck size={22} /> : <UserCircle size={22} />}
+    </span>
+  );
+}
+
+function AuthPanel({ session, providers, refresh, setToast }) {
+  async function logout() {
+    try {
+      await api("/api/auth/logout", { method: "POST", body: JSON.stringify({}) });
+      await refresh();
+      setToast("已登出");
+    } catch (error) {
+      setToast(error.message);
+    }
+  }
+
+  if (session?.authenticated) {
+    return (
+      <section className="section auth-section">
+        <div className="signed-in-card">
+          <span className="signed-in-avatar"><UserCircle size={24} /></span>
+          <span>
+            <strong>{session.profile?.displayName || "圈內成員"}</strong>
+            <small>{session.memberships?.length || 0} 個圈子 · {session.profile?.email || "未提供 Email"}</small>
+          </span>
+          <button className="icon-button" type="button" aria-label="登出" onClick={logout}>
+            <LogOut size={19} />
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="section auth-section">
+      <div className="auth-heading">
+        <Smartphone size={22} />
+        <span>
+          <strong>手機帳號快速登入</strong>
+          <small>iPhone 用 Apple，Android 用 Google，也可用 LINE。</small>
+        </span>
+      </div>
+      <div className="provider-list">
+        {providers.map((provider) => (
+          provider.configured ? (
+            <a className="provider-button" href={`${provider.startUrl}?redirectAfter=/`} key={provider.id}>
+              <span>{provider.shortLabel}</span>
+              <small>{provider.platformHint}</small>
+            </a>
+          ) : (
+            <button className="provider-button disabled" type="button" key={provider.id} disabled>
+              <span>{provider.shortLabel}</span>
+              <small>待設定</small>
+            </button>
+          )
+        ))}
+      </div>
+    </section>
   );
 }
 

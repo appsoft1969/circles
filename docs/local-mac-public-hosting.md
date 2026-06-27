@@ -132,12 +132,13 @@ npm --prefix /Users/kevin_huang/Documents/Projects/circles/website run ops:statu
 
 The current public API has a first scaffold for account and communication behavior:
 
-- `GET /api/session` resolves a profile from the temporary `x-incircle-profile-id` or `x-incircle-profile-email` header.
+- `GET /api/session` resolves a profile from the `incircle_session` cookie or the temporary `x-incircle-profile-id` / `x-incircle-profile-email` development headers.
+- Apple, Google, and LINE auth routes exist, but provider credentials are not configured yet.
 - `GET /api/circles/:circleId/members` requires that profile to be an active circle member.
 - `GET /api/tasks/:taskId/permissions` reports read, respond, manage, announce, close, and export capabilities.
 - Postgres-backed conversation endpoints support circle/task conversations, messages, message read receipts, device registration, and notification listing.
 
-This is not yet a real production login system. Before broad beta or app-store work, replace the temporary profile headers with proper auth tokens, add RLS/access policies, and wire mobile realtime subscriptions plus APNs/FCM push delivery.
+This is not yet a fully finished production login system. Before broad beta or app-store work, configure real provider credentials, add RLS/access policies, and wire mobile realtime subscriptions plus APNs/FCM push delivery.
 
 ## Public Ops Health Check
 

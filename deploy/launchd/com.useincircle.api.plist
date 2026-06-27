@@ -27,6 +27,10 @@
 		<string>127.0.0.1</string>
 		<key>PORT</key>
 		<string>8787</string>
+		<key>PUBLIC_BASE_URL</key>
+		<string>https://useincircle.app</string>
+		<key>AUTH_BASE_URL</key>
+		<string>https://useincircle.app</string>
 	</dict>
 
 	<key>KeepAlive</key>

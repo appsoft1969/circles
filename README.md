@@ -42,6 +42,7 @@ The first version should focus on casual group-buy management for known groups, 
 - [Local Mac Public Hosting](docs/local-mac-public-hosting.md)
 - [Postgres Schema Plan](docs/postgres-schema.md)
 - [Postgres Backup And Restore Runbook](docs/postgres-backup-restore.md)
+- [Social Login And Member Auth](docs/auth-social-login.md)
 
 ## Prototype
 
@@ -59,7 +60,7 @@ The first database-backed website is implemented as a React/Vite frontend with a
 
 The current public Mac-hosted site at `https://useincircle.app` runs the Express API with `DATA_STORE=postgres` against Homebrew Postgres at `127.0.0.1:5434`. SQLite remains supported for isolated local development and fallback testing through `DATA_STORE=sqlite`.
 
-Postgres/Supabase-oriented schema work lives in `supabase/`. The current Postgres path supports local schema validation, migrated public data, demo seed data, task reads, share-link reads, task creation, task detail/option edits, interest-check conversion, participant responses, task announcements, task comments, status updates, CSV export, authenticated session/membership scaffolding, task permissions, and Postgres-backed circle/task conversation APIs. Real production auth, RLS policies, push delivery provider integration, and mobile realtime subscriptions are still future work.
+Postgres/Supabase-oriented schema work lives in `supabase/`. The current Postgres path supports local schema validation, migrated public data, demo seed data, task reads, share-link reads, task creation, task detail/option edits, interest-check conversion, participant responses, task announcements, task comments, status updates, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, membership checks, task permissions, and Postgres-backed circle/task conversation APIs. Real provider credentials, RLS policies, push delivery provider integration, and mobile realtime subscriptions are still future work.
 
 Local development URLs:
 

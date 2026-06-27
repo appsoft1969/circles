@@ -1,5 +1,5 @@
 import pg from "pg";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { buildInterestConversion, normalizeTaskOptions, StoreError, templateLabels } from "./storeShared.js";
 
 const { Pool } = pg;
@@ -50,6 +50,14 @@ function json(value) {
 
 function shareToken() {
   return randomBytes(7).toString("base64url");
+}
+
+function sessionToken() {
+  return randomBytes(32).toString("base64url");
+}
+
+function hashToken(token) {
+  return createHash("sha256").update(token).digest("hex");
 }
 
 function positiveInteger(value, fallback = 0) {
@@ -236,6 +244,16 @@ function notificationFromRow(row) {
   };
 }
 
+function sessionFromRow(row) {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    createdAt: toIso(row.created_at),
+    lastSeenAt: toIso(row.last_seen_at),
+    expiresAt: toIso(row.expires_at),
+  };
+}
+
 function summarizeResponses(responses) {
   return responses.reduce(
     (acc, response) => {
@@ -348,7 +366,38 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     }
   }
 
+  async function profileBySessionToken(token, client = pool) {
+    if (!token) return null;
+    const result = await client.query(
+      `
+        UPDATE auth_sessions s
+        SET last_seen_at = now()
+        FROM profiles p
+        WHERE s.profile_id = p.id
+          AND s.token_hash = $1
+          AND s.revoked_at IS NULL
+          AND s.expires_at > now()
+          AND p.deleted_at IS NULL
+          AND p.status = 'active'
+        RETURNING
+          p.id::text,
+          p.display_name,
+          p.email,
+          p.phone,
+          p.avatar_url,
+          p.locale,
+          p.timezone,
+          p.status::text
+      `,
+      [hashToken(token)],
+    );
+    return profileFromRow(result.rows[0]);
+  }
+
   async function resolveProfile(actor = {}, client = pool) {
+    const sessionProfile = actor.sessionToken ? await profileBySessionToken(actor.sessionToken, client) : null;
+    if (sessionProfile) return sessionProfile;
+
     const profileId = actor.profileId ? String(actor.profileId).trim() : "";
     const email = actor.email ? String(actor.email).trim().toLowerCase() : "";
     if (!profileId && !email) return null;
@@ -394,6 +443,251 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         );
 
     return profileFromRow(result.rows[0]);
+  }
+
+  async function createAuthSession(profileId, metadata = {}) {
+    const token = sessionToken();
+    const result = await pool.query(
+      `
+        INSERT INTO auth_sessions (
+          profile_id,
+          token_hash,
+          expires_at,
+          user_agent,
+          ip_address,
+          metadata
+        )
+        VALUES ($1, $2, now() + interval '30 days', $3, $4, $5::jsonb)
+        RETURNING id::text, profile_id::text, created_at, last_seen_at, expires_at
+      `,
+      [
+        profileId,
+        hashToken(token),
+        metadata.userAgent || null,
+        metadata.ipAddress || null,
+        json({ provider: metadata.provider || null }),
+      ],
+    );
+    return { token, session: sessionFromRow(result.rows[0]) };
+  }
+
+  async function revokeAuthSession(token) {
+    if (!token) return false;
+    const result = await pool.query(
+      `
+        UPDATE auth_sessions
+        SET revoked_at = now()
+        WHERE token_hash = $1
+          AND revoked_at IS NULL
+        RETURNING id
+      `,
+      [hashToken(token)],
+    );
+    return result.rowCount > 0;
+  }
+
+  async function createOAuthState(provider, body = {}) {
+    const state = sessionToken();
+    const result = await pool.query(
+      `
+        INSERT INTO auth_oauth_states (
+          provider,
+          state_hash,
+          nonce,
+          redirect_after,
+          expires_at,
+          metadata
+        )
+        VALUES ($1, $2, $3, $4, now() + interval '10 minutes', $5::jsonb)
+        RETURNING id::text, provider, nonce, redirect_after, created_at, expires_at
+      `,
+      [provider, hashToken(state), body.nonce, body.redirectAfter || "/", json(body.metadata)],
+    );
+    return {
+      state,
+      oauthState: {
+        id: result.rows[0].id,
+        provider: result.rows[0].provider,
+        nonce: result.rows[0].nonce,
+        redirectAfter: result.rows[0].redirect_after,
+        createdAt: toIso(result.rows[0].created_at),
+        expiresAt: toIso(result.rows[0].expires_at),
+      },
+    };
+  }
+
+  async function consumeOAuthState(provider, state) {
+    const result = await pool.query(
+      `
+        UPDATE auth_oauth_states
+        SET consumed_at = now()
+        WHERE provider = $1
+          AND state_hash = $2
+          AND consumed_at IS NULL
+          AND expires_at > now()
+        RETURNING id::text, provider, nonce, redirect_after, created_at, expires_at
+      `,
+      [provider, hashToken(state)],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      provider: row.provider,
+      nonce: row.nonce,
+      redirectAfter: row.redirect_after,
+      createdAt: toIso(row.created_at),
+      expiresAt: toIso(row.expires_at),
+    };
+  }
+
+  async function upsertAuthIdentity(identity = {}) {
+    if (!identity.provider || !identity.providerUserId) {
+      throw new StoreError(400, "provider and providerUserId are required");
+    }
+
+    return withTransaction(async (client) => {
+      const existingIdentity = await client.query(
+        `
+          SELECT
+            p.id::text,
+            p.display_name,
+            p.email,
+            p.phone,
+            p.avatar_url,
+            p.locale,
+            p.timezone,
+            p.status::text
+          FROM auth_identities ai
+          JOIN profiles p ON p.id = ai.profile_id
+          WHERE ai.provider = $1
+            AND ai.provider_user_id = $2
+            AND p.deleted_at IS NULL
+          LIMIT 1
+        `,
+        [identity.provider, identity.providerUserId],
+      );
+
+      let profile = profileFromRow(existingIdentity.rows[0]);
+      if (!profile && identity.email && identity.emailVerified) {
+        const profileResult = await client.query(
+          `
+            SELECT
+              id::text,
+              display_name,
+              email,
+              phone,
+              avatar_url,
+              locale,
+              timezone,
+              status::text
+            FROM profiles
+            WHERE lower(email) = lower($1)
+              AND deleted_at IS NULL
+            LIMIT 1
+          `,
+          [identity.email],
+        );
+        profile = profileFromRow(profileResult.rows[0]);
+      }
+
+      if (!profile) {
+        const created = await client.query(
+          `
+            INSERT INTO profiles (
+              display_name,
+              email,
+              avatar_url,
+              metadata
+            )
+            VALUES ($1, $2, $3, $4::jsonb)
+            RETURNING
+              id::text,
+              display_name,
+              email,
+              phone,
+              avatar_url,
+              locale,
+              timezone,
+              status::text
+          `,
+          [
+            identity.displayName || identity.email || `${identity.provider} 使用者`,
+            identity.email || null,
+            identity.avatarUrl || null,
+            json({ createdFromProvider: identity.provider }),
+          ],
+        );
+        profile = profileFromRow(created.rows[0]);
+      } else {
+        const updated = await client.query(
+          `
+            UPDATE profiles
+            SET display_name = COALESCE(NULLIF($2, ''), display_name),
+                email = COALESCE(NULLIF($3, ''), email),
+                avatar_url = COALESCE(NULLIF($4, ''), avatar_url),
+                updated_at = now()
+            WHERE id::text = $1
+            RETURNING
+              id::text,
+              display_name,
+              email,
+              phone,
+              avatar_url,
+              locale,
+              timezone,
+              status::text
+          `,
+          [profile.id, identity.displayName || "", identity.email || "", identity.avatarUrl || ""],
+        );
+        profile = profileFromRow(updated.rows[0]);
+      }
+
+      await client.query(
+        `
+          INSERT INTO auth_identities (
+            profile_id,
+            provider,
+            provider_user_id,
+            email,
+            email_verified,
+            display_name,
+            avatar_url,
+            raw_profile,
+            last_login_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, now())
+          ON CONFLICT (provider, provider_user_id)
+          DO UPDATE SET
+            profile_id = EXCLUDED.profile_id,
+            email = EXCLUDED.email,
+            email_verified = EXCLUDED.email_verified,
+            display_name = EXCLUDED.display_name,
+            avatar_url = EXCLUDED.avatar_url,
+            raw_profile = EXCLUDED.raw_profile,
+            last_login_at = now()
+        `,
+        [
+          profile.id,
+          identity.provider,
+          identity.providerUserId,
+          identity.email || null,
+          Boolean(identity.emailVerified),
+          identity.displayName || null,
+          identity.avatarUrl || null,
+          json(identity.rawProfile),
+        ],
+      );
+
+      return { profile };
+    });
+  }
+
+  async function createAuthSessionForEmail(email, metadata = {}) {
+    const profile = await resolveProfile({ email });
+    if (!profile) throw new StoreError(404, "Profile not found");
+    const session = await createAuthSession(profile.id, metadata);
+    return { profile, ...session };
   }
 
   async function requireProfile(actor = {}, client = pool) {
@@ -1772,6 +2066,12 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     getSessionContext,
     listCircleMembers,
     getTaskPermissions,
+    createOAuthState,
+    consumeOAuthState,
+    upsertAuthIdentity,
+    createAuthSession,
+    createAuthSessionForEmail,
+    revokeAuthSession,
     getBootstrap,
     getTask,
     getTaskByShareToken,

@@ -1,4 +1,10 @@
 import express from "express";
+import {
+  buildAuthorizationUrl,
+  exchangeOAuthCode,
+  oauthRandomToken,
+  supportedAuthProviders,
+} from "./auth/oauthProviders.js";
 import { createStoreFromEnv } from "./data/storeFactory.js";
 import { StoreError } from "./data/storeShared.js";
 
@@ -15,17 +21,87 @@ if (process.argv.includes("--seed-only")) {
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+
+const sessionCookieName = process.env.AUTH_SESSION_COOKIE || "incircle_session";
 
 function actorFromRequest(req) {
   return {
+    sessionToken: readCookie(req, sessionCookieName) || bearerToken(req),
     profileId: req.get("x-incircle-profile-id") || null,
     email: req.get("x-incircle-profile-email") || null,
   };
 }
 
+function readCookie(req, name) {
+  const header = req.get("cookie");
+  if (!header) return null;
+  const cookies = Object.fromEntries(
+    header.split(";").map((cookie) => {
+      const [key, ...rest] = cookie.trim().split("=");
+      return [key, decodeURIComponent(rest.join("=") || "")];
+    }),
+  );
+  return cookies[name] || null;
+}
+
+function bearerToken(req) {
+  const authorization = req.get("authorization") || "";
+  const match = authorization.match(/^Bearer\s+(.+)$/i);
+  return match?.[1] || null;
+}
+
+function cookieOptions() {
+  const secure = process.env.AUTH_COOKIE_SECURE !== "0";
+  return [
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    secure ? "Secure" : null,
+    `Max-Age=${60 * 60 * 24 * 30}`,
+  ].filter(Boolean);
+}
+
+function setSessionCookie(res, token) {
+  res.setHeader("Set-Cookie", `${sessionCookieName}=${encodeURIComponent(token)}; ${cookieOptions().join("; ")}`);
+}
+
+function clearSessionCookie(res) {
+  res.setHeader("Set-Cookie", `${sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function requestMetadata(req, provider = null) {
+  return {
+    provider,
+    userAgent: req.get("user-agent") || null,
+    ipAddress: req.ip || req.socket?.remoteAddress || null,
+  };
+}
+
+function safeRedirectPath(value) {
+  if (!value || typeof value !== "string") return "/";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/";
+  return value;
+}
+
+function parseAppleUser(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 function sendError(res, error) {
   if (error instanceof StoreError) {
     return res.status(error.status).json({ error: error.message });
+  }
+  if (Number.isInteger(error.status)) {
+    return res.status(error.status).json({
+      error: error.message,
+      missingEnv: error.missingEnv || undefined,
+    });
   }
   console.error(error);
   return res.status(500).json({ error: "Internal server error" });
@@ -45,6 +121,63 @@ app.get("/api/bootstrap", route(async (_req, res) => {
 
 app.get("/api/session", route(async (req, res) => {
   res.json(await store.getSessionContext(actorFromRequest(req)));
+}));
+
+app.get("/api/auth/providers", route(async (_req, res) => {
+  res.json({ providers: supportedAuthProviders(process.env) });
+}));
+
+app.get("/api/auth/:provider/start", route(async (req, res) => {
+  const provider = req.params.provider;
+  const nonce = oauthRandomToken(16);
+  const { state } = await store.createOAuthState(provider, {
+    nonce,
+    redirectAfter: safeRedirectPath(req.query.redirectAfter || "/"),
+  });
+  const authorization = buildAuthorizationUrl({ provider, req, state, nonce });
+  res.redirect(authorization.url);
+}));
+
+app.all("/api/auth/:provider/callback", route(async (req, res) => {
+  const provider = req.params.provider;
+  const code = req.method === "POST" ? req.body?.code : req.query.code;
+  const state = req.method === "POST" ? req.body?.state : req.query.state;
+  if (!code || !state) throw new StoreError(400, "OAuth callback requires code and state");
+
+  const oauthState = await store.consumeOAuthState(provider, state);
+  if (!oauthState) throw new StoreError(400, "OAuth state is invalid or expired");
+
+  const rawUser = provider === "apple" ? parseAppleUser(req.body?.user) : null;
+  const { identity } = await exchangeOAuthCode({
+    provider,
+    req,
+    code,
+    nonce: oauthState.nonce,
+    rawUser,
+  });
+  const { profile } = await store.upsertAuthIdentity(identity);
+  const { token } = await store.createAuthSession(profile.id, requestMetadata(req, provider));
+  setSessionCookie(res, token);
+  res.redirect(safeRedirectPath(oauthState.redirectAfter || "/"));
+}));
+
+app.post("/api/auth/logout", route(async (req, res) => {
+  await store.revokeAuthSession(actorFromRequest(req).sessionToken);
+  clearSessionCookie(res);
+  res.json({ ok: true });
+}));
+
+app.post("/api/auth/dev-session", route(async (req, res) => {
+  if (process.env.AUTH_DEV_LOGIN_ENABLED !== "1") {
+    throw new StoreError(403, "Development login is disabled");
+  }
+  const email = req.body?.email || "kevin@example.com";
+  const result = await store.createAuthSessionForEmail(email, requestMetadata(req, "dev"));
+  setSessionCookie(res, result.token);
+  res.status(201).json({
+    profile: result.profile,
+    session: result.session,
+  });
 }));
 
 app.get("/api/circles/:circleId/members", route(async (req, res) => {

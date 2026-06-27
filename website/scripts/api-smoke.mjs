@@ -89,7 +89,7 @@ async function request(baseUrl, path, options) {
     body = text;
   }
   assert.ok(response.ok, `${path} returned ${response.status}: ${JSON.stringify(body)}`);
-  return { status: response.status, body };
+  return { status: response.status, body, headers: response.headers };
 }
 
 async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushToken }) {
@@ -133,7 +133,29 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       bootstrap.body.circles.find((circle) => memberCircleIds.has(circle.id)) ??
       bootstrap.body.circles[0];
 
-    const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: actorHeaders });
+    const providers = await request(baseUrl, "/api/auth/providers");
+    assert.ok(
+      ["apple", "google", "line"].every((provider) => providers.body.providers.some((item) => item.id === provider)),
+      `${label}: expected Apple, Google, and LINE providers`,
+    );
+
+    let sessionHeaders = actorHeaders;
+    if (label === "postgres") {
+      const devSession = await request(baseUrl, "/api/auth/dev-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "kevin@example.com" }),
+      });
+      const cookie = devSession.headers.get("set-cookie")?.split(";")[0];
+      assert.ok(cookie, `${label}: expected dev-session Set-Cookie`);
+      sessionHeaders = { Cookie: cookie };
+
+      const cookieSession = await request(baseUrl, "/api/session", { headers: sessionHeaders });
+      assert.equal(cookieSession.body.authenticated, true);
+      assert.equal(cookieSession.body.profile.email, "kevin@example.com");
+    }
+
+    const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });
     assert.ok(members.body.members.length >= 1, `${label}: expected circle members`);
     assert.ok(
       members.body.members.some((member) => member.role === "owner"),
@@ -163,7 +185,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     createdTaskId = created.body.task.id;
     createdTaskIds.push(createdTaskId);
 
-    const permissions = await request(baseUrl, `/api/tasks/${createdTaskId}/permissions`, { headers: actorHeaders });
+    const permissions = await request(baseUrl, `/api/tasks/${createdTaskId}/permissions`, { headers: sessionHeaders });
     assert.equal(permissions.body.permissions.authenticated, true);
     assert.equal(permissions.body.permissions.canManage, true);
     assert.equal(permissions.body.permissions.canAnnounce, true);
@@ -241,7 +263,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     if (label === "postgres") {
       const conversation = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...actorHeaders },
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
         body: JSON.stringify({
           taskId: createdTaskId,
           title: `${label} API smoke 討論`,
@@ -252,7 +274,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(conversation.body.conversation.taskId, createdTaskId);
 
       const conversations = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations?taskId=${createdTaskId}`, {
-        headers: actorHeaders,
+        headers: sessionHeaders,
       });
       assert.ok(
         conversations.body.conversations.some((item) => item.id === conversation.body.conversation.id),
@@ -261,7 +283,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
       const message = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...actorHeaders },
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
         body: JSON.stringify({
           body: `${label} 測試訊息：飲料到前台後請自取。`,
           metadata: { smoke: true },
@@ -271,7 +293,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(message.body.message.authorName, "Kevin");
 
       const messages = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
-        headers: actorHeaders,
+        headers: sessionHeaders,
       });
       assert.ok(
         messages.body.messages.some((item) => item.id === message.body.message.id),
@@ -280,7 +302,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
       const receipt = await request(baseUrl, `/api/messages/${message.body.message.id}/read`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...actorHeaders },
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
         body: JSON.stringify({}),
       });
       assert.equal(receipt.status, 201);
@@ -290,7 +312,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       createdPushTokens.push(pushToken);
       const device = await request(baseUrl, "/api/devices", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...actorHeaders },
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
         body: JSON.stringify({
           platform: "web",
           pushToken,
@@ -301,7 +323,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(device.status, 201);
       assert.equal(device.body.device.pushToken, pushToken);
 
-      const notifications = await request(baseUrl, "/api/notifications", { headers: actorHeaders });
+      const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
     }
 
@@ -402,6 +424,16 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(converted.body.sourceTask.metadata.convertedTo[0].taskId, converted.body.task.id);
     createdTaskIds.push(converted.body.task.id);
 
+    if (label === "postgres") {
+      await request(baseUrl, "/api/auth/logout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({}),
+      });
+      const loggedOut = await request(baseUrl, "/api/session", { headers: sessionHeaders });
+      assert.equal(loggedOut.body.authenticated, false);
+    }
+
     log(`${label}: flow passed`);
     return { createdTaskId };
   } finally {
@@ -491,7 +523,7 @@ async function main() {
   await assertPostgresReady();
   await runApiFlow({
     label: "postgres",
-    env: { DATA_STORE: "postgres", DATABASE_URL: postgresUrl },
+    env: { DATA_STORE: "postgres", DATABASE_URL: postgresUrl, AUTH_DEV_LOGIN_ENABLED: "1", AUTH_COOKIE_SECURE: "0" },
     cleanupCreatedTask: cleanupPostgresTask,
     cleanupCreatedPushToken: cleanupPostgresPushToken,
   });

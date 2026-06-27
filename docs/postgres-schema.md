@@ -13,6 +13,7 @@ Current status:
 - Postgres demo seed: `supabase/seed.sql`
 - Postgres store: implemented in `website/server/data/postgresStore.js`
 - API migration to Postgres: core MVP task reads/writes, task edits, interest-check conversion, share responses, status updates, CSV export, session/membership/permission scaffolding, and conversation/message/device/notification scaffolding are implemented
+- Auth identity/session migration: `supabase/migrations/202606270002_auth_identity_sessions.sql`
 
 The goal of this schema is to align the product with the future Expo / React Native + Supabase / Postgres architecture while keeping the current website able to run either on Postgres or SQLite through the store layer.
 
@@ -38,6 +39,9 @@ The public Mac-hosted Express API now uses Postgres for early development and pr
 Tables:
 
 - `profiles`
+- `auth_identities`
+- `auth_sessions`
+- `auth_oauth_states`
 - `devices`
 - `circles`
 - `circle_memberships`
@@ -46,6 +50,9 @@ Tables:
 Notes:
 
 - `profiles.id` is a UUID. In Supabase, this can later map to `auth.users.id`.
+- `auth_identities` stores Apple, Google, LINE, or future provider identities separately from `profiles`.
+- `auth_sessions` stores only token hashes; the raw session token is kept in an `HttpOnly` cookie.
+- `auth_oauth_states` stores short-lived state/nonce records for OAuth callbacks.
 - The migration does not add Supabase Row Level Security policies yet. Those should be added after auth flow decisions are stable.
 - `devices` is ready for Expo push tokens and notification delivery tracking.
 

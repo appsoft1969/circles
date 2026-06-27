@@ -166,7 +166,7 @@ The HTTP routes live in `website/server/index.js`.
 
 Route handlers should not contain raw SQL. Database-specific behavior belongs in `website/server/data/sqliteStore.js` or `website/server/data/postgresStore.js`, selected by `website/server/data/storeFactory.js`.
 
-The current auth scaffold is deliberately narrow: API routes can resolve a demo profile from `x-incircle-profile-id` or `x-incircle-profile-email`. This is only a bridge for private-beta API shape and smoke tests. Real production auth should use a signed session/JWT flow and enforce Postgres RLS or equivalent server-side policy checks.
+The current auth layer supports Apple, Google, and LINE OAuth/OIDC scaffolding, Postgres-backed `auth_identities`, `auth_sessions`, `auth_oauth_states`, and an `HttpOnly` cookie session. Provider credentials are not configured yet on the public Mac host. Temporary `x-incircle-profile-id` / `x-incircle-profile-email` headers remain available for development smoke paths, but they are not a production login mechanism.
 
 ## Data Store Selection
 
@@ -191,6 +191,11 @@ Current Postgres store status:
 - `GET /api/health`: implemented.
 - `GET /api/bootstrap`: implemented for circles, task templates, tasks, options, responses, and stats.
 - `GET /api/session`: implemented as temporary profile-header auth scaffold.
+- `GET /api/auth/providers`: implemented for Apple, Google, and LINE provider state.
+- `GET /api/auth/:provider/start`: implemented for configured OAuth/OIDC providers.
+- `GET|POST /api/auth/:provider/callback`: implemented for provider callbacks and cookie session creation.
+- `POST /api/auth/logout`: implemented.
+- `POST /api/auth/dev-session`: implemented only when `AUTH_DEV_LOGIN_ENABLED=1`.
 - `GET /api/circles/:circleId/members`: implemented with active membership requirement.
 - `GET /api/tasks/:taskId`: implemented.
 - `GET /api/tasks/:taskId/permissions`: implemented for read/respond/manage/announce/close/export flags.
@@ -217,7 +222,19 @@ Do not treat `DATA_STORE=postgres` as fully production-ready until auth, RLS/acc
 
 ### `GET /api/session`
 
-Returns the current temporary profile context and circle memberships. Anonymous calls return `authenticated: false`.
+Returns the current cookie session or temporary development profile context and circle memberships. Anonymous calls return `authenticated: false`.
+
+### Auth Routes
+
+The auth routes live in `website/server/index.js`; provider-specific OAuth/OIDC behavior lives in `website/server/auth/oauthProviders.js`.
+
+Supported providers:
+
+- `apple`
+- `google`
+- `line`
+
+Provider credentials are configured through environment variables documented in [Social Login And Member Auth](auth-social-login.md).
 
 ### `GET /api/circles/:circleId/members`
 

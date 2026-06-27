@@ -1112,6 +1112,10 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     throw new StoreError(501, "Realtime chat and push scaffolding are Postgres-only in this MVP");
   }
 
+  function postgresOnlyAuth() {
+    throw new StoreError(501, "Official auth sessions are Postgres-only in this MVP");
+  }
+
   initSchema();
   seed();
   ensureInterestCheckExample();
@@ -1125,6 +1129,12 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     getSessionContext,
     listCircleMembers,
     getTaskPermissions,
+    createOAuthState: postgresOnlyAuth,
+    consumeOAuthState: postgresOnlyAuth,
+    upsertAuthIdentity: postgresOnlyAuth,
+    createAuthSession: postgresOnlyAuth,
+    createAuthSessionForEmail: postgresOnlyAuth,
+    revokeAuthSession: postgresOnlyAuth,
     getBootstrap,
     getTask,
     getTaskByShareToken,

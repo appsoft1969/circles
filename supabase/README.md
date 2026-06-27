@@ -5,6 +5,7 @@ This folder contains Postgres assets intended to align InCircle with the future 
 Current state:
 
 - `migrations/202606270001_initial_schema.sql` defines the first production-oriented schema.
+- `migrations/202606270002_auth_identity_sessions.sql` adds auth identities, session tokens, and OAuth state records for Apple, Google, and LINE login.
 - `seed.sql` adds re-runnable local demo profiles, circles, memberships, tasks, options, responses, announcements, and comments.
 - The current public Mac-hosted website runs on Homebrew Postgres through `DATA_STORE=postgres`.
 - SQLite remains available as a local fallback/test data store.
@@ -62,7 +63,7 @@ PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
 ## Design Notes
 
 - `profiles.id` is intentionally UUID-based so it can later align with Supabase Auth user IDs.
-- Row Level Security policies are not included yet. The current Express API has only a temporary profile-header auth scaffold for private-beta API shape. Add real auth and RLS after the auth and membership model is implemented.
+- Row Level Security policies are not included yet. The current Express API has cookie session and Apple/Google/LINE auth scaffolding, but public provider credentials are not configured yet. Add real auth provider credentials and RLS before broad beta.
 - `task_templates` is seeded by the initial migration because those IDs are part of the product contract.
 - `seed.sql` is for local development and demos; do not treat it as production data.
 - `tasks` is the central object. Templates such as group buy, member sale, meal order, drink order, activity, poll, and expense split share the same engine.
