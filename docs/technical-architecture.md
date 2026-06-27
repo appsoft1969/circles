@@ -190,7 +190,7 @@ Current Postgres store status:
 
 - `GET /api/health`: implemented.
 - `GET /api/bootstrap`: implemented for circles, task templates, tasks, options, responses, and stats.
-- `GET /api/session`: implemented as temporary profile-header auth scaffold.
+- `GET /api/session`: implemented for cookie sessions plus temporary profile-header development scaffolding.
 - `GET /api/auth/providers`: implemented for Apple, Google, and LINE provider state.
 - `GET /api/auth/:provider/start`: implemented for configured OAuth/OIDC providers.
 - `GET|POST /api/auth/:provider/callback`: implemented for provider callbacks and cookie session creation.
@@ -205,16 +205,16 @@ Current Postgres store status:
 - `PATCH /api/circles/:circleId/invites/:inviteId`: implemented for owner/admin invite revocation.
 - `GET /api/tasks/:taskId`: implemented.
 - `GET /api/tasks/:taskId/permissions`: implemented for read/respond/manage/announce/close/export flags.
-- `POST /api/tasks`: implemented.
-- `PATCH /api/tasks/:taskId`: implemented for editable task details and active options.
-- `POST /api/tasks/:taskId/convert`: implemented for converting `interest_check` tasks into `activity`, `poll`, or `claim` tasks.
+- `POST /api/tasks`: implemented with authenticated owner/admin circle role requirement.
+- `PATCH /api/tasks/:taskId`: implemented for editable task details and active options with task-manager authorization.
+- `POST /api/tasks/:taskId/convert`: implemented for converting `interest_check` tasks into `activity`, `poll`, or `claim` tasks with task-manager authorization.
 - `GET /api/share/:token`: implemented.
 - `POST /api/share/:token/responses`: implemented.
-- `PATCH /api/responses/:responseId`: implemented.
-- `PATCH /api/tasks/:taskId/status`: implemented.
-- `POST /api/tasks/:taskId/announcements`: implemented.
+- `PATCH /api/responses/:responseId`: implemented for organizer payment/fulfillment updates with task-manager authorization.
+- `PATCH /api/tasks/:taskId/status`: implemented with task-manager authorization.
+- `POST /api/tasks/:taskId/announcements`: implemented with task-manager authorization.
 - `POST /api/tasks/:taskId/comments`: implemented.
-- `GET /api/tasks/:taskId/export.csv`: implemented.
+- `GET /api/tasks/:taskId/export.csv`: implemented with task-manager authorization.
 - `GET /api/circles/:circleId/conversations`: implemented in Postgres.
 - `POST /api/circles/:circleId/conversations`: implemented in Postgres.
 - `GET /api/conversations/:conversationId/messages`: implemented in Postgres.
@@ -275,15 +275,15 @@ Returns task-level capability flags for the temporary profile context.
 
 ### `POST /api/tasks`
 
-Creates a task from a selected template.
+Creates a task from a selected template. In Postgres, the current profile must be an active `owner` or `admin` member of the target circle.
 
 ### `PATCH /api/tasks/:taskId`
 
-Updates task title, description, deadline, payment or fee instructions, pickup or gathering instructions, and active options. Existing options omitted from the payload are deactivated instead of deleted so historical responses remain readable.
+Updates task title, description, deadline, payment or fee instructions, pickup or gathering instructions, and active options. Existing options omitted from the payload are deactivated instead of deleted so historical responses remain readable. In Postgres, the current profile must be the task creator or an active circle `owner` / `admin`.
 
 ### `POST /api/tasks/:taskId/convert`
 
-Converts an `interest_check` task into an `activity`, `poll`, or `claim` task while preserving the source response summary in metadata and a system comment. The organizer can override title, description, deadline, payment or fee instructions, pickup or gathering instructions, and follow-up options before creating the new task.
+Converts an `interest_check` task into an `activity`, `poll`, or `claim` task while preserving the source response summary in metadata and a system comment. The organizer can override title, description, deadline, payment or fee instructions, pickup or gathering instructions, and follow-up options before creating the new task. In Postgres, the current profile must be the source task creator or an active circle `owner` / `admin`.
 
 ### `GET /api/share/:token`
 

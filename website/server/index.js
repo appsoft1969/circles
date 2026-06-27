@@ -236,18 +236,27 @@ app.get("/api/tasks/:taskId/permissions", route(async (req, res) => {
 }));
 
 app.post("/api/tasks", route(async (req, res) => {
-  const task = await store.createTask(req.body ?? {});
+  const task = await store.createTask({
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
   res.status(201).json({ task });
 }));
 
 app.post("/api/tasks/:taskId/convert", route(async (req, res) => {
-  const result = await store.convertInterestCheck(req.params.taskId, req.body ?? {});
+  const result = await store.convertInterestCheck(req.params.taskId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
   if (!result) return res.status(404).json({ error: "Task not found" });
   res.status(201).json(result);
 }));
 
 app.patch("/api/tasks/:taskId", route(async (req, res) => {
-  const task = await store.updateTaskDetails(req.params.taskId, req.body ?? {});
+  const task = await store.updateTaskDetails(req.params.taskId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.json({ task });
 }));
@@ -264,13 +273,16 @@ app.post("/api/share/:token/responses", route(async (req, res) => {
 }));
 
 app.patch("/api/responses/:responseId", route(async (req, res) => {
-  const task = await store.updateResponse(req.params.responseId, req.body ?? {});
+  const task = await store.updateResponse(req.params.responseId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
   if (!task) return res.status(404).json({ error: "Response not found" });
   res.json({ task });
 }));
 
 app.patch("/api/tasks/:taskId/status", route(async (req, res) => {
-  const task = await store.updateTaskStatus(req.params.taskId, req.body?.status || "open");
+  const task = await store.updateTaskStatus(req.params.taskId, req.body?.status || "open", actorFromRequest(req));
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.json({ task });
 }));
@@ -352,7 +364,7 @@ app.patch("/api/notifications/:notificationId/read", route(async (req, res) => {
 }));
 
 app.get("/api/tasks/:taskId/export.csv", route(async (req, res) => {
-  const result = await store.buildTaskCsv(req.params.taskId);
+  const result = await store.buildTaskCsv(req.params.taskId, actorFromRequest(req));
   if (!result) return res.status(404).send("Task not found");
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");

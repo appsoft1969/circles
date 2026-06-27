@@ -155,6 +155,18 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       const cookieSession = await request(baseUrl, "/api/session", { headers: sessionHeaders });
       assert.equal(cookieSession.body.authenticated, true);
       assert.equal(cookieSession.body.profile.email, "kevin@example.com");
+
+      const anonymousCreate = await fetch(`${baseUrl}/api/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          circleId: officeCircle.id,
+          template: "drink_order",
+          title: `${label} anonymous task should fail`,
+          options: [{ title: "匿名選項", unitPrice: 1 }],
+        }),
+      });
+      assert.equal(anonymousCreate.status, 401, `${label}: anonymous task creation should require login`);
     }
 
     const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });
@@ -231,7 +243,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const created = await request(baseUrl, "/api/tasks", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({
         circleId: officeCircle.id,
         template: "drink_order",
@@ -260,7 +272,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const edited = await request(baseUrl, `/api/tasks/${createdTaskId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({
         title: `${label} API smoke 飲料已編輯`,
         description: "自動測試建立後編輯、填單、狀態更新與 CSV。",
@@ -288,7 +300,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const announced = await request(baseUrl, `/api/tasks/${createdTaskId}/announcements`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({
         title: "取餐提醒",
         body: `${label} 測試公告：飲料到前台後請自取。`,
@@ -400,7 +412,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const patched = await request(baseUrl, `/api/responses/${response.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({ paymentStatus: "paid", fulfillmentStatus: "picked_up" }),
     });
     const patchedResponse = patched.body.task.responses.find((item) => item.id === response.id);
@@ -410,19 +422,19 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const closed = await request(baseUrl, `/api/tasks/${createdTaskId}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({ status: "closed" }),
     });
     assert.equal(closed.body.task.status, "closed");
 
     const reopened = await request(baseUrl, `/api/tasks/${createdTaskId}/status`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({ status: "open" }),
     });
     assert.equal(reopened.body.task.status, "open");
 
-    const csvResponse = await fetch(`${baseUrl}/api/tasks/${createdTaskId}/export.csv`);
+    const csvResponse = await fetch(`${baseUrl}/api/tasks/${createdTaskId}/export.csv`, { headers: sessionHeaders });
     const csv = await csvResponse.text();
     assert.equal(csvResponse.status, 200);
     assert.ok(csv.includes(`${label} 測試成員`), `${label}: CSV should include participant`);
@@ -430,7 +442,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const interest = await request(baseUrl, "/api/tasks", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({
         circleId: officeCircle.id,
         template: "interest_check",
@@ -463,7 +475,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
     const converted = await request(baseUrl, `/api/tasks/${interestTaskId}/convert`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
       body: JSON.stringify({
         targetTemplate: "claim",
         title: `${label} 自訂票券領取登記`,

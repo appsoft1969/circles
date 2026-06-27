@@ -30,7 +30,7 @@ Postgres should be designed now because it affects:
 
 The public Mac-hosted Express API now uses Postgres for early development and private beta checks. This is still a local-hosted public path, not the final production architecture.
 
-`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, status updates, announcements, comments, CSV validation, temporary profile-header session context, membership checks, task permissions, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until real auth, RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
+`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, authenticated task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, organizer status updates, task announcements, comments, CSV validation, cookie-session/profile-header session context, membership checks, task permissions, circle invites, member management, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
 
 ## Schema Groups
 
@@ -194,18 +194,18 @@ The initial migration has been verified locally with:
 - Re-runnable migration behavior.
 - Re-runnable seed behavior.
 - Postgres API task reads through `GET /api/bootstrap`, `GET /api/tasks/:taskId`, and `GET /api/share/:token`.
-- Postgres API session/membership scaffolding through `GET /api/session`, `GET /api/circles/:circleId/members`, and `GET /api/tasks/:taskId/permissions`.
-- Postgres API task creation through `POST /api/tasks`.
-- Postgres API task edits through `PATCH /api/tasks/:taskId`.
-- Postgres API interest-check conversion through `POST /api/tasks/:taskId/convert`.
+- Postgres API session/membership support through `GET /api/session`, `GET /api/circles/:circleId/members`, and `GET /api/tasks/:taskId/permissions`.
+- Postgres API task creation through `POST /api/tasks`, requiring authenticated `owner` / `admin` circle membership.
+- Postgres API task edits through `PATCH /api/tasks/:taskId`, requiring the task creator or active circle `owner` / `admin`.
+- Postgres API interest-check conversion through `POST /api/tasks/:taskId/convert`, requiring the task creator or active circle `owner` / `admin`.
 - Postgres API share responses through `POST /api/share/:token/responses`.
-- Postgres API status updates through `PATCH /api/responses/:responseId` and `PATCH /api/tasks/:taskId/status`.
-- Postgres API task announcements through `POST /api/tasks/:taskId/announcements`.
+- Postgres API status updates through `PATCH /api/responses/:responseId` and `PATCH /api/tasks/:taskId/status`, requiring task-manager authorization.
+- Postgres API task announcements through `POST /api/tasks/:taskId/announcements`, requiring task-manager authorization.
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
 - Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
 - Postgres API push scaffolding through device registration, notification listing, and notification read state.
-- Postgres CSV export through `GET /api/tasks/:taskId/export.csv`.
-- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, conversations, message reads, notifications, and devices.
+- Postgres CSV export through `GET /api/tasks/:taskId/export.csv`, requiring task-manager authorization.
+- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, anonymous authorization rejection, conversations, message reads, notifications, and devices.
 - SQLite-to-Postgres migration through `website/scripts/migrate-sqlite-to-postgres.mjs`.
 - Daily local backup and restore drill through `website/scripts/postgres-backup-restore.mjs`, with verified artifacts copied to iCloud Drive.
 - Public Mac API health verified with `backend: "postgres"`.

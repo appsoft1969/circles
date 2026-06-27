@@ -754,6 +754,41 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return { profile, membership };
   }
 
+  function hasActor(actor = {}) {
+    return Boolean(actor.sessionToken || actor.profileId || actor.email);
+  }
+
+  async function requireTaskManager(taskId, actor = {}, client = pool) {
+    const profile = await requireProfile(actor, client);
+    const result = await client.query(
+      `
+        SELECT
+          t.id::text,
+          t.circle_id::text,
+          t.created_by_profile_id::text,
+          c.name AS circle_name,
+          cm.role::text AS membership_role
+        FROM tasks t
+        JOIN circles c ON c.id = t.circle_id
+        LEFT JOIN circle_memberships cm
+          ON cm.circle_id = t.circle_id
+         AND cm.profile_id = $2
+         AND cm.status = 'active'
+        WHERE t.id::text = $1
+          AND t.archived_at IS NULL
+          AND c.archived_at IS NULL
+        LIMIT 1
+      `,
+      [taskId, profile.id],
+    );
+    const task = result.rows[0];
+    if (!task) throw new StoreError(404, "Task not found");
+    const canManage =
+      task.created_by_profile_id === profile.id || ["owner", "admin"].includes(task.membership_role);
+    if (!canManage) throw new StoreError(403, "Task manager role required");
+    return { profile, task };
+  }
+
   function normalizeInviteCode(code) {
     const cleaned = String(code || "").trim();
     if (!cleaned) throw new StoreError(400, "Invite code is required");
@@ -1413,14 +1448,16 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     };
   }
 
-  async function buildTaskCsv(taskId) {
+  async function buildTaskCsv(taskId, actor = {}) {
     const task = await getTask(taskId);
     if (!task) return null;
+    await requireTaskManager(taskId, actor);
     return { task, csv: buildCsv(task) };
   }
 
   async function createTask(body = {}) {
     const taskId = await withTransaction(async (client) => {
+      const profile = await requireProfile(body.actor, client);
       const template = body.template || "group_buy";
       const templateResult = await client.query(
         `
@@ -1437,25 +1474,36 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       const circleResult = body.circleId
         ? await client.query(
             `
-              SELECT id::text, owner_profile_id::text
-              FROM circles
-              WHERE id::text = $1
-                AND archived_at IS NULL
+              SELECT c.id::text, c.owner_profile_id::text
+              FROM circles c
+              JOIN circle_memberships cm
+                ON cm.circle_id = c.id
+               AND cm.profile_id = $2
+               AND cm.status = 'active'
+               AND cm.role IN ('owner', 'admin')
+              WHERE c.id::text = $1
+                AND c.archived_at IS NULL
               LIMIT 1
             `,
-            [body.circleId],
+            [body.circleId, profile.id],
           )
         : await client.query(
             `
-              SELECT id::text, owner_profile_id::text
-              FROM circles
-              WHERE archived_at IS NULL
-              ORDER BY created_at ASC
+              SELECT c.id::text, c.owner_profile_id::text
+              FROM circles c
+              JOIN circle_memberships cm
+                ON cm.circle_id = c.id
+               AND cm.profile_id = $1
+               AND cm.status = 'active'
+               AND cm.role IN ('owner', 'admin')
+              WHERE c.archived_at IS NULL
+              ORDER BY c.created_at ASC
               LIMIT 1
             `,
+            [profile.id],
           );
       const circle = circleResult.rows[0];
-      if (!circle) throw new StoreError(400, "Circle not found");
+      if (!circle) throw new StoreError(403, "Circle owner/admin role required");
 
       const metadata = body.metadata ?? {};
       const options =
@@ -1486,7 +1534,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         [
           circle.id,
           template,
-          circle.owner_profile_id,
+          profile.id,
           body.sellerDisplayName || metadata.seller || null,
           body.title || `新的${templateLabels[template] ?? "事項"}`,
           body.description || "",
@@ -1536,6 +1584,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
 
   async function updateTaskDetails(taskId, body = {}) {
     const updatedTaskId = await withTransaction(async (client) => {
+      await requireTaskManager(taskId, body.actor, client);
       const existingResult = await client.query(
         `
           SELECT
@@ -1682,6 +1731,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   }
 
   async function convertInterestCheck(taskId, body = {}) {
+    await requireTaskManager(taskId, body.actor);
     const sourceTask = await getTask(taskId);
     if (!sourceTask) return null;
     if (sourceTask.template !== "interest_check") {
@@ -1703,7 +1753,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       },
     });
 
-    const createdTask = await createTask(conversion.task);
+    const createdTask = await createTask({ ...conversion.task, actor: body.actor });
     await createTaskComment(createdTask.id, {
       participantName: "系統",
       body: conversion.summaryText,
@@ -1886,6 +1936,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       );
       const existing = existingResult.rows[0];
       if (!existing) return null;
+      await requireTaskManager(existing.task_id, patch.actor, client);
 
       const nextPaymentStatus = patch.paymentStatus ?? existing.payment_status;
       const nextFulfillmentStatus = patch.fulfillmentStatus ?? existing.fulfillment_status;
@@ -1913,10 +1964,11 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return getTask(taskId);
   }
 
-  async function updateTaskStatus(taskId, status = "open") {
+  async function updateTaskStatus(taskId, status = "open", actor = {}) {
     if (!taskStatuses.has(status)) throw new StoreError(400, `Invalid task status: ${status}`);
 
     const updatedTaskId = await withTransaction(async (client) => {
+      await requireTaskManager(taskId, actor, client);
       const result = await client.query(
         `
           UPDATE tasks
@@ -1951,6 +2003,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     if (!body.body) throw new StoreError(400, "Announcement body is required");
 
     const updatedTaskId = await withTransaction(async (client) => {
+      const { profile, task: managedTask } = await requireTaskManager(taskId, body.actor, client);
       const taskResult = await client.query(
         `
           SELECT id::text, circle_id::text, created_by_profile_id::text
@@ -1963,14 +2016,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       );
       const task = taskResult.rows[0];
       if (!task) return null;
-      let authorProfileId = task.created_by_profile_id;
-      if (body.actor?.profileId || body.actor?.email) {
-        const { profile } = await requireCircleMember(task.circle_id, body.actor, {
-          roles: ["owner", "admin"],
-          client,
-        });
-        authorProfileId = profile.id;
-      }
+      const authorProfileId = profile.id;
 
       await client.query(
         `
@@ -1989,7 +2035,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         `,
         [
           task.circle_id,
-          task.id,
+          managedTask.id,
           authorProfileId,
           body.title || "事項公告",
           body.body,
@@ -2024,7 +2070,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       if (!task) return null;
       let authorProfileId = null;
       let participantName = body.participantName || body.authorName || "成員";
-      if (body.actor?.profileId || body.actor?.email) {
+      if (hasActor(body.actor)) {
         const { profile } = await requireCircleMember(task.circle_id, body.actor, { client });
         authorProfileId = profile.id;
         participantName = profile.displayName;

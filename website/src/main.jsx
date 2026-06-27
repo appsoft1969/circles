@@ -257,6 +257,7 @@ function App() {
     templates: (
       <TemplatePicker
         circles={state.circles}
+        session={state.session}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -862,21 +863,35 @@ function TaskRow({ task, onOpen, onShare }) {
   );
 }
 
-function TemplatePicker({ circles, go, refresh, setToast, selectedTemplate = "group_buy" }) {
-  const defaultCircle = getDefaultCircleForTemplate(circles, selectedTemplate);
+function TemplatePicker({ circles, session, go, refresh, setToast, selectedTemplate = "group_buy" }) {
+  const manageableCircleIds = new Set(
+    (session?.memberships ?? [])
+      .filter((membership) => ["owner", "admin"].includes(membership.role))
+      .map((membership) => membership.circleId),
+  );
+  const manageableCircles = circles.filter((circle) => manageableCircleIds.has(circle.id));
+  const defaultCircle = getDefaultCircleForTemplate(manageableCircles, selectedTemplate);
   const [template, setTemplate] = useState(selectedTemplate);
-  const [circleId, setCircleId] = useState(defaultCircle?.id ?? circles[0]?.id ?? "");
+  const [circleId, setCircleId] = useState(defaultCircle?.id ?? manageableCircles[0]?.id ?? "");
   const meta = templateMeta[template];
 
   async function createTask() {
+    if (!circleId) {
+      setToast("請先加入可管理的圈子");
+      return;
+    }
     const defaults = getTemplateDefaults(template);
-    const data = await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({ ...defaults, circleId, template }),
-    });
-    await refresh();
-    setToast(`已建立${meta.label}`);
-    go("manage", { taskId: data.task.id });
+    try {
+      const data = await api("/api/tasks", {
+        method: "POST",
+        body: JSON.stringify({ ...defaults, circleId, template }),
+      });
+      await refresh();
+      setToast(`已建立${meta.label}`);
+      go("manage", { taskId: data.task.id });
+    } catch (error) {
+      setToast(error.message);
+    }
   }
 
   return (
@@ -905,7 +920,10 @@ function TemplatePicker({ circles, go, refresh, setToast, selectedTemplate = "gr
       <section className="section">
         <h2>放在哪個圈子？</h2>
         <div className="circle-choice-list">
-          {circles.map((circle) => (
+          {manageableCircles.length === 0 ? (
+            <p className="empty-note">你目前沒有可建立事項的圈子。請先登入並加入圈子，或請圈主把你設為管理者。</p>
+          ) : null}
+          {manageableCircles.map((circle) => (
             <label key={circle.id} className="radio-row">
               <input type="radio" checked={circleId === circle.id} onChange={() => setCircleId(circle.id)} />
               <span>
@@ -918,7 +936,7 @@ function TemplatePicker({ circles, go, refresh, setToast, selectedTemplate = "gr
       </section>
 
       <div className="sticky-actions">
-        <button className="primary-button" type="button" onClick={createTask}>
+        <button className="primary-button" type="button" onClick={createTask} disabled={!circleId}>
           <Plus size={18} />
           建立{meta.label}
         </button>
