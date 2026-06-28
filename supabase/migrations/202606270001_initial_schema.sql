@@ -631,6 +631,10 @@ CREATE INDEX IF NOT EXISTS ix_notification_deliveries_notification_id
 CREATE INDEX IF NOT EXISTS ix_notification_deliveries_status
   ON notification_deliveries (status);
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_notification_deliveries_push_device
+  ON notification_deliveries (notification_id, device_id, channel)
+  WHERE device_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   actor_profile_id uuid REFERENCES profiles(id) ON DELETE SET NULL,

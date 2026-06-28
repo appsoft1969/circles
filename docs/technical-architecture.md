@@ -389,6 +389,7 @@ npm run backup:postgres
 npm run backup:postgres:status
 npm run ops:status
 npm run push:vapid
+npm run push:send -- --dry-run
 npm run build
 ```
 
@@ -418,6 +419,8 @@ Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailabl
 `npm run ops:status` checks the public site, `.app/.com/.info` redirects, API health, bootstrap data, a live share link, and the current backup status. It writes `website/artifacts/incircle-ops-status.json` and exits non-zero when the public hosting state is unhealthy. The launchd version enables macOS notifications on failure and stores cooldown state in `website/artifacts/incircle-ops-alert-state.json`.
 
 `npm run push:vapid` generates a Web Push VAPID key pair for the private local production env. Do not commit the generated private key.
+
+`npm run push:send` sends queued unread notification rows to registered Web Push browser subscriptions and records delivery status in `notification_deliveries`. Use `npm run push:send -- --dry-run` before scheduling or manual delivery checks.
 
 Current local URLs:
 
