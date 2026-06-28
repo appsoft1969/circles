@@ -274,7 +274,7 @@ function App() {
         go={go}
         refresh={refresh}
         setToast={setToast}
-        selectedTemplate={route.selectedTemplate ?? "group_buy"}
+        selectedTemplate={route.selectedTemplate}
       />
     ),
     manage: selectedTask ? (
@@ -1176,20 +1176,36 @@ function TaskRow({ task, onOpen, onShare }) {
   );
 }
 
-function TemplatePicker({ circles, session, go, refresh, setToast, selectedTemplate = "group_buy" }) {
+function TemplatePicker({ circles, session, go, refresh, setToast, selectedTemplate = "" }) {
   const manageableCircleIds = new Set(
     (session?.memberships ?? [])
       .filter((membership) => ["owner", "admin"].includes(membership.role))
       .map((membership) => membership.circleId),
   );
   const manageableCircles = circles.filter((circle) => manageableCircleIds.has(circle.id));
-  const defaultCircle = getDefaultCircleForTemplate(manageableCircles, selectedTemplate);
+  const initialCircle = selectedTemplate ? getDefaultCircleForTemplate(manageableCircles, selectedTemplate) : null;
   const [template, setTemplate] = useState(selectedTemplate);
-  const [circleId, setCircleId] = useState(defaultCircle?.id ?? manageableCircles[0]?.id ?? "");
-  const meta = templateMeta[template];
+  const [circleId, setCircleId] = useState(initialCircle?.id ?? "");
+  const [step, setStep] = useState(selectedTemplate ? "circle" : "template");
+  const meta = template ? templateMeta[template] : null;
+  const selectedCircle = manageableCircles.find((circle) => circle.id === circleId) ?? null;
+
+  function chooseTemplate(nextTemplate) {
+    const nextDefaultCircle = getDefaultCircleForTemplate(manageableCircles, nextTemplate);
+    setTemplate(nextTemplate);
+    setCircleId((current) => {
+      if (current && manageableCircles.some((circle) => circle.id === current)) return current;
+      return nextDefaultCircle?.id ?? manageableCircles[0]?.id ?? "";
+    });
+    setStep("circle");
+  }
 
   async function createTask() {
-    if (!circleId) {
+    if (!template || !meta) {
+      setToast("請先選擇要建立的事項類型");
+      return;
+    }
+    if (!selectedCircle) {
       setToast("請先加入可管理的圈子");
       return;
     }
@@ -1209,51 +1225,119 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
 
   return (
     <>
-      <Topbar title="建立事項" subtitle="選一個聊天群最常卡住的流程" onBack={() => go("dashboard")} />
-      <section className="section">
-        <div className="template-list">
-          {Object.entries(templateMeta).map(([key, item]) => (
-            <button
-              className={`template-choice ${template === key ? "active" : ""}`}
-              type="button"
-              key={key}
-              onClick={() => setTemplate(key)}
-            >
-              <item.icon size={22} />
+      <Topbar title="建立事項" subtitle={step === "template" ? "先選要處理的事" : meta?.label} onBack={() => go("dashboard")} />
+      <section className="section wizard-section">
+        <div className="wizard-step-head">
+          <span className="step-pill">1/3</span>
+          <div>
+            <h2>你想處理什麼事？</h2>
+            <p>先選一種最接近的生活情境，細節可以建立後再補。</p>
+          </div>
+        </div>
+        {step === "template" ? (
+          <div className="template-list">
+            {Object.entries(templateMeta).map(([key, item]) => (
+              <button
+                className={`template-choice ${template === key ? "active" : ""}`}
+                type="button"
+                key={key}
+                onClick={() => chooseTemplate(key)}
+              >
+                <item.icon size={22} />
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.description}</small>
+                </span>
+                <ChevronRight size={18} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button className="selected-summary" type="button" onClick={() => setStep("template")}>
+            {meta ? <meta.icon size={20} /> : null}
+            <span>
+              <strong>{meta?.label}</strong>
+              <small>點一下可重新選擇事項類型</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+        )}
+      </section>
+
+      {template ? (
+        <section className="section wizard-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">2/3</span>
+            <div>
+              <h2>放在哪個圈子？</h2>
+              <p>只會顯示你可以管理的圈子。</p>
+            </div>
+          </div>
+          {step === "confirm" && selectedCircle ? (
+            <button className="selected-summary" type="button" onClick={() => setStep("circle")}>
+              <Users size={20} />
               <span>
-                <strong>{item.label}</strong>
-                <small>{item.description}</small>
+                <strong>{selectedCircle.name}</strong>
+                <small>點一下可重新選擇圈子</small>
               </span>
               <ChevronRight size={18} />
             </button>
-          ))}
-        </div>
-      </section>
+          ) : (
+            <div className="circle-choice-list">
+              {manageableCircles.length === 0 ? (
+                <p className="empty-note">你目前沒有可建立事項的圈子。請先登入並加入圈子，或請圈主把你設為管理者。</p>
+              ) : null}
+              {manageableCircles.map((circle) => (
+                <label key={circle.id} className="radio-row">
+                  <input type="radio" checked={circleId === circle.id} onChange={() => setCircleId(circle.id)} />
+                  <span>
+                    <strong>{circle.name}</strong>
+                    <small>{circle.description}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : null}
 
-      <section className="section">
-        <h2>放在哪個圈子？</h2>
-        <div className="circle-choice-list">
-          {manageableCircles.length === 0 ? (
-            <p className="empty-note">你目前沒有可建立事項的圈子。請先登入並加入圈子，或請圈主把你設為管理者。</p>
-          ) : null}
-          {manageableCircles.map((circle) => (
-            <label key={circle.id} className="radio-row">
-              <input type="radio" checked={circleId === circle.id} onChange={() => setCircleId(circle.id)} />
-              <span>
-                <strong>{circle.name}</strong>
-                <small>{circle.description}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
+      {template && selectedCircle && step === "confirm" ? (
+        <section className="section wizard-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">3/3</span>
+            <div>
+              <h2>先建立基本事項</h2>
+              <p>圈內會先放入常用選項與說明，建立後再補截止時間、付款或其他細節。</p>
+            </div>
+          </div>
+          <div className="create-summary">
+            <div>
+              <small>事項類型</small>
+              <strong>{meta?.label}</strong>
+            </div>
+            <div>
+              <small>圈子</small>
+              <strong>{selectedCircle.name}</strong>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
-      <div className="sticky-actions">
-        <button className="primary-button" type="button" onClick={createTask} disabled={!circleId}>
-          <Plus size={18} />
-          建立{meta.label}
-        </button>
-      </div>
+      {template ? (
+        <div className="sticky-actions">
+          {step === "confirm" ? (
+            <button className="primary-button" type="button" onClick={createTask} disabled={!selectedCircle}>
+              <Plus size={18} />
+              建立{meta?.label}
+            </button>
+          ) : (
+            <button className="primary-button" type="button" onClick={() => setStep("confirm")} disabled={!selectedCircle}>
+              <ChevronRight size={18} />
+              下一步
+            </button>
+          )}
+        </div>
+      ) : null}
     </>
   );
 }
