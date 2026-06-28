@@ -5021,6 +5021,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask, onAuditChange
 }
 
 function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
+  const [activePanel, setActivePanel] = useState("responses");
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
@@ -5052,6 +5053,12 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
     return () => {
       cancelled = true;
     };
+  }, [task.id]);
+
+  useEffect(() => {
+    setActivePanel("responses");
+    setFilter("all");
+    setQuery("");
   }, [task.id]);
 
   const visibleResponses = task.responses.filter((response) => {
@@ -5211,6 +5218,12 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
           : filter === "pending"
             ? "目前沒有待處理的名單。"
             : "目前沒有符合條件的名單。";
+  const taskPanelItems = [
+    { id: "responses", step: "1", label: "名單/付款", detail: `${task.responses.length} 筆` },
+    { id: "discussion", step: "2", label: "公告討論", detail: task.announcements?.length ? `${task.announcements.length} 則公告` : "通知與留言" },
+    canManage ? { id: "setup", step: "3", label: "設定", detail: task.status === "open" ? "編輯或關閉" : "重新開放" } : null,
+    canManage ? { id: "history", step: "4", label: "紀錄", detail: `${auditEvents.length} 筆` } : null,
+  ].filter(Boolean);
 
   function refreshTaskAudit() {
     setAuditRefreshKey((current) => current + 1);
@@ -5283,10 +5296,36 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
         <Metric value={task.stats.unpaid + task.stats.review} label="待付款" alert />
         <Metric value={task.stats.pending} label={task.template === "activity" ? "待確認/參加" : "待處理"} />
       </section>
-      {canManage ? <TaskEditPanel task={task} setToast={setToast} updateTask={updateTask} onAuditChange={refreshTaskAudit} /> : null}
-      {canManage && task.template === "interest_check" ? (
+      <section className="section task-panel-section">
+        <div className="wizard-step-head">
+          <span className="step-pill">處理</span>
+          <div>
+            <h2>你現在要處理哪一塊？</h2>
+            <p>先選工作區，畫面只會顯示這一塊需要用到的內容。</p>
+          </div>
+        </div>
+        <div className="task-panel-tabs" role="tablist" aria-label="事項工作區">
+          {taskPanelItems.map((item) => (
+            <button
+              className={activePanel === item.id ? "active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={activePanel === item.id}
+              key={item.id}
+              onClick={() => setActivePanel(item.id)}
+            >
+              <span>{item.step}</span>
+              <strong>{item.label}</strong>
+              <small>{item.detail}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+      {canManage && activePanel === "setup" ? <TaskEditPanel task={task} setToast={setToast} updateTask={updateTask} onAuditChange={refreshTaskAudit} /> : null}
+      {canManage && task.template === "interest_check" && activePanel === "setup" ? (
         <InterestConversionPanel task={task} go={go} setToast={setToast} updateTask={updateTask} onAuditChange={refreshTaskAudit} />
       ) : null}
+      {activePanel === "discussion" ? (
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
         <div className="discussion-toolbar">
@@ -5329,6 +5368,9 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
         ) : null}
         <TaskDiscussion task={task} session={session} setToast={setToast} updateTask={updateTask} />
       </section>
+      ) : null}
+      {activePanel === "responses" ? (
+      <>
       <section className="filter-bar">
         {[
           ["all", `全部 (${task.responses.length})`],
@@ -5417,7 +5459,9 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
           );
         })}
       </section>
-      {canManage ? (
+      </>
+      ) : null}
+      {canManage && activePanel === "history" ? (
         <section className="section audit-section">
           <SectionTitle title="最近管理紀錄" />
           <AuditEventList events={auditEvents} />
@@ -5427,7 +5471,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
         <div className="sticky-actions">
           <button className="primary-button" type="button" disabled><Loader2 className="spin" size={18} />確認權限</button>
         </div>
-      ) : canManage ? (
+      ) : canManage && activePanel === "setup" ? (
         <div className="sticky-actions two">
           <button className="secondary-button" type="button" onClick={() => go("join", { taskId: task.id })}>預覽成員填單</button>
           <button className="primary-button orange" type="button" onClick={toggleStatus} disabled={statusBusy}>
@@ -5435,7 +5479,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
             {statusBusy ? "處理中" : task.status === "open" ? "關閉事項" : "重新開放"}
           </button>
         </div>
-      ) : (
+      ) : canManage ? null : (
         <div className="sticky-actions">
           <button className="primary-button green" type="button" onClick={() => go("join", { taskId: task.id })}>填寫 / 留言</button>
         </div>
