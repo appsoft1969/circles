@@ -1749,15 +1749,28 @@ function TaskEditPanel({ task, setToast, updateTask }) {
 }
 
 function InterestConversionPanel({ task, go, setToast, updateTask }) {
-  const [targetTemplate, setTargetTemplate] = useState("activity");
+  const [targetTemplate, setTargetTemplate] = useState("");
   const [draft, setDraft] = useState(() => buildConversionDraft(task, "activity", getInterestSummary(task)));
   const [busy, setBusy] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const summary = getInterestSummary(task);
   const convertedCount = Array.isArray(task.metadata?.convertedTo) ? task.metadata.convertedTo.length : 0;
+  const selectedTarget = interestConversionTargets.find((target) => target.id === targetTemplate);
 
   useEffect(() => {
-    setDraft(buildConversionDraft(task, targetTemplate, summary));
-  }, [task.id, targetTemplate]);
+    setTargetTemplate("");
+    setDraft(buildConversionDraft(task, "activity", summary));
+    setShowDetails(false);
+    setShowOptions(false);
+  }, [task.id]);
+
+  function chooseTarget(nextTemplate) {
+    setTargetTemplate(nextTemplate);
+    setDraft(buildConversionDraft(task, nextTemplate, summary));
+    setShowDetails(false);
+    setShowOptions(false);
+  }
 
   function updateDraft(field, value) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -1786,8 +1799,13 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
 
   async function convert() {
     if (busy) return;
+    if (!targetTemplate) {
+      setToast("請先選擇要轉成哪一種後續事項");
+      return;
+    }
     const options = optionPayload(draft.options);
     if (!draft.title.trim() || options.length === 0) {
+      if (options.length === 0) setShowOptions(true);
       setToast("請先填寫標題與至少一個選項");
       return;
     }
@@ -1827,76 +1845,132 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
         <span><strong>{summary.reserve}</strong> 人先保留</span>
         <span><strong>{summary.notThisTime}</strong> 人先不參加</span>
       </div>
-      <div className="conversion-list">
-        {interestConversionTargets.map((target) => (
-          <button
-            className={`conversion-choice ${targetTemplate === target.id ? "active" : ""}`}
-            type="button"
-            key={target.id}
-            onClick={() => setTargetTemplate(target.id)}
-          >
-            <strong>{target.label}</strong>
-            <small>{target.description}</small>
-          </button>
-        ))}
-      </div>
-      <div className="conversion-editor">
-        <label>
-          後續事項標題
-          <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
-        </label>
-        <label>
-          截止時間
-          <input type="datetime-local" value={draft.deadlineAt} onChange={(event) => updateDraft("deadlineAt", event.target.value)} />
-        </label>
-        <label>
-          說明
-          <textarea value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} />
-        </label>
-        <label>
-          付款/費用說明
-          <textarea value={draft.paymentInstructions} onChange={(event) => updateDraft("paymentInstructions", event.target.value)} />
-        </label>
-        <label>
-          集合/領取說明
-          <textarea value={draft.pickupInstructions} onChange={(event) => updateDraft("pickupInstructions", event.target.value)} />
-        </label>
-        <div className="option-editor-list">
-          <div className="option-editor-head">
-            <strong>後續選項</strong>
-            <button className="secondary-button compact" type="button" onClick={addOption}>新增選項</button>
-          </div>
-          {draft.options.map((option, index) => (
-            <div className="option-editor" key={`${targetTemplate}-${index}`}>
-              <div className="option-editor-title">
-                <span>選項 {index + 1}</span>
-                <button type="button" onClick={() => removeOption(index)} disabled={draft.options.length <= 1}>移除</button>
-              </div>
-              <input
-                aria-label={`選項 ${index + 1} 名稱`}
-                value={option.title}
-                onChange={(event) => updateOption(index, { title: event.target.value })}
-              />
-              <input
-                aria-label={`選項 ${index + 1} 補充說明`}
-                value={option.subtitle}
-                onChange={(event) => updateOption(index, { subtitle: event.target.value })}
-              />
-              <input
-                aria-label={`選項 ${index + 1} 金額`}
-                type="number"
-                min="0"
-                value={option.unitPrice}
-                onChange={(event) => updateOption(index, { unitPrice: event.target.value })}
-              />
-            </div>
-          ))}
+
+      <div className="wizard-step-head">
+        <span className="step-pill">1/2</span>
+        <div>
+          <h2>接下來要成立什麼？</h2>
+          <p>意願調查只是先問有沒有人，這一步才決定要變成正式活動、投票或領取登記。</p>
         </div>
       </div>
-      <button className="primary-button" type="button" onClick={convert} disabled={busy}>
-        {busy ? <Loader2 className="spin" size={18} /> : <ChevronRight size={18} />}
-        建立後續事項
-      </button>
+      {!targetTemplate ? (
+        <div className="conversion-list">
+          {interestConversionTargets.map((target) => (
+            <button
+              className="conversion-choice"
+              type="button"
+              key={target.id}
+              onClick={() => chooseTarget(target.id)}
+            >
+              <strong>{target.label}</strong>
+              <small>{target.description}</small>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button className="selected-summary" type="button" onClick={() => setTargetTemplate("")}>
+          <ClipboardList size={20} />
+          <span>
+            <strong>{selectedTarget?.label}</strong>
+            <small>{selectedTarget?.description}，點一下可重新選擇</small>
+          </span>
+          <ChevronRight size={18} />
+        </button>
+      )}
+
+      {targetTemplate ? (
+        <div className="guided-editor conversion-guided-editor">
+          <div className="wizard-step-head">
+            <span className="step-pill">2/2</span>
+            <div>
+              <h2>確認基本內容</h2>
+              <p>先確認標題與截止時間；細節、費用與選項可需要時再打開調整。</p>
+            </div>
+          </div>
+          <div className="editor-basic-grid">
+            <label>
+              後續事項標題
+              <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
+            </label>
+            <label>
+              截止時間
+              <input type="datetime-local" value={draft.deadlineAt} onChange={(event) => updateDraft("deadlineAt", event.target.value)} />
+            </label>
+          </div>
+
+          <button className="editor-panel-toggle" type="button" onClick={() => setShowDetails((current) => !current)}>
+            <span>
+              <strong>說明、費用與安排</strong>
+              <small>圈內已先帶入建議文字，可需要時再微調</small>
+            </span>
+            <ChevronRight className={showDetails ? "open" : ""} size={18} />
+          </button>
+          {showDetails ? (
+            <div className="editor-panel-content">
+              <label>
+                說明
+                <textarea value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} />
+              </label>
+              <label>
+                付款/費用說明
+                <textarea value={draft.paymentInstructions} onChange={(event) => updateDraft("paymentInstructions", event.target.value)} />
+              </label>
+              <label>
+                集合/領取說明
+                <textarea value={draft.pickupInstructions} onChange={(event) => updateDraft("pickupInstructions", event.target.value)} />
+              </label>
+            </div>
+          ) : null}
+
+          <button className="editor-panel-toggle" type="button" onClick={() => setShowOptions((current) => !current)}>
+            <span>
+              <strong>後續選項</strong>
+              <small>{draft.options.length} 個預設選項，可需要時再調整名稱、補充說明或金額</small>
+            </span>
+            <ChevronRight className={showOptions ? "open" : ""} size={18} />
+          </button>
+          {showOptions ? (
+            <div className="option-editor-list">
+              <div className="option-editor-head">
+                <strong>後續選項</strong>
+                <button className="secondary-button compact" type="button" onClick={addOption}>新增選項</button>
+              </div>
+              {draft.options.map((option, index) => (
+                <div className="option-editor" key={`${targetTemplate}-${index}`}>
+                  <div className="option-editor-title">
+                    <span>選項 {index + 1}</span>
+                    <button type="button" onClick={() => removeOption(index)} disabled={draft.options.length <= 1}>移除</button>
+                  </div>
+                  <input
+                    aria-label={`選項 ${index + 1} 名稱`}
+                    value={option.title}
+                    onChange={(event) => updateOption(index, { title: event.target.value })}
+                  />
+                  <input
+                    aria-label={`選項 ${index + 1} 補充說明`}
+                    value={option.subtitle}
+                    onChange={(event) => updateOption(index, { subtitle: event.target.value })}
+                  />
+                  <input
+                    aria-label={`選項 ${index + 1} 金額`}
+                    type="number"
+                    min="0"
+                    value={option.unitPrice}
+                    onChange={(event) => updateOption(index, { unitPrice: event.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {targetTemplate ? (
+        <button className="primary-button" type="button" onClick={convert} disabled={busy}>
+          {busy ? <Loader2 className="spin" size={18} /> : <ChevronRight size={18} />}
+          建立{selectedTarget?.label}
+        </button>
+      ) : null}
       {convertedCount > 0 ? <p className="empty-note">此意願調查已轉出 {convertedCount} 筆後續事項。</p> : null}
     </section>
   );
