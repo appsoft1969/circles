@@ -66,6 +66,18 @@ npm run icons:pwa
 
 The service worker is intentionally conservative. Task counts, payment status, chat messages, and notifications still come from the network so the app does not show stale operational data as if it were current. The service worker also contains the browser-side `push` and `notificationclick` handlers for Web Push delivery; clicking a Web Push notification opens the target page and best-effort marks the notification read. Native APNS/FCM app push remains future work.
 
+## Audit Events
+
+Postgres writes operational audit rows to `audit_events` for high-value actions that should be traceable later:
+
+- login session creation and revocation
+- circle creation and settings updates
+- circle invite creation, revocation, and accepted joins
+- circle member role/status/profile-note updates
+- push device registration and revocation
+
+Audit rows include actor profile, related circle/task when available, action, entity table/id, source IP/user agent when available, and structured metadata. This is a foundation for support/debugging, not a full admin console yet.
+
 ## Database Tables
 
 ### users

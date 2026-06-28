@@ -441,6 +441,7 @@ function normalizeNullableDateTime(value, fallback = null) {
 
 export function createPostgresStore({ connectionString = defaultConnectionString } = {}) {
   const pool = new Pool({ connectionString });
+  let auditSchemaReady = null;
   let notificationPreferenceSchemaReady = null;
   let circleNotificationPreferenceSchemaReady = null;
   let deviceSchemaReady = null;
@@ -492,6 +493,70 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     } finally {
       client.release();
     }
+  }
+
+  async function ensureAuditSchema() {
+    const statement = `
+      CREATE TABLE IF NOT EXISTS audit_events (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        actor_profile_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+        circle_id uuid REFERENCES circles(id) ON DELETE SET NULL,
+        task_id uuid REFERENCES tasks(id) ON DELETE SET NULL,
+        action text NOT NULL,
+        entity_table text NOT NULL,
+        entity_id uuid,
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+        ip_address inet,
+        user_agent text,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+
+      CREATE INDEX IF NOT EXISTS ix_audit_events_circle_created
+        ON audit_events (circle_id, created_at DESC);
+
+      CREATE INDEX IF NOT EXISTS ix_audit_events_actor_created
+        ON audit_events (actor_profile_id, created_at DESC);
+    `;
+    if (!auditSchemaReady) auditSchemaReady = pool.query(statement);
+    await auditSchemaReady;
+  }
+
+  async function recordAuditEvent(event, client = pool) {
+    await ensureAuditSchema();
+    await client.query(
+      `
+        INSERT INTO audit_events (
+          actor_profile_id,
+          circle_id,
+          task_id,
+          action,
+          entity_table,
+          entity_id,
+          metadata,
+          ip_address,
+          user_agent
+        )
+        VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5, $6::uuid, $7::jsonb, $8::inet, $9)
+      `,
+      [
+        event.actorProfileId || null,
+        event.circleId || null,
+        event.taskId || null,
+        event.action,
+        event.entityTable,
+        event.entityId || null,
+        json(event.metadata || {}),
+        event.ipAddress || null,
+        event.userAgent || null,
+      ],
+    );
+  }
+
+  function auditSource(actor = {}) {
+    return {
+      ipAddress: actor.ipAddress || null,
+      userAgent: actor.userAgent || null,
+    };
   }
 
   async function ensureNotificationPreferenceSchema() {
@@ -737,6 +802,15 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         json({ provider: metadata.provider || null }),
       ],
     );
+    await recordAuditEvent({
+      actorProfileId: profileId,
+      action: "auth.session.created",
+      entityTable: "auth_sessions",
+      entityId: result.rows[0].id,
+      metadata: { provider: metadata.provider || null },
+      ipAddress: metadata.ipAddress || null,
+      userAgent: metadata.userAgent || null,
+    });
     return { token, session: sessionFromRow(result.rows[0]) };
   }
 
@@ -748,10 +822,18 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         SET revoked_at = now()
         WHERE token_hash = $1
           AND revoked_at IS NULL
-        RETURNING id
+        RETURNING id::text, profile_id::text
       `,
       [hashToken(token)],
     );
+    if (result.rows[0]) {
+      await recordAuditEvent({
+        actorProfileId: result.rows[0].profile_id,
+        action: "auth.session.revoked",
+        entityTable: "auth_sessions",
+        entityId: result.rows[0].id,
+      });
+    }
     return result.rowCount > 0;
   }
 
@@ -1241,13 +1323,23 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         [profile.id, name, description, json({ ...metadata, createdFrom: metadata.createdFrom ?? "web" }), ownerDisplayName],
       );
 
-      return circleFromRow(result.rows[0]);
+      const circle = circleFromRow(result.rows[0]);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId: circle.id,
+        action: "circle.created",
+        entityTable: "circles",
+        entityId: circle.id,
+        metadata: { name: circle.name },
+        ...auditSource(body.actor),
+      }, client);
+      return circle;
     });
   }
 
   async function updateCircle(circleId, body = {}) {
     return withTransaction(async (client) => {
-      await requireCircleMember(circleId, body.actor, { roles: ["owner"], client });
+      const { profile } = await requireCircleMember(circleId, body.actor, { roles: ["owner"], client });
       const name = normalizeCircleName(body.name);
       const description = normalizeCircleDescription(body.description);
 
@@ -1273,7 +1365,17 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         [circleId, name, description],
       );
       if (!result.rows[0]) throw new StoreError(404, "Circle not found");
-      return circleFromRow(result.rows[0]);
+      const circle = circleFromRow(result.rows[0]);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId,
+        action: "circle.updated",
+        entityTable: "circles",
+        entityId: circle.id,
+        metadata: { name: circle.name, description: circle.description },
+        ...auditSource(body.actor),
+      }, client);
+      return circle;
     });
   }
 
@@ -1421,48 +1523,73 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   }
 
   async function createCircleInvite(circleId, body = {}) {
-    const { profile } = await requireCircleMember(circleId, body.actor, { roles: ["owner", "admin"] });
-    const role = normalizeInviteRole(body.role);
-    const maxUses = positiveInteger(body.maxUses, 30);
-    const expiresAt = normalizeInviteExpiresAt(body.expiresAt);
+    return withTransaction(async (client) => {
+      const { profile } = await requireCircleMember(circleId, body.actor, { roles: ["owner", "admin"], client });
+      const role = normalizeInviteRole(body.role);
+      const maxUses = positiveInteger(body.maxUses, 30);
+      const expiresAt = normalizeInviteExpiresAt(body.expiresAt);
 
-    const result = await pool.query(
-      `
-        WITH inserted AS (
-          INSERT INTO circle_invites (
-            circle_id,
-            role,
-            max_uses,
-            expires_at,
-            created_by_profile_id
+      const result = await client.query(
+        `
+          WITH inserted AS (
+            INSERT INTO circle_invites (
+              circle_id,
+              role,
+              max_uses,
+              expires_at,
+              created_by_profile_id
+            )
+            VALUES ($1, $2::circle_role, $3, $4::timestamptz, $5)
+            RETURNING *
           )
-          VALUES ($1, $2::circle_role, $3, $4::timestamptz, $5)
-          RETURNING *
-        )
-        ${inviteSelect.replace("FROM circle_invites ci", "FROM inserted ci")}
-      `,
-      [circleId, role, maxUses, expiresAt, profile.id],
-    );
-    return inviteFromRow(result.rows[0]);
+          ${inviteSelect.replace("FROM circle_invites ci", "FROM inserted ci")}
+        `,
+        [circleId, role, maxUses, expiresAt, profile.id],
+      );
+      const invite = inviteFromRow(result.rows[0]);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId,
+        action: "circle_invite.created",
+        entityTable: "circle_invites",
+        entityId: invite.id,
+        metadata: { role, maxUses, expiresAt },
+        ...auditSource(body.actor),
+      }, client);
+      return invite;
+    });
   }
 
   async function revokeCircleInvite(circleId, inviteId, actor = {}) {
-    await requireCircleMember(circleId, actor, { roles: ["owner", "admin"] });
-    const result = await pool.query(
-      `
-        WITH revoked AS (
-          UPDATE circle_invites
-          SET revoked_at = now()
-          WHERE circle_id::text = $1
-            AND id::text = $2
-            AND revoked_at IS NULL
-          RETURNING *
-        )
-        ${inviteSelect.replace("FROM circle_invites ci", "FROM revoked ci")}
-      `,
-      [circleId, inviteId],
-    );
-    return result.rows[0] ? inviteFromRow(result.rows[0]) : null;
+    return withTransaction(async (client) => {
+      const { profile } = await requireCircleMember(circleId, actor, { roles: ["owner", "admin"], client });
+      const result = await client.query(
+        `
+          WITH revoked AS (
+            UPDATE circle_invites
+            SET revoked_at = now()
+            WHERE circle_id::text = $1
+              AND id::text = $2
+              AND revoked_at IS NULL
+            RETURNING *
+          )
+          ${inviteSelect.replace("FROM circle_invites ci", "FROM revoked ci")}
+        `,
+        [circleId, inviteId],
+      );
+      if (!result.rows[0]) return null;
+      const invite = inviteFromRow(result.rows[0]);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId,
+        action: "circle_invite.revoked",
+        entityTable: "circle_invites",
+        entityId: invite.id,
+        metadata: { code: invite.code },
+        ...auditSource(actor),
+      }, client);
+      return invite;
+    });
   }
 
   async function acceptCircleInvite(code, actor = {}) {
@@ -1566,9 +1693,23 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           );
 
       await client.query("UPDATE circle_invites SET used_count = used_count + 1 WHERE id::text = $1", [inviteRow.id]);
+      const membership = membershipFromRow(membershipResult.rows[0]);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId: inviteRow.circle_id,
+        action: "circle_member.joined_by_invite",
+        entityTable: "circle_memberships",
+        entityId: membership.id,
+        metadata: {
+          inviteId: inviteRow.id,
+          role: membership.role,
+          previousStatus: existing?.status || null,
+        },
+        ...auditSource(actor),
+      }, client);
       return {
         invite: inviteFromRow({ ...inviteRow, used_count: inviteRow.used_count + 1 }),
-        membership: membershipFromRow(membershipResult.rows[0]),
+        membership,
         joined: true,
         alreadyMember: false,
       };
@@ -1651,7 +1792,30 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         `,
         [circleId, membershipId, nextRole, nextStatus, nextDisplayName, nextContactHint, target.circleName],
       );
-      return membershipFromRow(result.rows[0]);
+      const updatedMember = membershipFromRow(result.rows[0]);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId,
+        action: "circle_member.updated",
+        entityTable: "circle_memberships",
+        entityId: updatedMember.id,
+        metadata: {
+          before: {
+            role: target.role,
+            status: target.status,
+            displayName: target.displayName,
+            contactHint: target.contactHint,
+          },
+          after: {
+            role: updatedMember.role,
+            status: updatedMember.status,
+            displayName: updatedMember.displayName,
+            contactHint: updatedMember.contactHint,
+          },
+        },
+        ...auditSource(body.actor),
+      }, client);
+      return updatedMember;
     });
   }
 
@@ -3269,7 +3433,21 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       ],
     );
 
-    return deviceFromRow(result.rows[0]);
+    const device = deviceFromRow(result.rows[0]);
+    await recordAuditEvent({
+      actorProfileId: profile.id,
+      action: "device.registered",
+      entityTable: "devices",
+      entityId: device.id,
+      metadata: {
+        platform: device.platform,
+        appVersion: device.appVersion,
+        deviceName: device.deviceName,
+        hasWebPushSubscription: Boolean(device.pushSubscription),
+      },
+      ...auditSource(body.actor),
+    });
+    return device;
   }
 
   async function revokeRegisteredDevice(body = {}) {
@@ -3303,7 +3481,19 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     );
 
     if (!result.rows[0]) throw new StoreError(404, "Registered device not found");
-    return deviceFromRow(result.rows[0]);
+    const device = deviceFromRow(result.rows[0]);
+    await recordAuditEvent({
+      actorProfileId: profile.id,
+      action: "device.revoked",
+      entityTable: "devices",
+      entityId: device.id,
+      metadata: {
+        platform: device.platform,
+        hasWebPushSubscription: Boolean(device.pushSubscription),
+      },
+      ...auditSource(body.actor),
+    });
+    return device;
   }
 
   async function getWebPushStatus(actor = {}) {

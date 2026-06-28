@@ -20,6 +20,7 @@ if (process.argv.includes("--seed-only")) {
 }
 
 const app = express();
+app.set("trust proxy", process.env.TRUST_PROXY || "loopback");
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -30,6 +31,8 @@ function actorFromRequest(req) {
     sessionToken: readCookie(req, sessionCookieName) || bearerToken(req),
     profileId: req.get("x-incircle-profile-id") || null,
     email: req.get("x-incircle-profile-email") || null,
+    userAgent: req.get("user-agent") || null,
+    ipAddress: req.ip || req.socket?.remoteAddress || null,
   };
 }
 

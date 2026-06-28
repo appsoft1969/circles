@@ -145,6 +145,16 @@ Audit use cases:
 - Task closing/reopening.
 - Invite or membership changes.
 
+Current API audit writes:
+
+- `auth.session.created` and `auth.session.revoked`
+- `circle.created` and `circle.updated`
+- `circle_invite.created` and `circle_invite.revoked`
+- `circle_member.joined_by_invite` and `circle_member.updated`
+- `device.registered` and `device.revoked`
+
+Audit rows store the actor profile, related circle/task when available, action, entity table/id, source IP/user agent when available, and structured metadata for support/debugging. Sensitive push tokens are intentionally not copied into audit metadata.
+
 ## Local Homebrew Postgres Commands
 
 Start Postgres:

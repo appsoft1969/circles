@@ -92,6 +92,24 @@ async function request(baseUrl, path, options) {
   return { status: response.status, body, headers: response.headers };
 }
 
+async function countPostgresAuditEvents(action, entityId) {
+  const pool = new Pool({ connectionString: postgresUrl });
+  try {
+    const result = await pool.query(
+      `
+        SELECT count(*)::int AS count
+        FROM audit_events
+        WHERE action = $1
+          AND entity_id::text = $2
+      `,
+      [action, entityId],
+    );
+    return Number(result.rows[0]?.count || 0);
+  } finally {
+    await pool.end();
+  }
+}
+
 async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushToken, cleanupCreatedInviteData }) {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -213,6 +231,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     });
     assert.equal(createdCircle.status, 201);
     assert.equal(createdCircle.body.circle.memberCount, 1);
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("circle.created", createdCircle.body.circle.id)) >= 1,
+        `${label}: expected circle.created audit event`,
+      );
+    }
 
     const updatedCircle = await request(baseUrl, `/api/circles/${createdCircle.body.circle.id}`, {
       method: "PATCH",
@@ -224,6 +248,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     });
     assert.equal(updatedCircle.body.circle.name, `${label} API smoke 圈子已更新`);
     assert.equal(updatedCircle.body.circle.description, "自動測試更新圈子名稱與說明。");
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("circle.updated", createdCircle.body.circle.id)) >= 1,
+        `${label}: expected circle.updated audit event`,
+      );
+    }
 
     const postCircleSession = await request(baseUrl, "/api/session", { headers: sessionHeaders });
     assert.ok(
@@ -266,6 +296,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(invite.body.invite.role, "member");
       assert.equal(invite.body.invite.usedCount, 0);
       createdInviteIds.push(invite.body.invite.id);
+      assert.ok(
+        (await countPostgresAuditEvents("circle_invite.created", invite.body.invite.id)) >= 1,
+        `${label}: expected circle_invite.created audit event`,
+      );
 
       const inviteList = await request(baseUrl, `/api/circles/${officeCircle.id}/invites`, { headers: sessionHeaders });
       assert.ok(
@@ -305,6 +339,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(accepted.body.joined, true);
       assert.equal(accepted.body.membership.circleId, officeCircle.id);
       assert.equal(accepted.body.membership.role, "member");
+      assert.ok(
+        (await countPostgresAuditEvents("circle_member.joined_by_invite", accepted.body.membership.id)) >= 1,
+        `${label}: expected circle_member.joined_by_invite audit event`,
+      );
 
       const joinerContext = await request(baseUrl, "/api/session", { headers: joinerHeaders });
       assert.ok(
@@ -328,6 +366,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(updatedMember.body.member.role, "guest");
       assert.equal(updatedMember.body.member.displayName, "邀請測試成員已整理");
       assert.equal(updatedMember.body.member.contactHint, "由 smoke 測試更新");
+      assert.ok(
+        (await countPostgresAuditEvents("circle_member.updated", updatedMember.body.member.id)) >= 1,
+        `${label}: expected circle_member.updated audit event`,
+      );
     }
 
     const created = await request(baseUrl, "/api/tasks", {
@@ -693,6 +735,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(webPushDevice.status, 201);
       assert.equal(webPushDevice.body.device.pushToken, webPushEndpoint);
       assert.equal(webPushDevice.body.device.pushSubscription.endpoint, webPushEndpoint);
+      assert.ok(
+        (await countPostgresAuditEvents("device.registered", webPushDevice.body.device.id)) >= 1,
+        `${label}: expected device.registered audit event`,
+      );
 
       const pushStatus = await request(baseUrl, "/api/push/status", { headers: sessionHeaders });
       assert.equal(typeof pushStatus.body.status.configured, "boolean");
@@ -717,6 +763,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       });
       assert.equal(revokedWebPushDevice.body.device.pushToken, webPushEndpoint);
       assert.ok(revokedWebPushDevice.body.device.revokedAt, `${label}: expected revoked device timestamp`);
+      assert.ok(
+        (await countPostgresAuditEvents("device.revoked", revokedWebPushDevice.body.device.id)) >= 1,
+        `${label}: expected device.revoked audit event`,
+      );
 
       const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
