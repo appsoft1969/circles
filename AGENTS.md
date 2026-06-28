@@ -296,7 +296,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
 - Field hints, helper copy, and placeholders should be visually subordinate to real user input. Placeholder text must be smaller than entered text and use a lighter gray so users can clearly distinguish hints from filled values.
 - Keep mobile typography friendly to older users without making the UI feel heavy. Primary actions and entered form values should stay clearly readable, normal body copy should generally avoid tiny sizes, and secondary helper text should remain legible while visually lighter than the main content.
 - In guided flows, completed steps must switch from question wording to confirmation wording. If the user has already selected `訂飲料`, the step should say that it is selected and offer a clear way to reselect, not keep asking as if no choice was made.
-- Guided copy should sound like a helpful person, not a system prompt. Prefer short conversational phrasing such as `你已選好：訂飲料` and `想換的話，點這裡重選` over formal wording such as `需要更改時`.
+- Guided copy should sound like a helpful person, not a system prompt. Prefer short, friendly, everyday phrasing such as `你已選好：訂飲料`, `想換的話，點這裡重選`, and `好了，儲存設定` over formal wording such as `需要更改時`.
 - Avoid social-app patterns:
   - Infinite feed.
   - Public profile browsing.

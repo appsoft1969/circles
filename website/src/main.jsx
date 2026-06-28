@@ -1796,6 +1796,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
   const summary = getInterestSummary(task);
   const convertedCount = Array.isArray(task.metadata?.convertedTo) ? task.metadata.convertedTo.length : 0;
   const selectedTarget = interestConversionTargets.find((target) => target.id === targetTemplate);
+  const targetIsSelected = Boolean(selectedTarget);
 
   useEffect(() => {
     setTargetTemplate("");
@@ -1877,7 +1878,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
 
   return (
     <section className="section conversion-section">
-      <SectionTitle title="下一步轉換" />
+      <SectionTitle title="把意願變成下一步" />
       <div className="interest-summary">
         <span><strong>{summary.positive}</strong> 人有興趣</span>
         <span><strong>{summary.positiveQuantity}</strong> 份/名額</span>
@@ -1888,8 +1889,8 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
       <div className="wizard-step-head">
         <span className="step-pill">1/2</span>
         <div>
-          <h2>接下來要成立什麼？</h2>
-          <p>意願調查只是先問有沒有人，這一步才決定要變成正式活動、投票或領取登記。</p>
+          <h2>{targetIsSelected ? `你已選好：${selectedTarget.label}` : "接下來想怎麼安排？"}</h2>
+          <p>{targetIsSelected ? "想換成其他方式的話，點下方卡片就能重選。" : "大家已經表態了，現在可以決定要辦活動、開投票，還是改成領取登記。"}</p>
         </div>
       </div>
       {!targetTemplate ? (
@@ -1911,7 +1912,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
           <ClipboardList size={20} />
           <span>
             <strong>{selectedTarget?.label}</strong>
-            <small>{selectedTarget?.description}，點一下可重新選擇</small>
+            <small>想換其他安排，點這裡重選</small>
           </span>
           <ChevronRight size={18} />
         </button>
@@ -1922,25 +1923,25 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
           <div className="wizard-step-head">
             <span className="step-pill">2/2</span>
             <div>
-              <h2>確認基本內容</h2>
-              <p>先確認標題與截止時間；細節、費用與選項可需要時再打開調整。</p>
+              <h2>先確認這個後續事項</h2>
+              <p>先看標題和截止時間就好；說明、費用和選項需要時再打開改。</p>
             </div>
           </div>
           <div className="editor-basic-grid">
             <label>
-              後續事項標題
+              這個後續事項叫什麼？
               <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
             </label>
             <label>
-              截止時間
+              什麼時候截止？
               <input type="datetime-local" value={draft.deadlineAt} onChange={(event) => updateDraft("deadlineAt", event.target.value)} />
             </label>
           </div>
 
           <button className="editor-panel-toggle" type="button" onClick={() => setShowDetails((current) => !current)}>
             <span>
-              <strong>說明、費用與安排</strong>
-              <small>圈內已先帶入建議文字，可需要時再微調</small>
+              <strong>還要補說明或費用嗎？</strong>
+              <small>圈內已先帶入建議文字，想改再打開。</small>
             </span>
             <ChevronRight className={showDetails ? "open" : ""} size={18} />
           </button>
@@ -1963,8 +1964,8 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
 
           <button className="editor-panel-toggle" type="button" onClick={() => setShowOptions((current) => !current)}>
             <span>
-              <strong>後續選項</strong>
-              <small>{draft.options.length} 個預設選項，可需要時再調整名稱、補充說明或金額</small>
+              <strong>要調整選項或金額嗎？</strong>
+              <small>目前有 {draft.options.length} 個預設選項；名稱、說明或金額想改再打開。</small>
             </span>
             <ChevronRight className={showOptions ? "open" : ""} size={18} />
           </button>
@@ -2007,10 +2008,10 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
       {targetTemplate ? (
         <button className="primary-button" type="button" onClick={convert} disabled={busy}>
           {busy ? <Loader2 className="spin" size={18} /> : <ChevronRight size={18} />}
-          建立{selectedTarget?.label}
+          好了，建立{selectedTarget?.label}
         </button>
       ) : null}
-      {convertedCount > 0 ? <p className="empty-note">此意願調查已轉出 {convertedCount} 筆後續事項。</p> : null}
+      {convertedCount > 0 ? <p className="empty-note">這個意願調查已經轉出 {convertedCount} 筆後續事項。</p> : null}
     </section>
   );
 }
