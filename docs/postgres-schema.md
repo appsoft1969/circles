@@ -116,7 +116,7 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
-Current API support has started Phase 2 and Phase 3 at the data/API layer: device registration, notification rows, conversations, messages, and read receipts exist in Postgres. Real push delivery, unread badge rules, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
+Current API support has started Phase 2 and Phase 3 at the data/API layer: device registration, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. Real push delivery, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
 
 ### Attachments And Audit
 
@@ -205,7 +205,7 @@ The initial migration has been verified locally with:
 - Postgres API task announcements through `POST /api/tasks/:taskId/announcements`, requiring task-manager authorization and writing announcement receipts, in-app notifications, and a mirrored task-conversation message.
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
 - Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
-- Postgres API push scaffolding through device registration, notification listing, and notification read state.
+- Postgres API push scaffolding through device registration, notification listing, per-notification read state, and bulk notification read state.
 - Postgres CSV export through `GET /api/tasks/:taskId/export.csv`, requiring task-manager authorization.
 - Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, anonymous authorization rejection, conversations, message reads, notifications, and devices.
 - SQLite-to-Postgres migration through `website/scripts/migrate-sqlite-to-postgres.mjs`.

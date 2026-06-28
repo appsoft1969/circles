@@ -722,6 +722,7 @@ function CommunicationPanel({ notifications = [], session, go }) {
   );
   const visibleMemberships = uniqueMemberships.slice(0, 4);
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
+  const priorityUnreadCount = notifications.filter((notification) => !notification.readAt && notificationPriority(notification)).length;
 
   return (
     <section className="section communication-section">
@@ -734,7 +735,7 @@ function CommunicationPanel({ notifications = [], session, go }) {
         <button className={`communication-card ${unreadCount > 0 ? "unread" : ""}`} type="button" onClick={() => go("notifications")}>
           <span className="communication-icon">{unreadCount > 0 ? <BellDot size={20} /> : <Bell size={20} />}</span>
           <strong>{unreadCount > 0 ? `${unreadCount} 則未讀` : "通知中心"}</strong>
-          <small>圈內訊息與提醒</small>
+          <small>{priorityUnreadCount > 0 ? `有 ${priorityUnreadCount} 則重要提醒` : "圈內訊息與提醒"}</small>
         </button>
         {visibleMemberships.map((membership) => (
           <button
@@ -751,6 +752,20 @@ function CommunicationPanel({ notifications = [], session, go }) {
       </div>
     </section>
   );
+}
+
+function notificationPriority(notification) {
+  const priority = notification.data?.priority;
+  return priority === "urgent" || priority === "important" ? priority : "";
+}
+
+function notificationBadgeLabel(notification) {
+  const priority = notificationPriority(notification);
+  if (priority === "urgent") return "緊急";
+  if (priority === "important") return "重要";
+  if (notification.type === "announcement") return "公告";
+  if (notification.type === "message") return "討論";
+  return "通知";
 }
 
 function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
@@ -1267,6 +1282,10 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
 
 function NotificationCenter({ notifications = [], circles = [], go, refresh, setToast }) {
   const circleNames = new Map(circles.map((circle) => [circle.id, circle.name]));
+  const [markingAll, setMarkingAll] = useState(false);
+  const unreadNotifications = notifications.filter((notification) => !notification.readAt);
+  const unreadCount = unreadNotifications.length;
+  const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
 
   async function openNotification(notification) {
     try {
@@ -1292,27 +1311,60 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
     }
   }
 
+  async function markAllRead() {
+    if (unreadCount === 0 || markingAll) return;
+    setMarkingAll(true);
+    try {
+      const data = await api("/api/notifications/read-all", { method: "PATCH" });
+      await refresh();
+      setToast(data.count > 0 ? "這些通知都先標成已讀了" : "目前沒有未讀通知");
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
   return (
     <>
       <Topbar title="通知中心" subtitle="圈內訊息與提醒" onBack={() => go("dashboard")} />
       <section className="section notification-list-section">
-        {notifications.length === 0 ? <p className="empty-note">目前沒有通知。</p> : null}
-        <div className="notification-list">
-          {notifications.map((notification) => (
-            <button
-              className={`notification-row ${notification.readAt ? "" : "unread"}`}
-              type="button"
-              key={notification.id}
-              onClick={() => openNotification(notification)}
-            >
-              <span className="notification-icon">{notification.readAt ? <Bell size={18} /> : <BellDot size={18} />}</span>
-              <span>
-                <strong>{notification.title}</strong>
-                <small>{circleNames.get(notification.circleId) ?? "圈內"} · {formatDateTime(notification.createdAt)}</small>
-                <em>{notification.body}</em>
-              </span>
+        <div className="notification-summary">
+          <div>
+            <strong>{unreadCount > 0 ? `還有 ${unreadCount} 則沒看` : "目前沒有未讀通知"}</strong>
+            <p>{priorityUnreadCount > 0 ? `其中 ${priorityUnreadCount} 則是重要或緊急提醒。` : "點開通知就能回到相關圈子、事項或討論串。"}</p>
+          </div>
+          {unreadCount > 0 ? (
+            <button className="secondary-button compact" type="button" onClick={markAllRead} disabled={markingAll}>
+              {markingAll ? <Loader2 className="spin" size={16} /> : <Check size={16} />}
+              全部已讀
             </button>
-          ))}
+          ) : null}
+        </div>
+        {notifications.length === 0 ? <p className="empty-note">目前沒有通知。有新的公告或討論時會出現在這裡。</p> : null}
+        <div className="notification-list">
+          {notifications.map((notification) => {
+            const priority = notificationPriority(notification);
+            const badgeLabel = notificationBadgeLabel(notification);
+            return (
+              <button
+                className={["notification-row", notification.readAt ? "read" : "unread", priority].filter(Boolean).join(" ")}
+                type="button"
+                key={notification.id}
+                onClick={() => openNotification(notification)}
+              >
+                <span className="notification-icon">{notification.readAt ? <Bell size={18} /> : <BellDot size={18} />}</span>
+                <span className="notification-main">
+                  <strong>{notification.title}</strong>
+                  <span className="notification-meta-line">
+                    <small>{circleNames.get(notification.circleId) ?? "圈內"} · {formatDateTime(notification.createdAt)}</small>
+                    <b className={`notification-badge ${priority || notification.type}`}>{badgeLabel}</b>
+                  </span>
+                  <em>{notification.body}</em>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
     </>

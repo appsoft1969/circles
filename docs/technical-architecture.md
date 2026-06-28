@@ -339,9 +339,10 @@ The Postgres store now supports:
 - `POST /api/messages/:messageId/read`
 - `POST /api/devices`
 - `GET /api/notifications`
+- `PATCH /api/notifications/read-all`
 - `PATCH /api/notifications/:notificationId/read`
 
-These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center and circle conversation screen on top of these APIs. SQLite returns `501` for these realtime/push routes.
+These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, bulk read action, and circle conversation screen on top of these APIs. SQLite returns `501` for these realtime/push routes.
 
 ## Local Commands
 

@@ -2383,7 +2383,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           announcementId,
           body.title || "事項公告",
           body.body.slice(0, 160),
-          json({ taskId: managedTask.id, conversationId }),
+          json({ taskId: managedTask.id, conversationId, priority }),
         ],
       );
 
@@ -2835,6 +2835,41 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return result.rows[0] ? notificationFromRow(result.rows[0]) : null;
   }
 
+  async function markAllNotificationsRead(actor = {}) {
+    const profile = await requireProfile(actor);
+    const result = await pool.query(
+      `
+        UPDATE notifications
+        SET read_at = COALESCE(read_at, now()),
+            status = CASE
+              WHEN status = 'queued' THEN 'read'::notification_status
+              ELSE status
+            END
+        WHERE recipient_profile_id::text = $1
+          AND read_at IS NULL
+          AND cancelled_at IS NULL
+        RETURNING
+          id::text,
+          recipient_profile_id::text,
+          actor_profile_id::text,
+          circle_id::text,
+          task_id::text,
+          announcement_id::text,
+          message_id::text,
+          type,
+          title,
+          body,
+          status::text,
+          data,
+          created_at,
+          read_at
+      `,
+      [profile.id],
+    );
+
+    return result.rows.map(notificationFromRow);
+  }
+
   return {
     backend: "postgres",
     connectionString: maskConnectionString(connectionString),
@@ -2876,6 +2911,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     registerDevice,
     listNotifications,
     markNotificationRead,
+    markAllNotificationsRead,
     buildTaskCsv,
     close: () => pool.end(),
   };

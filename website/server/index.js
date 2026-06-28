@@ -381,6 +381,11 @@ app.get("/api/notifications", route(async (req, res) => {
   res.json({ notifications });
 }));
 
+app.patch("/api/notifications/read-all", route(async (req, res) => {
+  const notifications = await store.markAllNotificationsRead(actorFromRequest(req));
+  res.json({ count: notifications.length, notifications });
+}));
+
 app.patch("/api/notifications/:notificationId/read", route(async (req, res) => {
   const notification = await store.markNotificationRead(req.params.notificationId, actorFromRequest(req));
   if (!notification) return res.status(404).json({ error: "Notification not found" });

@@ -458,6 +458,31 @@ a {
   gap: 10px;
 }
 
+.notification-summary {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+}
+
+.notification-summary strong {
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.notification-summary p {
+  margin: 5px 0 0;
+  color: #62646b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .notification-row,
 .conversation-row {
   width: 100%;
@@ -471,6 +496,48 @@ a {
 .notification-row.unread {
   border-color: #a7d9bd;
   box-shadow: inset 3px 0 0 #11965a;
+}
+
+.notification-row.important {
+  border-color: #e6b36f;
+  background: #fffaf2;
+}
+
+.notification-row.urgent {
+  border-color: #efa69f;
+  background: #fff5f3;
+}
+
+.notification-main {
+  min-width: 0;
+}
+
+.notification-meta-line {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 3px;
+}
+
+.notification-badge {
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #62646b;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.notification-badge.important {
+  background: #fff0dc;
+  color: #bd641d;
+}
+
+.notification-badge.urgent {
+  background: #ffe7e3;
+  color: #d6493b;
 }
 
 .notification-row em {

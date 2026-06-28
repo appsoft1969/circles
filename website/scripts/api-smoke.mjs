@@ -420,6 +420,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.ok(announcementNotification, `${label}: expected invited member notification for announcement`);
       assert.equal(announcementNotification.taskId, createdTaskId);
       assert.ok(announcementNotification.data.conversationId, `${label}: expected announcement notification conversationId`);
+      assert.equal(announcementNotification.data.priority, "important");
       assert.equal(announcementNotification.readAt, null);
 
       const announcementConversations = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations?taskId=${createdTaskId}`, {
@@ -515,6 +516,20 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         });
         assert.equal(readNotification.body.notification.id, memberNotification.id);
         assert.ok(readNotification.body.notification.readAt, `${label}: expected notification read timestamp`);
+
+        const readAllNotifications = await request(baseUrl, "/api/notifications/read-all", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+          body: JSON.stringify({}),
+        });
+        assert.equal(readAllNotifications.status, 200);
+        assert.ok(readAllNotifications.body.count >= 1, `${label}: expected bulk notification read count`);
+        assert.ok(
+          readAllNotifications.body.notifications.some(
+            (notification) => notification.announcementId === announced.body.task.announcements[0].id && notification.readAt,
+          ),
+          `${label}: expected announcement notification to be marked read in bulk`,
+        );
       }
 
       const messages = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
