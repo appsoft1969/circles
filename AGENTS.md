@@ -290,6 +290,9 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Clear status labels.
   - Fast participant submission.
   - Organizer management table/list.
+- Use progressive disclosure for forms and task setup. Show only required or immediately clarifying fields first; hide advanced options, optional details, and later-stage controls until the user reaches the right step or explicitly chooses to expand them.
+- Prefer guided input over dense all-at-once forms. Reduce perceived complexity by asking for the next practical decision instead of showing every possible field, status, and option on one screen.
+- Do not crowd mobile screens with fields just because the backend supports them. If a value is not needed to understand or complete the current step, defer it.
 - Avoid social-app patterns:
   - Infinite feed.
   - Public profile browsing.
