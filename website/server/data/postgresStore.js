@@ -186,6 +186,16 @@ function membershipFromRow(row) {
   };
 }
 
+function circleFromRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    inviteCode: row.invite_code,
+    memberCount: Number(row.member_count || 0),
+  };
+}
+
 function inviteFromRow(row) {
   return {
     id: row.id,
@@ -821,6 +831,19 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return cleaned;
   }
 
+  function normalizeCircleName(name) {
+    const value = String(name || "").trim();
+    if (!value) throw new StoreError(400, "Circle name is required");
+    if (value.length > 40) throw new StoreError(400, "Circle name must be 40 characters or less");
+    return value;
+  }
+
+  function normalizeCircleDescription(description = "") {
+    const value = String(description || "").trim();
+    if (value.length > 160) throw new StoreError(400, "Circle description must be 160 characters or less");
+    return value;
+  }
+
   function normalizeInviteRole(role = "member") {
     const value = String(role || "member").trim();
     if (!inviteRoles.has(value)) {
@@ -902,6 +925,65 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       throw new StoreError(409, "Invite link has reached its usage limit");
     }
     if (!row.available) throw new StoreError(404, "Invite link is not available");
+  }
+
+  async function createCircle(body = {}) {
+    return withTransaction(async (client) => {
+      const profile = await requireProfile(body.actor, client);
+      const name = normalizeCircleName(body.name);
+      const description = normalizeCircleDescription(body.description);
+      const metadata = body.metadata && typeof body.metadata === "object" ? body.metadata : {};
+      const ownerDisplayName = profile.displayName || profile.email || "圈主";
+
+      const result = await client.query(
+        `
+          WITH inserted_circle AS (
+            INSERT INTO circles (
+              owner_profile_id,
+              name,
+              description,
+              visibility,
+              metadata
+            )
+            VALUES ($1, $2, $3, 'private', $4::jsonb)
+            RETURNING *
+          ),
+          inserted_membership AS (
+            INSERT INTO circle_memberships (
+              circle_id,
+              profile_id,
+              display_name,
+              contact_hint,
+              role,
+              status,
+              invited_by_profile_id,
+              joined_at
+            )
+            SELECT
+              id,
+              $1,
+              $5,
+              '圈主',
+              'owner',
+              'active',
+              $1,
+              now()
+            FROM inserted_circle
+            RETURNING id
+          )
+          SELECT
+            c.id::text,
+            c.name,
+            c.description,
+            c.invite_code,
+            1::int AS member_count
+          FROM inserted_circle c
+        `,
+        [profile.id, name, description, json({ ...metadata, createdFrom: metadata.createdFrom ?? "web" }), ownerDisplayName],
+      );
+
+      return circleFromRow(result.rows[0]);
+    });
   }
 
   async function getSessionContext(actor = {}) {
@@ -1502,13 +1584,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     ]);
 
     return {
-      circles: circlesResult.rows.map((circle) => ({
-        id: circle.id,
-        name: circle.name,
-        description: circle.description,
-        inviteCode: circle.invite_code,
-        memberCount: circle.member_count,
-      })),
+      circles: circlesResult.rows.map(circleFromRow),
       tasks,
       templates: templatesResult.rows.map((template) => ({
         id: template.id,
@@ -2680,6 +2756,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     connectionString: maskConnectionString(connectionString),
     health,
     getSessionContext,
+    createCircle,
     listCircleMembers,
     getCircleInvite,
     listCircleInvites,

@@ -346,6 +346,15 @@ a {
   line-height: 1.45;
 }
 
+.membership-empty-card .secondary-button {
+  margin-top: 10px;
+}
+
+.membership-create-button {
+  justify-self: start;
+  margin-top: 12px;
+}
+
 .auth-note {
   margin: 10px 0 0;
   color: #74767c;

@@ -283,6 +283,15 @@ function App() {
         selectedTemplate={route.selectedTemplate}
       />
     ),
+    createCircle: (
+      <CircleCreator
+        session={state.session}
+        providers={state.authProviders}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
     manage: selectedTask ? (
       <TaskManage
         task={selectedTask}
@@ -516,12 +525,22 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
         ) : (
           <div className="membership-empty-card">
             <UserPlus size={20} />
-            <span>
+            <div>
               <strong>你還沒有加入圈子</strong>
               <small>收到圈主分享的邀請連結後，打開連結就能加入。還沒有連結的話，請圈主在成員頁建立邀請給你。</small>
-            </span>
+              <button className="secondary-button compact" type="button" onClick={() => go("createCircle")}>
+                <Plus size={16} />
+                建立自己的圈子
+              </button>
+            </div>
           </div>
         )}
+        {memberships.length > 0 ? (
+          <button className="secondary-button compact membership-create-button" type="button" onClick={() => go("createCircle")}>
+            <Plus size={16} />
+            建立新圈子
+          </button>
+        ) : null}
       </section>
     );
   }
@@ -551,6 +570,92 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
         ))}
       </div>
     </section>
+  );
+}
+
+function CircleCreator({ session, providers, go, refresh, setToast }) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function createCircle() {
+    if (saving) return;
+    if (!name.trim()) {
+      setToast("先幫圈子取個名稱");
+      return;
+    }
+    setSaving(true);
+    try {
+      const data = await api("/api/circles", {
+        method: "POST",
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim(),
+        }),
+      });
+      await refresh();
+      setToast(`已建立「${data.circle.name}」`);
+      go("members", { circleId: data.circle.id });
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!session?.authenticated) {
+    return (
+      <>
+        <Topbar title="建立圈子" subtitle="先登入" onBack={() => go("dashboard")} />
+        <section className="join-hero">
+          <h1>先確認你是誰，再建立圈子</h1>
+          <p>圈子建立後，你會成為圈主，可以再分享邀請連結給熟人加入。</p>
+        </section>
+        <AuthPanel session={session} providers={providers} go={go} refresh={refresh} setToast={setToast} />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Topbar title="建立圈子" subtitle="先開一個熟人圈" onBack={() => go("dashboard")} />
+      <section className="section wizard-overview">
+        <p>先建立一個熟人圈，再邀請成員進來。之後訂飲料、揪活動、統計付款，都可以放在這個圈子裡。</p>
+      </section>
+      <section className="section wizard-section form-section">
+        <div className="wizard-step-head">
+          <span className="step-pill">1/1</span>
+          <div>
+            <h2>這個圈子叫什麼？</h2>
+            <p>先取一個大家一看就知道的名字，說明可以之後再補。</p>
+          </div>
+        </div>
+        <label>
+          圈子名稱
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={40}
+            placeholder="例如：辦公室午餐圈"
+          />
+        </label>
+        <label>
+          簡單說明
+          <textarea
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={160}
+            placeholder="例如：公司中午訂餐、飲料、下午茶"
+          />
+        </label>
+      </section>
+      <div className="sticky-actions">
+        <button className="primary-button green" type="button" onClick={createCircle} disabled={saving || !name.trim()}>
+          {saving ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+          好了，建立圈子
+        </button>
+      </div>
+    </>
   );
 }
 

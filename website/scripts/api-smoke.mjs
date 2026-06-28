@@ -188,6 +188,31 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(anonymousTaskRead.status, 401, `${label}: anonymous direct task read should require login`);
     }
 
+    const createdCircle = await request(baseUrl, "/api/circles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
+      body: JSON.stringify({
+        name: `${label} API smoke 圈子 ${Date.now()}`,
+        description: "自動測試建立圈子與圈主權限。",
+      }),
+    });
+    assert.equal(createdCircle.status, 201);
+    assert.equal(createdCircle.body.circle.memberCount, 1);
+
+    const postCircleSession = await request(baseUrl, "/api/session", { headers: sessionHeaders });
+    assert.ok(
+      postCircleSession.body.memberships.some(
+        (membership) => membership.circleId === createdCircle.body.circle.id && membership.role === "owner",
+      ),
+      `${label}: expected created circle owner membership`,
+    );
+
+    const postCircleBootstrap = await request(baseUrl, "/api/bootstrap", { headers: sessionHeaders });
+    assert.ok(
+      postCircleBootstrap.body.circles.some((circle) => circle.id === createdCircle.body.circle.id),
+      `${label}: expected created circle in bootstrap`,
+    );
+
     const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });
     assert.ok(members.body.members.length >= 1, `${label}: expected circle members`);
     assert.ok(

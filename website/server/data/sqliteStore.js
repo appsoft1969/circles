@@ -161,6 +161,10 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     db.prepare(`INSERT INTO ${table} (${columns}) VALUES (${placeholders})`).run(data);
   }
 
+  function circleMemberCount(circleId) {
+    return 1 + db.prepare("SELECT COUNT(*) AS count FROM circle_members WHERE circle_id = ?").get(circleId).count;
+  }
+
   function seed() {
     if (countRows("users") > 0) return;
 
@@ -645,7 +649,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
         name: circle.name,
         description: circle.description,
         inviteCode: circle.invite_code,
-        memberCount: db.prepare("SELECT COUNT(*) AS count FROM circle_members WHERE circle_id = ?").get(circle.id).count,
+        memberCount: circleMemberCount(circle.id),
       })),
       tasks: listTasks(),
       templates: Object.entries(templateLabels).map(([templateId, label]) => ({ id: templateId, label })),
@@ -1014,6 +1018,19 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     return user;
   }
 
+  function normalizeCircleName(name) {
+    const value = String(name || "").trim();
+    if (!value) throw new StoreError(400, "Circle name is required");
+    if (value.length > 40) throw new StoreError(400, "Circle name must be 40 characters or less");
+    return value;
+  }
+
+  function normalizeCircleDescription(description = "") {
+    const value = String(description || "").trim();
+    if (value.length > 160) throw new StoreError(400, "Circle description must be 160 characters or less");
+    return value;
+  }
+
   function ownerMembershipFromCircle(circle, user) {
     return {
       id: `${circle.id}_${user.id}_owner`,
@@ -1025,6 +1042,16 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
       role: "owner",
       status: "active",
       joinedAt: circle.created_at,
+    };
+  }
+
+  function circleFromRow(circle) {
+    return {
+      id: circle.id,
+      name: circle.name,
+      description: circle.description,
+      inviteCode: circle.invite_code,
+      memberCount: circleMemberCount(circle.id),
     };
   }
 
@@ -1040,6 +1067,21 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
       status: "active",
       joinedAt: row.created_at,
     };
+  }
+
+  function createCircle(body = {}) {
+    const user = requireUser(body.actor);
+    const circleId = id("circle");
+    const createdAt = now();
+    insert("circles", {
+      id: circleId,
+      owner_user_id: user.id,
+      name: normalizeCircleName(body.name),
+      description: normalizeCircleDescription(body.description),
+      invite_code: shareToken(),
+      created_at: createdAt,
+    });
+    return circleFromRow(db.prepare("SELECT * FROM circles WHERE id = ?").get(circleId));
   }
 
   function getSessionContext(actor = {}) {
@@ -1131,6 +1173,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     dbPath,
     health: () => ({ ok: true, backend: "sqlite", dbPath }),
     getSessionContext,
+    createCircle,
     listCircleMembers,
     getCircleInvite: postgresOnlyCircleInvites,
     listCircleInvites: postgresOnlyCircleInvites,

@@ -190,6 +190,14 @@ app.post("/api/circle-invites/:code/join", route(async (req, res) => {
   res.status(result.joined ? 201 : 200).json(result);
 }));
 
+app.post("/api/circles", route(async (req, res) => {
+  const circle = await store.createCircle({
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ circle });
+}));
+
 app.get("/api/circles/:circleId/members", route(async (req, res) => {
   const members = await store.listCircleMembers(req.params.circleId, actorFromRequest(req));
   res.json({ members });
