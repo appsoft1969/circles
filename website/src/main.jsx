@@ -1141,6 +1141,11 @@ function MemberInvitationCard({ invitation, onRespond, busyId = "" }) {
 
 function CircleOverviewCard({ circle, go }) {
   const hasAttention = circle.unreadCount > 0 || circle.unpaid > 0 || circle.priorityUnreadCount > 0;
+  const metaText = [
+    membershipRoleLabels[circle.role] ?? circle.role,
+    circle.memberCount !== null ? `${circle.memberCount} 人` : null,
+    `${circle.taskCount} 件事項`,
+  ].filter(Boolean).join(" · ");
   const statusText = circle.priorityUnreadCount > 0
     ? `${circle.priorityUnreadCount} 則重要提醒`
     : circle.unreadCount > 0
@@ -1151,19 +1156,17 @@ function CircleOverviewCard({ circle, go }) {
           ? `${circle.activeCount} 件進行中`
           : "目前安靜";
   return (
-    <button className={`circle-overview-card ${hasAttention ? "has-attention" : ""}`} type="button" onClick={() => go("circleHome", { circleId: circle.id })}>
+    <button className="circle-overview-card" type="button" onClick={() => go("circleHome", { circleId: circle.id })}>
       <span className="circle-overview-icon"><Users size={20} /></span>
       <span className="circle-overview-main">
-        <strong>{circle.name}</strong>
-        <small>{circle.description || (circle.recentTask ? `最近：${circle.recentTask.title}` : "點進去看事項、討論與成員")}</small>
-        <span className="circle-overview-meta">
-          <em>{membershipRoleLabels[circle.role] ?? circle.role}</em>
-          {circle.memberCount !== null ? <em>{circle.memberCount} 人</em> : null}
-          <em>{circle.taskCount} 件事項</em>
+        <span className="circle-overview-title-row">
+          <strong>{circle.name}</strong>
+          <span className={`circle-overview-status ${hasAttention ? "alert" : ""}`}>
+            {statusText}
+          </span>
         </span>
-      </span>
-      <span className={`circle-overview-status ${hasAttention ? "alert" : ""}`}>
-        {statusText}
+        <small>{circle.description || (circle.recentTask ? `最近：${circle.recentTask.title}` : "點進去看事項、討論與成員")}</small>
+        <span className="circle-card-meta">{metaText}</span>
       </span>
     </button>
   );

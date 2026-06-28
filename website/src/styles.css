@@ -569,13 +569,31 @@ a {
   padding: 13px;
 }
 
-.circle-overview-card.has-attention {
-  border-color: #b9c9f6;
-  box-shadow: inset 4px 0 0 #2e62d4;
-}
-
 .circle-overview-main {
   min-width: 0;
+}
+
+.circle-overview-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.circle-overview-title-row strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.circle-card-meta {
+  display: block;
+  margin-top: 8px;
+  color: #85878d;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .circle-overview-meta {
@@ -597,8 +615,7 @@ a {
 }
 
 .circle-overview-status {
-  grid-column: 2;
-  justify-self: start;
+  justify-self: end;
   border-radius: 999px;
   background: #eef1f6;
   color: #596276;
@@ -606,6 +623,7 @@ a {
   line-height: 1.2;
   font-weight: 900;
   padding: 5px 8px;
+  white-space: nowrap;
 }
 
 .circle-overview-status.alert {
