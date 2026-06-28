@@ -303,6 +303,11 @@ function App() {
     };
   }, [state.session?.authenticated, state.session?.profile?.id]);
 
+  useEffect(() => {
+    const unreadCount = state.notifications.filter((notification) => !notification.readAt).length;
+    document.title = unreadCount > 0 ? `(${unreadCount > 99 ? "99+" : unreadCount}) 圈內 InCircle` : "圈內 InCircle";
+  }, [state.notifications]);
+
   const selectedTask = useMemo(() => {
     if (route.taskId) return state.tasks.find((task) => task.id === route.taskId);
     return state.tasks[0];
