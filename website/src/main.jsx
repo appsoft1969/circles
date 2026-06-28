@@ -2632,6 +2632,8 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
   const [circlePreferences, setCirclePreferences] = useState(null);
   const [loadingCirclePreferences, setLoadingCirclePreferences] = useState(false);
   const [savingCirclePreferences, setSavingCirclePreferences] = useState(false);
+  const [circlePreferenceNotice, setCirclePreferenceNotice] = useState("");
+  const [circlePreferenceBusyText, setCirclePreferenceBusyText] = useState("");
   const [error, setError] = useState("");
 
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
@@ -2764,10 +2766,35 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
     }
   }
 
+  function circlePreferenceNoticeFor(patch, nextPreferences) {
+    if (Object.prototype.hasOwnProperty.call(patch, "inAppEnabled")) {
+      return patch.inAppEnabled ? "這個圈子的提醒已打開" : "這個圈子的提醒已關閉";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "importantOnly")) {
+      return patch.importantOnly ? "這個圈子之後只收重要提醒" : "這個圈子的一般提醒也會出現";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "announcementEnabled")) {
+      return patch.announcementEnabled ? "這個圈子的公告會提醒你" : "這個圈子的公告先不提醒你";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "messageEnabled")) {
+      return patch.messageEnabled ? "這個圈子的討論會提醒你" : "這個圈子的討論先不提醒你";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "mutedUntil")) {
+      return patch.mutedUntil ? `已暫停提醒到 ${formatDateTime(nextPreferences.mutedUntil)}` : "已解除這個圈子的靜音";
+    }
+    return "這個圈子的提醒已更新";
+  }
+
+  function circlePreferencePendingTextFor(patch) {
+    if (Object.prototype.hasOwnProperty.call(patch, "mutedUntil")) return "正在更新靜音設定...";
+    return "正在更新這個圈子的提醒...";
+  }
+
   async function updateCirclePreferences(patch) {
     if (!circlePreferences || savingCirclePreferences) return;
     const previous = circlePreferences;
     setCirclePreferences({ ...circlePreferences, ...patch });
+    setCirclePreferenceBusyText(circlePreferencePendingTextFor(patch));
     setSavingCirclePreferences(true);
     try {
       const data = await api(`/api/circles/${circleId}/notification-preferences`, {
@@ -2775,12 +2802,15 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
         body: JSON.stringify(patch),
       });
       setCirclePreferences(data.preferences);
-      setToast("這個圈子的提醒已更新");
+      const message = circlePreferenceNoticeFor(patch, data.preferences);
+      setCirclePreferenceNotice(message);
+      setToast(message);
     } catch (saveError) {
       setCirclePreferences(previous);
       setToast(saveError.message);
     } finally {
       setSavingCirclePreferences(false);
+      setCirclePreferenceBusyText("");
     }
   }
 
@@ -2804,6 +2834,12 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
               </small>
             </div>
           </div>
+          {savingCirclePreferences || circlePreferenceNotice ? (
+            <div className={`circle-preference-feedback ${savingCirclePreferences ? "saving" : ""}`} role="status">
+              {savingCirclePreferences ? <Loader2 className="spin" size={17} /> : <Check size={17} />}
+              <span>{savingCirclePreferences ? circlePreferenceBusyText || "正在更新這個圈子的提醒..." : circlePreferenceNotice}</span>
+            </div>
+          ) : null}
           {loadingCirclePreferences ? <p className="empty-note">我正在讀這個圈子的提醒設定...</p> : null}
           {circlePreferences ? (
             <div className="circle-notification-controls">

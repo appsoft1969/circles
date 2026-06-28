@@ -1164,6 +1164,28 @@ a {
   line-height: 1.45;
 }
 
+.circle-preference-feedback {
+  border: 1px solid #b8dabe;
+  border-radius: 8px;
+  background: #eef9f2;
+  color: #0f7d4c;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
+.circle-preference-feedback.saving {
+  border-color: #d6d6d1;
+  background: #f5f5f3;
+  color: #62646b;
+}
+
 .circle-notification-controls {
   display: grid;
   gap: 10px;
