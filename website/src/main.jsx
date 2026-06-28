@@ -483,6 +483,14 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
   const memberships = session?.memberships ?? [];
   const visibleMemberships = memberships.slice(0, 3);
   const extraMemberships = Math.max(0, memberships.length - visibleMemberships.length);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileNameDraft, setProfileNameDraft] = useState(session?.profile?.displayName || "");
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  useEffect(() => {
+    setProfileNameDraft(session?.profile?.displayName || "");
+    setEditingProfile(false);
+  }, [session?.profile?.displayName]);
 
   async function logout() {
     try {
@@ -491,6 +499,28 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
       setToast("已登出");
     } catch (error) {
       setToast(error.message);
+    }
+  }
+
+  async function saveProfile() {
+    if (savingProfile) return;
+    if (!profileNameDraft.trim()) {
+      setToast("先填你想顯示的名字");
+      return;
+    }
+    setSavingProfile(true);
+    try {
+      const data = await api("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ displayName: profileNameDraft.trim() }),
+      });
+      await refresh();
+      setEditingProfile(false);
+      setToast(`已更新為「${data.profile.displayName}」`);
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setSavingProfile(false);
     }
   }
 
@@ -507,6 +537,30 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
             <LogOut size={19} />
           </button>
         </div>
+        <button className="editor-panel-toggle profile-edit-toggle" type="button" onClick={() => setEditingProfile((current) => !current)}>
+          <span>
+            <strong>{editingProfile ? "收起個人名稱" : "調整顯示名稱"}</strong>
+            <small>填單時會先帶入這個名字；Email 只做登入識別。</small>
+          </span>
+          <ChevronRight className={editingProfile ? "open" : ""} size={18} />
+        </button>
+        {editingProfile ? (
+          <div className="editor-panel-content profile-edit-panel">
+            <label>
+              顯示名稱
+              <input
+                value={profileNameDraft}
+                onChange={(event) => setProfileNameDraft(event.target.value)}
+                maxLength={40}
+                placeholder="例如：Kevin"
+              />
+            </label>
+            <button className="primary-button green compact" type="button" onClick={saveProfile} disabled={savingProfile || !profileNameDraft.trim()}>
+              {savingProfile ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+              好了，儲存名稱
+            </button>
+          </div>
+        ) : null}
         {memberships.length > 0 ? (
           <div className="membership-chip-list" aria-label="已加入的圈子">
             {visibleMemberships.map((membership) => (

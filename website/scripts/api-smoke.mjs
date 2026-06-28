@@ -188,6 +188,17 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(anonymousTaskRead.status, 401, `${label}: anonymous direct task read should require login`);
     }
 
+    if (label === "sqlite") {
+      const updatedProfile = await request(baseUrl, "/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({ displayName: "SQLite Smoke Kevin" }),
+      });
+      assert.equal(updatedProfile.body.profile.displayName, "SQLite Smoke Kevin");
+      const updatedSession = await request(baseUrl, "/api/session", { headers: sessionHeaders });
+      assert.equal(updatedSession.body.profile.displayName, "SQLite Smoke Kevin");
+    }
+
     const createdCircle = await request(baseUrl, "/api/circles", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...sessionHeaders },
@@ -273,6 +284,13 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.ok(joinerCookie, `${label}: expected invite joiner Set-Cookie`);
       const joinerHeaders = { Cookie: joinerCookie };
       invitedMemberHeaders = joinerHeaders;
+
+      const updatedInviteProfile = await request(baseUrl, "/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...joinerHeaders },
+        body: JSON.stringify({ displayName: "邀請測試成員個人名稱" }),
+      });
+      assert.equal(updatedInviteProfile.body.profile.displayName, "邀請測試成員個人名稱");
 
       const accepted = await request(baseUrl, `/api/circle-invites/${invite.body.invite.code}/join`, {
         method: "POST",

@@ -277,6 +277,25 @@ a {
   color: #11965a;
 }
 
+.profile-edit-toggle {
+  margin-top: 12px;
+}
+
+.profile-edit-panel {
+  margin-top: 12px;
+}
+
+.profile-edit-panel label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.profile-edit-panel .primary-button {
+  justify-self: start;
+}
+
 .membership-chip-list {
   display: flex;
   flex-wrap: wrap;

@@ -123,6 +123,14 @@ app.get("/api/session", route(async (req, res) => {
   res.json(await store.getSessionContext(actorFromRequest(req)));
 }));
 
+app.patch("/api/profile", route(async (req, res) => {
+  const profile = await store.updateProfile({
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json({ profile });
+}));
+
 app.get("/api/auth/providers", route(async (_req, res) => {
   res.json({ providers: supportedAuthProviders(process.env) });
 }));

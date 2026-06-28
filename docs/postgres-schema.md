@@ -30,7 +30,7 @@ Postgres should be designed now because it affects:
 
 The public Mac-hosted Express API now uses Postgres for early development and private beta checks. This is still a local-hosted public path, not the final production architecture.
 
-`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, organizer status updates, task announcements, comments, CSV validation, cookie-session/profile-header session context, membership checks, task permissions, circle invites, member management, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
+`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, organizer status updates, task announcements, comments, CSV validation, cookie-session/profile-header session context, membership checks, task permissions, circle invites, member management, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
 
 ## Schema Groups
 
@@ -195,6 +195,7 @@ The initial migration has been verified locally with:
 - Re-runnable seed behavior.
 - Postgres API task reads through member-scoped `GET /api/bootstrap`, member-scoped `GET /api/tasks/:taskId`, and public `GET /api/share/:token`.
 - Postgres API session/membership support through `GET /api/session`, `GET /api/circles/:circleId/members`, and `GET /api/tasks/:taskId/permissions`.
+- Postgres API profile display-name settings through `PATCH /api/profile`, requiring authentication and leaving provider email/identity fields unchanged.
 - Postgres API circle creation/settings through `POST /api/circles` and `PATCH /api/circles/:circleId`, requiring authentication and restricting settings updates to active `owner` membership.
 - Postgres API task creation through `POST /api/tasks`, requiring authenticated `owner` / `admin` circle membership.
 - Postgres API task edits through `PATCH /api/tasks/:taskId`, requiring the task creator or active circle `owner` / `admin`.

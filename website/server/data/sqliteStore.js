@@ -1031,6 +1031,13 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     return value;
   }
 
+  function normalizeProfileDisplayName(value) {
+    const clean = String(value || "").trim();
+    if (!clean) throw new StoreError(400, "Profile display name is required");
+    if (clean.length > 40) throw new StoreError(400, "Profile display name must be 40 characters or less");
+    return clean;
+  }
+
   function ownerMembershipFromCircle(circle, user) {
     return {
       id: `${circle.id}_${user.id}_owner`,
@@ -1129,6 +1136,12 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     };
   }
 
+  function updateProfile(body = {}) {
+    const user = requireUser(body.actor);
+    db.prepare("UPDATE users SET display_name = ? WHERE id = ?").run(normalizeProfileDisplayName(body.displayName), user.id);
+    return profileFromUser(db.prepare("SELECT * FROM users WHERE id = ?").get(user.id));
+  }
+
   function listCircleMembers(circleId, actor = {}) {
     const user = requireUser(actor);
     const circle = db.prepare("SELECT * FROM circles WHERE id = ?").get(circleId);
@@ -1187,6 +1200,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     dbPath,
     health: () => ({ ok: true, backend: "sqlite", dbPath }),
     getSessionContext,
+    updateProfile,
     createCircle,
     updateCircle,
     listCircleMembers,

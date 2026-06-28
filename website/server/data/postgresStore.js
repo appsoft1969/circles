@@ -844,6 +844,13 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return value;
   }
 
+  function normalizeProfileDisplayName(value) {
+    const clean = String(value || "").trim();
+    if (!clean) throw new StoreError(400, "Profile display name is required");
+    if (clean.length > 40) throw new StoreError(400, "Profile display name must be 40 characters or less");
+    return clean;
+  }
+
   function normalizeInviteRole(role = "member") {
     const value = String(role || "member").trim();
     if (!inviteRoles.has(value)) {
@@ -1084,6 +1091,32 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         pushDevices: true,
       },
     };
+  }
+
+  async function updateProfile(body = {}) {
+    const profile = await requireProfile(body.actor);
+    const displayName = normalizeProfileDisplayName(body.displayName);
+    const result = await pool.query(
+      `
+        UPDATE profiles
+        SET display_name = $2
+        WHERE id::text = $1
+          AND deleted_at IS NULL
+          AND status = 'active'
+        RETURNING
+          id::text,
+          display_name,
+          email,
+          phone,
+          avatar_url,
+          locale,
+          timezone,
+          status::text
+      `,
+      [profile.id, displayName],
+    );
+    if (!result.rows[0]) throw new StoreError(404, "Profile not found");
+    return profileFromRow(result.rows[0]);
   }
 
   async function listCircleMembers(circleId, actor = {}) {
@@ -2807,6 +2840,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     connectionString: maskConnectionString(connectionString),
     health,
     getSessionContext,
+    updateProfile,
     createCircle,
     updateCircle,
     listCircleMembers,

@@ -175,7 +175,7 @@ The API uses `website/server/data/storeFactory.js`.
 Supported `DATA_STORE` values:
 
 - `sqlite`: default working MVP runtime.
-- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, circle creation/settings, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, CSV export, membership/permission APIs, and Postgres-backed conversation/message/push-device scaffolding. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
+- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, profile display-name settings, circle creation/settings, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, CSV export, membership/permission APIs, and Postgres-backed conversation/message/push-device scaffolding. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
 - Task announcements and task comments are part of the core task object in both stores. Postgres also exposes the first conversation/message/read/notification/device APIs, still tied to circles and tasks.
 
 SQLite environment variables:
@@ -191,6 +191,7 @@ Current Postgres store status:
 - `GET /api/health`: implemented.
 - `GET /api/bootstrap`: implemented for task templates plus member-scoped circles, tasks, options, responses, and stats. Anonymous Postgres calls return no circles or tasks.
 - `GET /api/session`: implemented for cookie sessions plus temporary profile-header development scaffolding.
+- `PATCH /api/profile`: implemented for authenticated profile display-name settings. Provider email and identity fields stay read-only in this MVP.
 - `GET /api/auth/providers`: implemented for Apple, Google, and LINE provider state.
 - `GET /api/auth/:provider/start`: implemented for configured OAuth/OIDC providers.
 - `GET|POST /api/auth/:provider/callback`: implemented for provider callbacks and cookie session creation.
@@ -231,6 +232,10 @@ Do not treat `DATA_STORE=postgres` as fully production-ready until auth, RLS/acc
 ### `GET /api/session`
 
 Returns the current cookie session or temporary development profile context and circle memberships. Anonymous calls return `authenticated: false`.
+
+### `PATCH /api/profile`
+
+Updates the authenticated profile display name only. This name is used as the default friendly name in member flows; OAuth provider email and provider identity IDs are not changed here.
 
 ### Auth Routes
 
