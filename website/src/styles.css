@@ -2543,6 +2543,59 @@ a {
   line-height: 1.55;
 }
 
+.task-created-success {
+  border-bottom: 1px solid #dededb;
+}
+
+.success-action-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.success-action-card {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 74px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 13px;
+  color: #2b2c31;
+  text-align: left;
+  cursor: pointer;
+}
+
+.success-action-card.primary {
+  border-color: #a8beff;
+  background: #f2f6ff;
+  color: #1e55c7;
+}
+
+.success-action-card strong,
+.success-action-card small {
+  display: block;
+}
+
+.success-action-card strong {
+  color: inherit;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.success-action-card small {
+  margin-top: 3px;
+  color: #74767c;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.success-action-card.primary small {
+  color: #526ca8;
+}
+
 .option-list {
   display: grid;
   gap: 10px;

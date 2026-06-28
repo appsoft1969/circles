@@ -528,6 +528,7 @@ function App() {
         go={go}
         refresh={refresh}
         setToast={setToast}
+        updateTask={updateTask}
         selectedTemplate={route.selectedTemplate}
       />
     ),
@@ -2892,7 +2893,7 @@ function TaskRow({ task, onOpen, onShare }) {
   );
 }
 
-function TemplatePicker({ circles, session, go, refresh, setToast, selectedTemplate = "" }) {
+function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, selectedTemplate = "" }) {
   const manageableCircleIds = new Set(
     (session?.memberships ?? [])
       .filter((membership) => ["owner", "admin"].includes(membership.role))
@@ -2903,15 +2904,18 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
   const [template, setTemplate] = useState(selectedTemplate);
   const [circleId, setCircleId] = useState(initialCircle?.id ?? "");
   const [step, setStep] = useState(selectedTemplate ? "circle" : "template");
+  const [createdTask, setCreatedTask] = useState(null);
+  const [creating, setCreating] = useState(false);
   const meta = template ? templateMeta[template] : null;
   const selectedCircle = manageableCircles.find((circle) => circle.id === circleId) ?? null;
   const hasManageableCircles = manageableCircles.length > 0;
-  const activeStepIndex = Math.max(0, createTaskSteps.findIndex((item) => item.id === step));
+  const activeStepIndex = step === "done" ? createTaskSteps.length : Math.max(0, createTaskSteps.findIndex((item) => item.id === step));
   const templateIsSelected = Boolean(meta) && step !== "template";
   const circleIsSelected = Boolean(selectedCircle) && step === "confirm";
 
   function chooseTemplate(nextTemplate) {
     const nextDefaultCircle = getDefaultCircleForTemplate(manageableCircles, nextTemplate);
+    setCreatedTask(null);
     setTemplate(nextTemplate);
     setCircleId((current) => {
       if (current && manageableCircles.some((circle) => circle.id === current)) return current;
@@ -2921,6 +2925,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
   }
 
   async function createTask() {
+    if (creating) return;
     if (!template || !meta) {
       setToast("請先選擇要建立的事項類型");
       return;
@@ -2930,22 +2935,32 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
       return;
     }
     const defaults = getTemplateDefaults(template);
+    setCreating(true);
     try {
       const data = await api("/api/tasks", {
         method: "POST",
         body: JSON.stringify({ ...defaults, circleId, template }),
       });
+      await updateTask?.(data.task);
       await refresh();
+      setCreatedTask(data.task);
+      setStep("done");
       setToast(`已建立${meta.label}`);
-      go("manage", { taskId: data.task.id });
     } catch (error) {
       setToast(error.message);
+    } finally {
+      setCreating(false);
     }
+  }
+
+  async function shareCreatedTask() {
+    if (!createdTask) return;
+    await shareTaskLink(createdTask, setToast);
   }
 
   return (
     <>
-      <Topbar title="建立事項" subtitle={step === "template" ? "先選要處理的事" : meta?.label} onBack={() => go("dashboard")} />
+      <Topbar title="建立事項" subtitle={step === "done" ? "已建立" : step === "template" ? "先選要處理的事" : meta?.label} onBack={() => go("dashboard")} />
       <section className="section wizard-overview">
         <p>一步一步來，不用一次填完。先選情境，圈內先幫你放入基本內容，細節之後再補。</p>
         <ol className="wizard-progress" aria-label="建立事項進度">
@@ -2957,6 +2972,60 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
           ))}
         </ol>
       </section>
+      {createdTask ? (
+        <>
+          <section className="join-success task-created-success">
+            <span className="join-success-icon"><Check size={26} /></span>
+            <h1>已建立「{createdTask.title}」</h1>
+            <p>接下來通常會先分享填單連結，讓圈內成員填寫；也可以先進管理頁補截止時間、付款或公告。</p>
+          </section>
+          <section className="section wizard-section">
+            <div className="wizard-step-head">
+              <span className="step-pill">下一步</span>
+              <div>
+                <h2>你現在想先做哪一件？</h2>
+                <p>不用自己找功能，照最常用的順序放在這裡。</p>
+              </div>
+            </div>
+            <div className="success-action-grid">
+              <button className="success-action-card primary" type="button" onClick={shareCreatedTask}>
+                <Share2 size={20} />
+                <span>
+                  <strong>分享填單連結</strong>
+                  <small>先複製連結，再開啟手機分享面板</small>
+                </span>
+              </button>
+              <button className="success-action-card" type="button" onClick={() => go("manage", { taskId: createdTask.id })}>
+                <ReceiptText size={20} />
+                <span>
+                  <strong>查看統計與名單</strong>
+                  <small>進管理頁補細節、看回覆</small>
+                </span>
+              </button>
+              <button className="success-action-card" type="button" onClick={() => go("join", { taskId: createdTask.id })}>
+                <ExternalLink size={20} />
+                <span>
+                  <strong>預覽成員填單</strong>
+                  <small>自己先看成員會看到什麼</small>
+                </span>
+              </button>
+            </div>
+          </section>
+          <div className="sticky-actions two">
+            <button className="secondary-button" type="button" onClick={() => {
+              setCreatedTask(null);
+              setStep("template");
+            }}>
+              再建立一件
+            </button>
+            <button className="primary-button" type="button" onClick={shareCreatedTask}>
+              <Share2 size={18} />
+              分享連結
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
       <section className="section wizard-section">
         <div className="wizard-step-head">
           <span className="step-pill">1/3</span>
@@ -3067,9 +3136,9 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
       {template ? (
         <div className="sticky-actions">
           {step === "confirm" ? (
-            <button className="primary-button" type="button" onClick={createTask} disabled={!selectedCircle}>
-              <Plus size={18} />
-              建立{meta?.label}
+            <button className="primary-button" type="button" onClick={createTask} disabled={!selectedCircle || creating}>
+              {creating ? <Loader2 className="spin" size={18} /> : <Plus size={18} />}
+              {creating ? "建立中" : `建立${meta?.label}`}
             </button>
           ) : (
             <button className="primary-button" type="button" onClick={() => setStep("confirm")} disabled={!selectedCircle}>
@@ -3079,6 +3148,8 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
           )}
         </div>
       ) : null}
+        </>
+      )}
     </>
   );
 }
@@ -4227,6 +4298,8 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
       });
       updateTask(data.task);
       setSubmitted(submittedSnapshot);
+      setCommentBody("");
+      setShowComment(false);
       setToast("已送出，主揪會在圈內看到統計");
       window.scrollTo({ top: 0, behavior: "smooth" });
       refresh().catch(() => {});
@@ -4248,7 +4321,12 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
     });
     updateTask(data.task);
     setCommentBody("");
+    setShowComment(false);
     setToast("已留言，主揪會在事項中看到");
+  }
+
+  async function shareCurrentTask() {
+    await shareTaskLink(task, setToast);
   }
 
   function continueToDetails() {
@@ -4274,7 +4352,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
         <section className="join-success">
           <span className="join-success-icon"><Check size={26} /></span>
           <h1>已送出，主揪會看到統計</h1>
-          <p>想補充或改內容，可以留言給主揪，或直接請主揪幫你調整。</p>
+          <p>你可以把這張填單分享給其他人；有臨時補充，也可以直接在這裡留言給主揪。</p>
         </section>
         <section className="section wizard-section">
           <div className="wizard-step-head">
@@ -4301,8 +4379,59 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
             <small>{task.paymentInstructions || "付款方式由團主通知。"}</small>
           </div>
         </section>
+        <section className="section wizard-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">下一步</span>
+            <div>
+              <h2>還要做什麼嗎？</h2>
+              <p>沒有要補充就可以離開；要分享或留言，也可以直接在這裡做。</p>
+            </div>
+          </div>
+          <div className="success-action-grid">
+            <button className="success-action-card primary" type="button" onClick={shareCurrentTask}>
+              <Share2 size={20} />
+              <span>
+                <strong>分享給別人填</strong>
+                <small>先複製連結，再開啟手機分享面板</small>
+              </span>
+            </button>
+            <button className="success-action-card" type="button" onClick={resetForAnotherPerson}>
+              <UserPlus size={20} />
+              <span>
+                <strong>再幫另一人填</strong>
+                <small>適合辦公室代填、家人一起填</small>
+              </span>
+            </button>
+            <button className="success-action-card" type="button" onClick={() => go("manage", { taskId: task.id })}>
+              <ReceiptText size={20} />
+              <span>
+                <strong>查看事項統計</strong>
+                <small>回到名單與統計頁</small>
+              </span>
+            </button>
+          </div>
+          <button className="editor-panel-toggle" type="button" onClick={() => setShowComment((current) => !current)}>
+            <span>
+              <strong>還要補一句話給主揪嗎？</strong>
+              <small>例如晚點到、備註口味、請主揪幫忙確認。</small>
+            </span>
+            <ChevronRight className={showComment ? "open" : ""} size={18} />
+          </button>
+          {showComment ? (
+            <div className="editor-panel-content">
+              <label>
+                補充留言
+                <textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="例如：我會晚點到，麻煩先幫我保留。" />
+              </label>
+              <button className="secondary-button" type="button" onClick={sendComment} disabled={!commentBody.trim()}>
+                <MessageSquare size={18} />
+                送出留言
+              </button>
+            </div>
+          ) : null}
+        </section>
         <div className="sticky-actions two">
-          <button className="secondary-button" type="button" onClick={resetForAnotherPerson}>再填另一人</button>
+          <button className="secondary-button" type="button" onClick={shareCurrentTask}>分享填單</button>
           <button className="primary-button green" type="button" onClick={() => go("manage", { taskId: task.id })}>
             查看事項
           </button>
