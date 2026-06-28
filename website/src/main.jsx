@@ -1570,10 +1570,14 @@ function buildTaskEditDraft(task) {
 function TaskEditPanel({ task, setToast, updateTask }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const [draft, setDraft] = useState(() => buildTaskEditDraft(task));
 
   useEffect(() => {
     setDraft(buildTaskEditDraft(task));
+    setShowDetails(false);
+    setShowOptions(false);
   }, [task.id, task.updatedAt]);
 
   function updateDraft(field, value) {
@@ -1604,12 +1608,21 @@ function TaskEditPanel({ task, setToast, updateTask }) {
   function cancel() {
     setDraft(buildTaskEditDraft(task));
     setEditing(false);
+    setShowDetails(false);
+    setShowOptions(false);
+  }
+
+  function startEditing() {
+    setEditing(true);
+    setShowDetails(false);
+    setShowOptions(false);
   }
 
   async function save() {
     if (saving) return;
     const options = optionPayload(draft.options, { includeId: true });
     if (!draft.title.trim() || options.length === 0) {
+      if (options.length === 0) setShowOptions(true);
       setToast("請先填寫標題與至少一個選項");
       return;
     }
@@ -1629,6 +1642,8 @@ function TaskEditPanel({ task, setToast, updateTask }) {
       });
       updateTask(data.task);
       setEditing(false);
+      setShowDetails(false);
+      setShowOptions(false);
       setToast("事項已更新");
     } catch (error) {
       setToast(error.message);
@@ -1639,65 +1654,90 @@ function TaskEditPanel({ task, setToast, updateTask }) {
 
   return (
     <section className="section task-edit-section">
-      <SectionTitle title="事項設定" action={editing ? "取消" : "編輯"} onClick={editing ? cancel : () => setEditing(true)} />
+      <SectionTitle title="事項設定" action={editing ? "取消" : "編輯"} onClick={editing ? cancel : startEditing} />
       {!editing ? (
         <div className="task-setting-summary">
           <span><strong>{task.options.length}</strong> 個選項</span>
           <span><strong>{task.deadlineAt ? formatDateTime(task.deadlineAt) : "未設定"}</strong> 截止</span>
         </div>
       ) : (
-        <div className="conversion-editor">
-          <label>
-            事項標題
-            <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
-          </label>
-          <label>
-            截止時間
-            <input type="datetime-local" value={draft.deadlineAt} onChange={(event) => updateDraft("deadlineAt", event.target.value)} />
-          </label>
-          <label>
-            說明
-            <textarea value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} />
-          </label>
-          <label>
-            付款/費用說明
-            <textarea value={draft.paymentInstructions} onChange={(event) => updateDraft("paymentInstructions", event.target.value)} />
-          </label>
-          <label>
-            集合/領取說明
-            <textarea value={draft.pickupInstructions} onChange={(event) => updateDraft("pickupInstructions", event.target.value)} />
-          </label>
-          <div className="option-editor-list">
-            <div className="option-editor-head">
-              <strong>選項</strong>
-              <button className="secondary-button compact" type="button" onClick={addOption}>新增選項</button>
-            </div>
-            {draft.options.map((option, index) => (
-              <div className="option-editor" key={option.id ?? `new-${index}`}>
-                <div className="option-editor-title">
-                  <span>選項 {index + 1}</span>
-                  <button type="button" onClick={() => removeOption(index)} disabled={draft.options.length <= 1}>移除</button>
-                </div>
-                <input
-                  aria-label={`事項選項 ${index + 1} 名稱`}
-                  value={option.title}
-                  onChange={(event) => updateOption(index, { title: event.target.value })}
-                />
-                <input
-                  aria-label={`事項選項 ${index + 1} 補充說明`}
-                  value={option.subtitle}
-                  onChange={(event) => updateOption(index, { subtitle: event.target.value })}
-                />
-                <input
-                  aria-label={`事項選項 ${index + 1} 金額`}
-                  type="number"
-                  min="0"
-                  value={option.unitPrice}
-                  onChange={(event) => updateOption(index, { unitPrice: event.target.value })}
-                />
-              </div>
-            ))}
+        <div className="guided-editor">
+          <div className="editor-basic-grid">
+            <label>
+              事項標題
+              <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
+            </label>
+            <label>
+              截止時間
+              <input type="datetime-local" value={draft.deadlineAt} onChange={(event) => updateDraft("deadlineAt", event.target.value)} />
+            </label>
           </div>
+
+          <button className="editor-panel-toggle" type="button" onClick={() => setShowDetails((current) => !current)}>
+            <span>
+              <strong>說明、付款與領取</strong>
+              <small>{draft.description || draft.paymentInstructions || draft.pickupInstructions ? "已保留原本說明，可需要時調整" : "可先略過，之後再補"}</small>
+            </span>
+            <ChevronRight className={showDetails ? "open" : ""} size={18} />
+          </button>
+          {showDetails ? (
+            <div className="editor-panel-content">
+              <label>
+                說明
+                <textarea value={draft.description} onChange={(event) => updateDraft("description", event.target.value)} />
+              </label>
+              <label>
+                付款/費用說明
+                <textarea value={draft.paymentInstructions} onChange={(event) => updateDraft("paymentInstructions", event.target.value)} />
+              </label>
+              <label>
+                集合/領取說明
+                <textarea value={draft.pickupInstructions} onChange={(event) => updateDraft("pickupInstructions", event.target.value)} />
+              </label>
+            </div>
+          ) : null}
+
+          <button className="editor-panel-toggle" type="button" onClick={() => setShowOptions((current) => !current)}>
+            <span>
+              <strong>選項與金額</strong>
+              <small>{draft.options.length} 個選項，建立後通常只在需要調整品項或價格時打開</small>
+            </span>
+            <ChevronRight className={showOptions ? "open" : ""} size={18} />
+          </button>
+          {showOptions ? (
+            <div className="option-editor-list">
+              <div className="option-editor-head">
+                <strong>選項</strong>
+                <button className="secondary-button compact" type="button" onClick={addOption}>新增選項</button>
+              </div>
+              {draft.options.map((option, index) => (
+                <div className="option-editor" key={option.id ?? `new-${index}`}>
+                  <div className="option-editor-title">
+                    <span>選項 {index + 1}</span>
+                    <button type="button" onClick={() => removeOption(index)} disabled={draft.options.length <= 1}>移除</button>
+                  </div>
+                  <input
+                    aria-label={`事項選項 ${index + 1} 名稱`}
+                    value={option.title}
+                    onChange={(event) => updateOption(index, { title: event.target.value })}
+                  />
+                  <input
+                    aria-label={`事項選項 ${index + 1} 補充說明`}
+                    value={option.subtitle}
+                    onChange={(event) => updateOption(index, { subtitle: event.target.value })}
+                  />
+                  <input
+                    aria-label={`事項選項 ${index + 1} 金額`}
+                    type="number"
+                    min="0"
+                    value={option.unitPrice}
+                    onChange={(event) => updateOption(index, { unitPrice: event.target.value })}
+                  />
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           <button className="primary-button" type="button" onClick={save} disabled={saving}>
             {saving ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
             儲存設定
