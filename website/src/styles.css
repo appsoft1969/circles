@@ -398,23 +398,25 @@ a {
 .circle-overview-section,
 .todo-summary-section,
 .profile-shortcuts,
-.circle-next-step-section,
+.circle-daily-section,
 .circle-home-actions {
   display: grid;
   gap: 12px;
 }
 
+.circle-daily-copy {
+  margin: -4px 0 0;
+  color: #666870;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .attention-list,
 .circle-overview-list,
-.circle-next-step-list,
 .profile-shortcut-list,
 .member-invitation-list {
   display: grid;
   gap: 10px;
-}
-
-.circle-next-step-section .selected-summary {
-  background: #fbfbfa;
 }
 
 .attention-card,

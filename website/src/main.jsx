@@ -137,6 +137,16 @@ function taskContextLine(task, meta = templateMeta[task?.template] ?? null) {
   return parts.filter((part, index) => parts.findIndex((item) => item === part) === index).join(" · ");
 }
 
+function circleTaskContextLine(task, meta = templateMeta[task?.template] ?? null) {
+  const pendingCount = (task?.stats?.unpaid ?? 0) + (task?.stats?.review ?? 0) + (task?.stats?.pending ?? 0);
+  const parts = [
+    meta?.contextLabel || meta?.label || task?.templateLabel || "事項",
+    task?.stats?.responses ? `${task.stats.responses} 筆已填` : "還沒有人填",
+    pendingCount > 0 ? `${pendingCount} 待確認` : "可以點進去看內容",
+  ];
+  return parts.join(" · ");
+}
+
 function shortText(value, maxLength = 32) {
   const text = String(value || "").trim();
   if (text.length <= maxLength) return text;
@@ -1348,47 +1358,6 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   const canManage = ["owner", "admin"].includes(membership?.role);
   const canEditCircle = membership?.role === "owner";
-  const firstActiveTask = activeTasks[0] ?? null;
-  const nextStepActions = [
-    canManage
-      ? {
-          id: "invite",
-          title: (circle.memberCount ?? 0) <= 1 ? "先邀請熟人進來" : "要加人進來嗎？",
-          body: "分享邀請連結，或直接送站內入圈邀請。",
-          icon: UserPlus,
-          onClick: () => go("memberInvite", { circleId: circle.id }),
-        }
-      : {
-          id: "members",
-          title: "先看看圈內有哪些人",
-          body: "熟人圈裡的成員名單會整理在這裡。",
-          icon: Users,
-          onClick: () => go("members", { circleId: circle.id }),
-        },
-    firstActiveTask
-      ? {
-          id: "active-task",
-          title: "看看正在辦的事",
-          body: `${firstActiveTask.title} · ${templateMeta[firstActiveTask.template]?.label ?? "事項"}`,
-          icon: templateMeta[firstActiveTask.template]?.icon ?? ClipboardList,
-          onClick: () => go("manage", { taskId: firstActiveTask.id, taskPanel: taskAttentionPanel(firstActiveTask) }),
-        }
-      : canManage
-        ? {
-            id: "create-task",
-            title: "建立第一件事項",
-            body: "訂飲料、揪活動、團購或意願調查，都從這裡開始。",
-            icon: Plus,
-            onClick: () => go("templates", { selectedCircleId: circle.id }),
-          }
-        : {
-            id: "chat",
-            title: "到圈內討論打聲招呼",
-            body: "臨時通知、約時間或問大家意見，可以先開一串討論。",
-            icon: MessageCircle,
-            onClick: () => go("circleChat", { circleId: circle.id }),
-          },
-  ];
   return (
     <>
       <Topbar title={circle.name} subtitle="圈子首頁" onBack={() => go("dashboard")} />
@@ -1396,18 +1365,18 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
         <span className="circle-overview-icon"><Users size={22} /></span>
         <div>
           <h1>{circle.name}</h1>
-          <p>{circle.description || "這個圈子的事項、討論、成員都整理在這裡。"}</p>
+          <p>{circle.description || "每天先進這個圈子，看今天有沒有人正在揪。想跟就直接填。"}</p>
           <div className="circle-overview-meta">
             <em>{membershipRoleLabels[membership?.role] ?? "成員"}</em>
             <em>{circle.memberCount ?? 0} 人</em>
-            <em>{activeTasks.length} 件進行中</em>
+            <em>{activeTasks.length} 件正在揪</em>
           </div>
         </div>
       </section>
       <section className="home-status-strip">
         <span>
           <strong>{activeTasks.length}</strong>
-          進行中
+          正在揪
         </span>
         <span className={unpaid > 0 ? "alert" : ""}>
           <strong>{unpaid}</strong>
@@ -1418,25 +1387,56 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           未讀
         </span>
       </section>
-      <section className="section circle-next-step-section">
-        <SectionTitle title="下一步可以先做什麼" />
-        <div className="circle-next-step-list">
-          {nextStepActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <button className="selected-summary" type="button" key={action.id} onClick={action.onClick}>
-                <Icon size={20} />
-                <span>
-                  <strong>{action.title}</strong>
-                  <small>{action.body}</small>
-                </span>
-                <ChevronRight size={18} />
+      <section className="section circle-daily-section">
+        <SectionTitle title="今天有人在揪嗎？" action={canManage ? "開一件事" : null} onClick={() => go("templates", { selectedCircleId: circle.id })} />
+        <p className="circle-daily-copy">
+          {activeTasks.length > 0 ? "想跟就點進去填；名單、數量、付款和後續狀態會整理在事項裡。" : "目前這圈還沒有人開事項。有人要訂飲料、叫外食或揪活動時，可以從這裡開始。"}
+        </p>
+        {activeTasks.length > 0 ? (
+          <div className="task-list">
+            {activeTasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                context="circle"
+                onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })}
+                onShare={() => shareTask(task)}
+              />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={ClipboardList}
+            title="這個圈子今天還沒有人開事項"
+            body={canManage ? "要訂飲料、揪活動或統計票券時，可以直接開一件事。" : "等圈內有人開始揪，會先出現在這裡。"}
+            className="home-empty-state"
+            action={canManage ? (
+              <button className="secondary-button compact" type="button" onClick={() => go("templates", { selectedCircleId: circle.id })}>
+                開一件事
               </button>
-            );
-          })}
-        </div>
+            ) : null}
+          />
+        )}
+      </section>
+      <section className="section">
+        <SectionTitle title="需要注意" />
+        {attentionItems.length > 0 ? (
+          <div className="attention-list">
+            {attentionItems.slice(0, 3).map((item) => (
+              <AttentionCard key={item.id} item={item} go={go} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Check}
+            title="這個圈子目前沒有急著處理的事"
+            body="如果有重要公告、未讀討論、待付款或待確認事項，會先放在這裡。"
+            className="home-empty-state"
+          />
+        )}
       </section>
       <section className="section circle-home-actions">
+        <SectionTitle title="其他入口" />
         <div className="success-action-grid">
           <button className="success-action-card primary" type="button" onClick={() => go("circleChat", { circleId: circle.id })}>
             <MessageCircle size={20} />
@@ -1452,6 +1452,15 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
               <small>看圈內有哪些人</small>
             </span>
           </button>
+          {canManage ? (
+            <button className="success-action-card" type="button" onClick={() => go("memberInvite", { circleId: circle.id })}>
+              <UserPlus size={20} />
+              <span>
+                <strong>邀請熟人</strong>
+                <small>分享連結或站內邀請</small>
+              </span>
+            </button>
+          ) : null}
           {canEditCircle ? (
             <button className="success-action-card" type="button" onClick={() => go("circleSettings", { circleId: circle.id })}>
               <Settings size={20} />
@@ -1473,45 +1482,11 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
         </div>
       </section>
       <section className="section">
-        <SectionTitle title="需要注意" />
-        {attentionItems.length > 0 ? (
-          <div className="attention-list">
-            {attentionItems.slice(0, 3).map((item) => (
-              <AttentionCard key={item.id} item={item} go={go} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={Check}
-            title="這個圈子目前沒有急著處理的事"
-            body="如果有重要公告、未讀討論、待付款或待確認事項，會先放在這裡。"
-            className="home-empty-state"
-          />
-        )}
-      </section>
-      <section className="section">
-        <SectionTitle title="進行中的事項" action="建立事項" onClick={() => go("templates", { selectedCircleId: circle.id })} />
-        {activeTasks.length > 0 ? (
-          <div className="task-list">
-            {activeTasks.map((task) => (
-              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })} onShare={() => shareTask(task)} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={ClipboardList}
-            title="這個圈子目前沒有進行中的事項"
-            body="要訂飲料、揪活動或統計票券時，可以從建立事項開始。"
-            className="home-empty-state"
-          />
-        )}
-      </section>
-      <section className="section">
         <SectionTitle title="最近結束" />
         {recentClosedTasks.length > 0 ? (
           <div className="task-list">
             {recentClosedTasks.map((task) => (
-              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })} onShare={() => shareTask(task)} />
+              <TaskRow key={task.id} task={task} context="circle" onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })} onShare={() => shareTask(task)} />
             ))}
           </div>
         ) : (
@@ -4210,27 +4185,54 @@ function SectionTitle({ title, action, onClick, disabled = false, busy = false }
   );
 }
 
-function TaskRow({ task, onOpen, onShare }) {
+function TaskRow({ task, onOpen, onShare, context = "default" }) {
   const meta = templateMeta[task.template] ?? templateMeta.group_buy;
   const Icon = meta.icon;
   const pendingCount = task.stats.unpaid + task.stats.review;
+  const circleScoped = context === "circle";
+  const contextLine = circleScoped ? circleTaskContextLine(task, meta) : taskContextLine(task, meta);
+  const freeAndEmpty = circleScoped && Number(task.stats.totalAmount || 0) <= 0 && Number(task.stats.responses || 0) <= 0;
+  const sideValue = freeAndEmpty
+    ? "可跟"
+    : circleScoped && Number(task.stats.totalAmount || 0) <= 0
+      ? countText(task.stats.responses)
+      : money(task.stats.totalAmount);
+  const sideLabel = circleScoped
+    ? pendingCount > 0
+      ? `${pendingCount} 待付款`
+      : task.stats.pending > 0
+        ? `${task.stats.pending} 待處理`
+        : freeAndEmpty
+          ? "點進去填"
+          : `${task.stats.responses} 已填`
+    : `${pendingCount} 待付款`;
+  const rowBadges = circleScoped
+    ? [
+        { text: taskStatusLabel(task), className: `status-mini ${task.status}` },
+        { text: taskDeadlineLabel(task) },
+      ]
+    : [
+        { text: taskStatusLabel(task), className: `status-mini ${task.status}` },
+        { text: taskDeadlineLabel(task) },
+        { text: `${task.stats.responses} 筆回覆` },
+      ];
   return (
     <article className="task-row">
       <button type="button" onClick={onOpen} className="task-main">
         <span className={`task-icon ${meta.accent}`}><Icon size={19} /></span>
         <span>
           <strong>{task.title}</strong>
-          <small>{taskContextLine(task, meta)}</small>
+          <small>{contextLine}</small>
           <span className="task-meta-line">
-            <em className={`status-mini ${task.status}`}>{taskStatusLabel(task)}</em>
-            <em>{taskDeadlineLabel(task)}</em>
-            <em>{task.stats.responses} 筆回覆</em>
+            {rowBadges.map((badge) => (
+              <em className={badge.className} key={badge.text}>{badge.text}</em>
+            ))}
           </span>
         </span>
       </button>
       <div className="task-stats">
-        <b>{money(task.stats.totalAmount)}</b>
-        <span>{pendingCount} 待付款</span>
+        <b>{sideValue}</b>
+        <span>{sideLabel}</span>
       </div>
       <button className="icon-button" type="button" aria-label="分享填單連結" onClick={onShare}>
         <Share2 size={19} />
