@@ -25,6 +25,7 @@ import {
   ReceiptText,
   Search,
   Send,
+  Settings,
   Share2,
   ShieldCheck,
   Split,
@@ -407,6 +408,16 @@ function resolveAppRoute(pathname, data = {}) {
     return { name: "circleChat", circleId: circleChatMatch[1] };
   }
 
+  const circleSettingsMatch = pathname.match(/^\/circles\/([^/]+)\/settings$/);
+  if (circleSettingsMatch && data.circles?.some((circle) => circle.id === circleSettingsMatch[1])) {
+    return { name: "circleSettings", circleId: circleSettingsMatch[1] };
+  }
+
+  const circleAuditMatch = pathname.match(/^\/circles\/([^/]+)\/audit$/);
+  if (circleAuditMatch && data.circles?.some((circle) => circle.id === circleAuditMatch[1])) {
+    return { name: "circleAudit", circleId: circleAuditMatch[1] };
+  }
+
   const circleMemberInviteMatch = pathname.match(/^\/circles\/([^/]+)\/members\/invite$/);
   if (circleMemberInviteMatch && data.circles?.some((circle) => circle.id === circleMemberInviteMatch[1])) {
     return { name: "memberInvite", circleId: circleMemberInviteMatch[1] };
@@ -436,6 +447,8 @@ function pathForRoute(name, extra = {}, state = {}) {
   if (name === "circleHome" && extra.circleId) return `/circles/${extra.circleId}`;
   if (name === "manage" && extra.taskId) return `/tasks/${extra.taskId}`;
   if (name === "circleChat" && extra.circleId) return `/circles/${extra.circleId}/chat`;
+  if (name === "circleSettings" && extra.circleId) return `/circles/${extra.circleId}/settings`;
+  if (name === "circleAudit" && extra.circleId) return `/circles/${extra.circleId}/audit`;
   if (name === "memberInvite" && extra.circleId) return `/circles/${extra.circleId}/members/invite`;
   if (name === "members" && extra.circleId) return `/circles/${extra.circleId}/members`;
   if (name === "join" && extra.taskId) {
@@ -788,6 +801,24 @@ function App() {
         mode="invite"
       />
     ),
+    circleSettings: (
+      <CircleSettings
+        circle={state.circles.find((circle) => circle.id === route.circleId)}
+        circleId={route.circleId}
+        session={state.session}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
+    circleAudit: (
+      <CircleAudit
+        circle={state.circles.find((circle) => circle.id === route.circleId)}
+        circleId={route.circleId}
+        session={state.session}
+        go={go}
+      />
+    ),
     circleInvite: (
       <CircleInviteJoin
         code={route.inviteCode}
@@ -855,6 +886,8 @@ function BottomNav({ routeName, unreadCount = 0, onNavigate }) {
     circleChat: "dashboard",
     members: "dashboard",
     memberInvite: "dashboard",
+    circleSettings: "dashboard",
+    circleAudit: "dashboard",
     manage: "todos",
     join: "todos",
     createCircle: "profile",
@@ -1238,6 +1271,8 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
   const attentionItems = buildAttentionItems(tasks, notifications);
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
+  const canManage = ["owner", "admin"].includes(membership?.role);
+  const canEditCircle = membership?.role === "owner";
   return (
     <>
       <Topbar title={circle.name} subtitle="圈子首頁" onBack={() => go("dashboard")} />
@@ -1279,10 +1314,28 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           <button className="success-action-card" type="button" onClick={() => go("members", { circleId: circle.id })}>
             <Users size={20} />
             <span>
-              <strong>成員與邀請</strong>
-              <small>看成員、建立邀請連結</small>
+              <strong>成員</strong>
+              <small>看圈內有哪些人</small>
             </span>
           </button>
+          {canEditCircle ? (
+            <button className="success-action-card" type="button" onClick={() => go("circleSettings", { circleId: circle.id })}>
+              <Settings size={20} />
+              <span>
+                <strong>圈子設定</strong>
+                <small>調整名稱與簡單說明</small>
+              </span>
+            </button>
+          ) : null}
+          {canManage ? (
+            <button className="success-action-card" type="button" onClick={() => go("circleAudit", { circleId: circle.id })}>
+              <ReceiptText size={20} />
+              <span>
+                <strong>管理紀錄</strong>
+                <small>看最近改了什麼</small>
+              </span>
+            </button>
+          ) : null}
         </div>
       </section>
       <section className="section">
@@ -1868,12 +1921,10 @@ function AuditEventList({ events = [] }) {
 function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode = "members" }) {
   const currentMembership = session?.memberships?.find((membership) => membership.circleId === circleId);
   const canManage = ["owner", "admin"].includes(currentMembership?.role);
-  const canEditCircle = currentMembership?.role === "owner";
   const isInviteMode = mode === "invite";
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [memberInvitations, setMemberInvitations] = useState([]);
-  const [auditEvents, setAuditEvents] = useState([]);
   const [inviteRole, setInviteRole] = useState("member");
   const [directInviteRole, setDirectInviteRole] = useState("member");
   const [directInviteRecipient, setDirectInviteRecipient] = useState("");
@@ -1887,10 +1938,6 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
   const [editingMemberId, setEditingMemberId] = useState("");
   const [memberNameDraft, setMemberNameDraft] = useState("");
   const [memberContactDraft, setMemberContactDraft] = useState("");
-  const [editingCircle, setEditingCircle] = useState(false);
-  const [circleNameDraft, setCircleNameDraft] = useState(circle?.name ?? currentMembership?.circleName ?? "");
-  const [circleDescriptionDraft, setCircleDescriptionDraft] = useState(circle?.description ?? "");
-  const [savingCircle, setSavingCircle] = useState(false);
   const [loading, setLoading] = useState(true);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [directInviteBusy, setDirectInviteBusy] = useState(false);
@@ -1900,22 +1947,8 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
   const [actionNotice, setActionNotice] = useState("");
   const [error, setError] = useState("");
   const circleName = circle?.name ?? currentMembership?.circleName ?? "圈子成員";
-  const circleDescription = circle?.description ?? "";
   const inviteSettingsSummary = `${membershipRoleLabels[inviteRole] ?? inviteRole} · ${Math.max(1, Number(maxUses || 30))} 次 · ${Math.max(1, Number(expireDays || 30))} 天`;
   const onlyOwnerSoFar = canManage && members.length <= 1;
-
-  async function loadAuditEvents() {
-    if (!circleId || !canManage) {
-      setAuditEvents([]);
-      return;
-    }
-    try {
-      const data = await api(`/api/circles/${circleId}/audit-events?limit=20`);
-      setAuditEvents(data.events ?? []);
-    } catch {
-      setAuditEvents([]);
-    }
-  }
 
   async function loadMembers() {
     if (!circleId) return;
@@ -1924,19 +1957,16 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
     try {
       const memberData = await api(`/api/circles/${circleId}/members`);
       setMembers(memberData.members ?? []);
-      if (canManage) {
-        const [inviteData, memberInvitationData, auditData] = await Promise.all([
+      if (canManage && isInviteMode) {
+        const [inviteData, memberInvitationData] = await Promise.all([
           api(`/api/circles/${circleId}/invites`),
           api(`/api/circles/${circleId}/member-invitations`),
-          api(`/api/circles/${circleId}/audit-events?limit=20`),
         ]);
         setInvites(inviteData.invites ?? []);
         setMemberInvitations(memberInvitationData.invitations ?? []);
-        setAuditEvents(auditData.events ?? []);
       } else {
         setInvites([]);
         setMemberInvitations([]);
-        setAuditEvents([]);
       }
     } catch (loadError) {
       setError(loadError.message);
@@ -1947,41 +1977,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
 
   useEffect(() => {
     loadMembers();
-  }, [circleId, canManage]);
-
-  useEffect(() => {
-    setCircleNameDraft(circle?.name ?? currentMembership?.circleName ?? "");
-    setCircleDescriptionDraft(circleDescription);
-    setEditingCircle(false);
-  }, [circleId, circle?.name, currentMembership?.circleName, circleDescription]);
-
-  async function saveCircleSettings() {
-    if (savingCircle) return;
-    if (!circleNameDraft.trim()) {
-      setToast("先幫圈子取個名稱");
-      return;
-    }
-    setSavingCircle(true);
-    try {
-      const data = await api(`/api/circles/${circleId}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          name: circleNameDraft.trim(),
-          description: circleDescriptionDraft.trim(),
-        }),
-      });
-      await refresh();
-      await loadAuditEvents();
-      setEditingCircle(false);
-      const message = `已更新「${data.circle.name}」`;
-      setActionNotice(message);
-      setToast(message);
-    } catch (saveError) {
-      setToast(saveError.message);
-    } finally {
-      setSavingCircle(false);
-    }
-  }
+  }, [circleId, canManage, isInviteMode]);
 
   async function createInvite() {
     if (inviteBusy) return;
@@ -1997,7 +1993,6 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
         }),
       });
       setInvites((current) => [data.invite, ...current]);
-      await loadAuditEvents();
       await shareCircleInvite(data.invite, setToast);
       setActionNotice("邀請已建立，連結也準備好可以分享了");
     } catch (createError) {
@@ -2020,7 +2015,6 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
         body: JSON.stringify({ revoked: true }),
       });
       setInvites((current) => current.filter((item) => item.id !== data.invite.id));
-      await loadAuditEvents();
       const message = "邀請連結已停用，這組連結不能再加入";
       setActionNotice(message);
       setToast(message);
@@ -2053,7 +2047,6 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
       setDirectInviteMessage("");
       setShowDirectInviteMessage(false);
       await refresh();
-      await loadAuditEvents();
       const message = `已送出入圈邀請給 ${data.invitation.invitedName || "對方"}`;
       setActionNotice(message);
       setToast(message);
@@ -2073,7 +2066,6 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
         body: JSON.stringify({ revoked: true }),
       });
       setMemberInvitations((current) => current.map((item) => (item.id === data.invitation.id ? data.invitation : item)));
-      await loadAuditEvents();
       const message = `已撤回給 ${invitation.invitedName || "對方"} 的入圈邀請`;
       setActionNotice(message);
       setToast(message);
@@ -2101,7 +2093,6 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
         setManagingMemberId("");
       }
       await refresh();
-      await loadAuditEvents();
       const message = patch.status === "removed"
         ? `已把 ${member.displayName} 移出圈子`
         : patch.role
@@ -2153,7 +2144,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
       <Topbar
         title={isInviteMode ? "邀請新成員" : "圈子成員"}
         subtitle={circleName}
-        onBack={() => (isInviteMode ? go("members", { circleId }) : go("dashboard"))}
+        onBack={() => (isInviteMode ? go("members", { circleId }) : go("circleHome", { circleId }))}
         action={!isInviteMode && canManage ? (
           <button className="icon-button" type="button" aria-label="邀請新成員" onClick={() => go("memberInvite", { circleId })}>
             <UserPlus size={22} />
@@ -2503,62 +2494,173 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode 
             </div>
           </section>
           ) : null}
-
-          {!isInviteMode && canEditCircle ? (
-            <section className="section wizard-section form-section">
-              <SectionTitle title="圈子設定" action={editingCircle ? "取消" : "編輯"} onClick={() => setEditingCircle((current) => !current)} />
-              {editingCircle ? (
-                <>
-                  <div className="wizard-step-head">
-                    <span className="step-pill">設定</span>
-                    <div>
-                      <h2>圈子名稱要怎麼顯示？</h2>
-                      <p>名稱讓大家一眼看懂，說明只要補一句這個圈子平常做什麼就好。</p>
-                    </div>
-                  </div>
-                  <label>
-                    圈子名稱
-                    <input
-                      value={circleNameDraft}
-                      onChange={(event) => setCircleNameDraft(event.target.value)}
-                      maxLength={40}
-                      placeholder="例如：辦公室午餐圈"
-                    />
-                  </label>
-                  <label>
-                    簡單說明
-                    <textarea
-                      value={circleDescriptionDraft}
-                      onChange={(event) => setCircleDescriptionDraft(event.target.value)}
-                      maxLength={160}
-                      placeholder="例如：公司中午訂餐、飲料、下午茶"
-                    />
-                  </label>
-                  <button className="primary-button green" type="button" onClick={saveCircleSettings} disabled={savingCircle || !circleNameDraft.trim()}>
-                    {savingCircle ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
-                    好了，儲存設定
-                  </button>
-                </>
-              ) : (
-                <button className="selected-summary" type="button" onClick={() => setEditingCircle(true)}>
-                  <Users size={20} />
-                  <span>
-                    <strong>{circleName}</strong>
-                    <small>{circleDescription || "還沒有說明，點這裡補一句讓成員更清楚。"}</small>
-                  </span>
-                  <ChevronRight size={18} />
-                </button>
-              )}
-            </section>
-          ) : null}
-
-          {!isInviteMode && canManage ? (
-            <section className="section audit-section">
-              <SectionTitle title="最近管理紀錄" />
-              <AuditEventList events={auditEvents} />
-            </section>
-          ) : null}
         </>
+      )}
+    </>
+  );
+}
+
+function CircleSettings({ circle, circleId, session, go, refresh, setToast }) {
+  const currentMembership = session?.memberships?.find((membership) => membership.circleId === circleId);
+  const canEditCircle = currentMembership?.role === "owner";
+  const circleName = circle?.name ?? currentMembership?.circleName ?? "圈子設定";
+  const [circleNameDraft, setCircleNameDraft] = useState(circle?.name ?? currentMembership?.circleName ?? "");
+  const [circleDescriptionDraft, setCircleDescriptionDraft] = useState(circle?.description ?? "");
+  const [savingCircle, setSavingCircle] = useState(false);
+  const [actionNotice, setActionNotice] = useState("");
+
+  useEffect(() => {
+    setCircleNameDraft(circle?.name ?? currentMembership?.circleName ?? "");
+    setCircleDescriptionDraft(circle?.description ?? "");
+  }, [circleId, circle?.name, circle?.description, currentMembership?.circleName]);
+
+  async function saveCircleSettings() {
+    if (savingCircle) return;
+    if (!circleNameDraft.trim()) {
+      setToast("先幫圈子取個名稱");
+      return;
+    }
+    setSavingCircle(true);
+    try {
+      const data = await api(`/api/circles/${circleId}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: circleNameDraft.trim(),
+          description: circleDescriptionDraft.trim(),
+        }),
+      });
+      await refresh();
+      const message = `已更新「${data.circle.name}」`;
+      setActionNotice(message);
+      setToast(message);
+    } catch (saveError) {
+      setToast(saveError.message);
+    } finally {
+      setSavingCircle(false);
+    }
+  }
+
+  return (
+    <>
+      <Topbar title="圈子設定" subtitle={circleName} onBack={() => go("circleHome", { circleId })} />
+      <section className="member-hero">
+        <span className="member-hero-icon"><Settings size={22} /></span>
+        <div>
+          <h1>{circleName}</h1>
+          <p>這裡只調整圈子的名稱與簡單說明。成員、邀請與紀錄會放在各自的頁面。</p>
+        </div>
+      </section>
+      <ActionFeedback message={actionNotice} className="member-action-feedback" />
+      {!canEditCircle ? (
+        <section className="section">
+          <EmptyState
+            icon={ShieldCheck}
+            title="只有圈主可以調整圈子設定"
+            body="如果需要改名稱或說明，請圈主到這裡處理。"
+            centered
+            className="member-empty-state"
+          />
+        </section>
+      ) : (
+        <section className="section wizard-section form-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">設定</span>
+            <div>
+              <h2>圈子名稱要怎麼顯示？</h2>
+              <p>名稱讓大家一眼看懂，說明只要補一句這個圈子平常做什麼就好。</p>
+            </div>
+          </div>
+          <label>
+            圈子名稱
+            <input
+              value={circleNameDraft}
+              onChange={(event) => setCircleNameDraft(event.target.value)}
+              maxLength={40}
+              placeholder="例如：辦公室午餐圈"
+            />
+          </label>
+          <label>
+            簡單說明
+            <textarea
+              value={circleDescriptionDraft}
+              onChange={(event) => setCircleDescriptionDraft(event.target.value)}
+              maxLength={160}
+              placeholder="例如：公司中午訂餐、飲料、下午茶"
+            />
+          </label>
+          <button className="primary-button green" type="button" onClick={saveCircleSettings} disabled={savingCircle || !circleNameDraft.trim()}>
+            {savingCircle ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+            {savingCircle ? "儲存中" : "好了，儲存設定"}
+          </button>
+        </section>
+      )}
+    </>
+  );
+}
+
+function CircleAudit({ circle, circleId, session, go }) {
+  const currentMembership = session?.memberships?.find((membership) => membership.circleId === circleId);
+  const canManage = ["owner", "admin"].includes(currentMembership?.role);
+  const circleName = circle?.name ?? currentMembership?.circleName ?? "管理紀錄";
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAuditEvents() {
+      if (!circleId || !canManage) {
+        setAuditEvents([]);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError("");
+      try {
+        const data = await api(`/api/circles/${circleId}/audit-events?limit=30`);
+        if (!cancelled) setAuditEvents(data.events ?? []);
+      } catch (loadError) {
+        if (!cancelled) setError(loadError.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadAuditEvents();
+    return () => {
+      cancelled = true;
+    };
+  }, [circleId, canManage]);
+
+  return (
+    <>
+      <Topbar title="管理紀錄" subtitle={circleName} onBack={() => go("circleHome", { circleId })} />
+      <section className="member-hero">
+        <span className="member-hero-icon"><ReceiptText size={22} /></span>
+        <div>
+          <h1>{circleName}</h1>
+          <p>這裡只看最近的管理變更，例如邀請、成員、付款與公告相關紀錄。</p>
+        </div>
+      </section>
+      {!canManage ? (
+        <section className="section">
+          <EmptyState
+            icon={ShieldCheck}
+            title="只有圈主或管理者可以看管理紀錄"
+            body="一般成員只會看到自己的待辦、通知與圈內事項。"
+            centered
+            className="member-empty-state"
+          />
+        </section>
+      ) : loading ? (
+        <section className="section"><p className="empty-note">讀取管理紀錄...</p></section>
+      ) : error ? (
+        <section className="section"><p className="empty-note">無法讀取管理紀錄：{error}</p></section>
+      ) : (
+        <section className="section audit-section">
+          <SectionTitle title="最近管理紀錄" />
+          <AuditEventList events={auditEvents} />
+        </section>
       )}
     </>
   );
