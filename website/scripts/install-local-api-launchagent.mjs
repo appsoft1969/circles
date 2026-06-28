@@ -24,6 +24,7 @@ const sensitiveEnvKeys = new Set([
   "LINE_CLIENT_SECRET",
   "LINE_CHANNEL_SECRET",
   "APPLE_PRIVATE_KEY",
+  "WEB_PUSH_PRIVATE_KEY",
 ]);
 
 const baseEnv = {
@@ -52,6 +53,9 @@ const allowedEnvKeys = new Set([
   "APPLE_TEAM_ID",
   "APPLE_KEY_ID",
   "APPLE_PRIVATE_KEY",
+  "WEB_PUSH_PUBLIC_KEY",
+  "WEB_PUSH_PRIVATE_KEY",
+  "WEB_PUSH_SUBJECT",
 ]);
 
 function parseEnvFile(filePath) {

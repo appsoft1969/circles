@@ -78,6 +78,14 @@ function requestMetadata(req, provider = null) {
   };
 }
 
+function webPushConfig() {
+  const publicKey = process.env.WEB_PUSH_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || "";
+  return {
+    configured: Boolean(publicKey),
+    publicKey,
+  };
+}
+
 function safeRedirectPath(value) {
   if (!value || typeof value !== "string") return "/";
   if (!value.startsWith("/") || value.startsWith("//")) return "/";
@@ -385,6 +393,10 @@ app.post("/api/messages/:messageId/read", route(async (req, res) => {
     actor: actorFromRequest(req),
   });
   res.status(201).json({ receipt });
+}));
+
+app.get("/api/push/config", route(async (req, res) => {
+  res.json(webPushConfig());
 }));
 
 app.post("/api/devices", route(async (req, res) => {

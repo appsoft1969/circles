@@ -576,6 +576,26 @@ a {
   gap: 10px;
 }
 
+.device-push-panel {
+  border: 1px solid #e3e3df;
+  border-radius: 8px;
+  background: #fbfbfa;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.device-push-panel p {
+  margin: 0;
+  color: #62646b;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.device-push-panel .secondary-button {
+  width: 100%;
+}
+
 .circle-status-list {
   display: grid;
   gap: 8px;

@@ -651,6 +651,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(receipt.status, 201);
       assert.equal(receipt.body.receipt.messageId, message.body.message.id);
 
+      const pushConfig = await request(baseUrl, "/api/push/config", { headers: sessionHeaders });
+      assert.equal(typeof pushConfig.body.configured, "boolean");
+      assert.equal(typeof pushConfig.body.publicKey, "string");
+
       const pushToken = `api-smoke-${createdTaskId}`;
       createdPushTokens.push(pushToken);
       const device = await request(baseUrl, "/api/devices", {
@@ -665,6 +669,30 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       });
       assert.equal(device.status, 201);
       assert.equal(device.body.device.pushToken, pushToken);
+
+      const webPushEndpoint = `https://push.example.test/${createdTaskId}`;
+      createdPushTokens.push(webPushEndpoint);
+      const webPushDevice = await request(baseUrl, "/api/devices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({
+          platform: "web",
+          pushSubscription: {
+            endpoint: webPushEndpoint,
+            expirationTime: null,
+            keys: {
+              p256dh: "api-smoke-p256dh",
+              auth: "api-smoke-auth",
+            },
+          },
+          appVersion: "smoke",
+          deviceName: "API smoke browser",
+          userAgent: "api-smoke",
+        }),
+      });
+      assert.equal(webPushDevice.status, 201);
+      assert.equal(webPushDevice.body.device.pushToken, webPushEndpoint);
+      assert.equal(webPushDevice.body.device.pushSubscription.endpoint, webPushEndpoint);
 
       const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);

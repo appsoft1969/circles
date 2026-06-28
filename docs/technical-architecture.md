@@ -244,7 +244,8 @@ Current Postgres store status:
 - `GET /api/conversations/:conversationId/messages`: implemented in Postgres.
 - `POST /api/conversations/:conversationId/messages`: implemented in Postgres and queues in-app notification rows for other profile-linked members.
 - `POST /api/messages/:messageId/read`: implemented in Postgres with membership check.
-- `POST /api/devices`: implemented in Postgres for push-token registration.
+- `GET /api/push/config`: implemented for Web Push public-key discovery.
+- `POST /api/devices`: implemented in Postgres for push-token and Web Push subscription registration.
 - `GET /api/notifications`: implemented in Postgres.
 - `GET /api/notifications/preferences`: implemented in Postgres.
 - `PATCH /api/notifications/preferences`: implemented in Postgres.
@@ -362,6 +363,7 @@ The Postgres store now supports:
 - `GET /api/conversations/:conversationId/messages`
 - `POST /api/conversations/:conversationId/messages`
 - `POST /api/messages/:messageId/read`
+- `GET /api/push/config`
 - `POST /api/devices`
 - `GET /api/notifications`
 - `GET /api/notifications/preferences`
@@ -371,7 +373,7 @@ The Postgres store now supports:
 - `PATCH /api/notifications/read-all`
 - `PATCH /api/notifications/:notificationId/read`
 
-These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows; quiet hours are recorded for later push delivery and do not currently silence OS-level notifications. SQLite returns `501` for these realtime/push routes.
+These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, device-level Web Push subscription registration, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows; quiet hours are recorded for later push delivery and do not currently silence OS-level notifications. SQLite returns `501` for these realtime/push routes.
 
 ## Local Commands
 
@@ -386,6 +388,7 @@ npm run test:api
 npm run backup:postgres
 npm run backup:postgres:status
 npm run ops:status
+npm run push:vapid
 npm run build
 ```
 
@@ -413,6 +416,8 @@ Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailabl
 `npm run backup:postgres:status` checks backup freshness, local dump integrity, restore-check status, and iCloud copy presence/hash consistency. It writes `website/artifacts/postgres-backup-status.json` and exits non-zero when the backup state is unhealthy.
 
 `npm run ops:status` checks the public site, `.app/.com/.info` redirects, API health, bootstrap data, a live share link, and the current backup status. It writes `website/artifacts/incircle-ops-status.json` and exits non-zero when the public hosting state is unhealthy. The launchd version enables macOS notifications on failure and stores cooldown state in `website/artifacts/incircle-ops-alert-state.json`.
+
+`npm run push:vapid` generates a Web Push VAPID key pair for the private local production env. Do not commit the generated private key.
 
 Current local URLs:
 

@@ -152,6 +152,17 @@ function registerAppServiceWorker() {
   }, { once: true });
 }
 
+function browserPushSupported() {
+  return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+}
+
+function urlBase64ToUint8Array(value) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
+}
+
 function canUseNativeShare(shareData) {
   if (!navigator.share) return false;
   if (!navigator.canShare) return true;
@@ -1477,6 +1488,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
   const [notificationFilter, setNotificationFilter] = useState("unread");
+  const [pushConfig, setPushConfig] = useState(null);
+  const [pushStatus, setPushStatus] = useState("checking");
+  const [enablingPush, setEnablingPush] = useState(false);
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
   const priorityNotifications = notifications.filter((notification) => notificationPriority(notification));
@@ -1527,6 +1541,42 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       })
       .finally(() => {
         if (!cancelled) setLoadingPreferences(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.authenticated, session?.profile?.id]);
+
+  useEffect(() => {
+    if (!session?.authenticated) return undefined;
+    let cancelled = false;
+    setPushStatus("checking");
+    api("/api/push/config")
+      .then(async (data) => {
+        if (cancelled) return;
+        setPushConfig(data);
+        if (!browserPushSupported()) {
+          setPushStatus("unsupported");
+          return;
+        }
+        if (Notification.permission === "denied") {
+          setPushStatus("denied");
+          return;
+        }
+        const registration = await navigator.serviceWorker.getRegistration();
+        if (cancelled) return;
+        if (!registration) {
+          setPushStatus("idle");
+          return;
+        }
+        const subscription = await registration.pushManager.getSubscription();
+        setPushStatus(subscription ? "registered" : "idle");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPushConfig(null);
+          setPushStatus("unavailable");
+        }
       });
     return () => {
       cancelled = true;
@@ -1590,6 +1640,73 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       setSavingPreferences(false);
     }
   }
+
+  async function enableWebPush() {
+    if (enablingPush) return;
+    if (!browserPushSupported()) {
+      setToast("這個瀏覽器暫時不支援手機提醒");
+      setPushStatus("unsupported");
+      return;
+    }
+    if (!pushConfig?.publicKey) {
+      setToast("推播金鑰尚未設定，先保留通知中心提醒");
+      setPushStatus("unavailable");
+      return;
+    }
+    setEnablingPush(true);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setPushStatus(permission === "denied" ? "denied" : "idle");
+        setToast("你還沒有允許這台裝置收提醒");
+        return;
+      }
+      const registration = await navigator.serviceWorker.getRegistration() ?? await navigator.serviceWorker.register("/sw.js");
+      const existingSubscription = await registration.pushManager.getSubscription();
+      const subscription = existingSubscription ?? await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(pushConfig.publicKey),
+      });
+      const subscriptionJson = subscription.toJSON();
+      await api("/api/devices", {
+        method: "POST",
+        body: JSON.stringify({
+          platform: "web",
+          pushToken: subscriptionJson.endpoint,
+          pushSubscription: subscriptionJson,
+          appVersion: "pwa",
+          deviceName: "Web App",
+          userAgent: navigator.userAgent,
+          locale: navigator.language,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        }),
+      });
+      setPushStatus("registered");
+      setToast("這台裝置已登記，之後接上推播發送就能收到提醒");
+    } catch (error) {
+      setPushStatus("unavailable");
+      setToast(error.message);
+    } finally {
+      setEnablingPush(false);
+    }
+  }
+
+  const pushStatusText = {
+    checking: "正在確認這台裝置是否能收提醒...",
+    idle: pushConfig?.configured ? "可以登記這台裝置，之後就能接手機提醒。" : "推播金鑰還沒設定，現在先使用通知中心提醒。",
+    registered: "這台裝置已經登記好，等後端發送流程接上就能收到提醒。",
+    denied: "這台裝置目前拒絕通知，之後要到瀏覽器或系統設定裡打開。",
+    unsupported: "這個瀏覽器暫時不支援手機提醒，通知中心仍可正常使用。",
+    unavailable: "目前還不能登記這台裝置，通知中心仍可正常使用。",
+  }[pushStatus] ?? "通知中心仍可正常使用。";
+  const pushActionDisabled =
+    enablingPush ||
+    pushStatus === "checking" ||
+    pushStatus === "registered" ||
+    pushStatus === "denied" ||
+    pushStatus === "unsupported" ||
+    !pushConfig?.configured;
+  const pushActionLabel = pushStatus === "registered" ? "這台裝置已登記" : "登記這台裝置";
 
   return (
     <>
@@ -1746,6 +1863,24 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
                 ) : null}
               </div>
             ) : null}
+          </div>
+        ) : null}
+        {session?.authenticated ? (
+          <div className="notification-preferences">
+            <div className="notification-preference-head">
+              <span className="notification-icon"><Smartphone size={18} /></span>
+              <div>
+                <strong>這台裝置要收手機提醒嗎？</strong>
+                <small>先把瀏覽器推播訂閱準備好，真正發送會在下一階段接上。</small>
+              </div>
+            </div>
+            <div className="device-push-panel">
+              <p>{pushStatusText}</p>
+              <button className="secondary-button compact" type="button" onClick={enableWebPush} disabled={pushActionDisabled}>
+                {enablingPush ? <Loader2 className="spin" size={16} /> : <BellDot size={16} />}
+                {pushActionLabel}
+              </button>
+            </div>
           </div>
         ) : null}
         {hasNotifications ? (

@@ -270,8 +270,10 @@ function deviceFromRow(row) {
     profileId: row.profile_id,
     platform: row.platform,
     pushToken: row.push_token,
+    pushSubscription: parseJson(row.push_subscription, null),
     appVersion: row.app_version,
     deviceName: row.device_name,
+    userAgent: row.user_agent,
     locale: row.locale,
     timezone: row.timezone,
     lastSeenAt: toIso(row.last_seen_at),
@@ -423,6 +425,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   const pool = new Pool({ connectionString });
   let notificationPreferenceSchemaReady = null;
   let circleNotificationPreferenceSchemaReady = null;
+  let deviceSchemaReady = null;
 
   const taskSelect = `
     SELECT
@@ -554,6 +557,17 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       `);
     }
     await circleNotificationPreferenceSchemaReady;
+  }
+
+  async function ensureDeviceSchema() {
+    if (!deviceSchemaReady) {
+      deviceSchemaReady = pool.query(`
+        ALTER TABLE devices
+          ADD COLUMN IF NOT EXISTS push_subscription jsonb,
+          ADD COLUMN IF NOT EXISTS user_agent text;
+      `);
+    }
+    await deviceSchemaReady;
   }
 
   async function getCircleNotificationPreferencesForProfile(profileId, circleId, client = pool) {
@@ -3139,9 +3153,28 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return circleNotificationPreferenceFromRow(result.rows[0]);
   }
 
+  function normalizePushSubscription(value) {
+    if (!value || typeof value !== "object") return null;
+    const endpoint = String(value.endpoint || "").trim();
+    const keys = value.keys && typeof value.keys === "object" ? value.keys : {};
+    const p256dh = String(keys.p256dh || "").trim();
+    const auth = String(keys.auth || "").trim();
+    if (!endpoint || !p256dh || !auth) {
+      throw new StoreError(400, "Web push subscription requires endpoint, p256dh, and auth");
+    }
+    return {
+      endpoint,
+      expirationTime: value.expirationTime ?? null,
+      keys: { p256dh, auth },
+    };
+  }
+
   async function registerDevice(body = {}) {
     const profile = await requireProfile(body.actor);
-    if (!body.pushToken) throw new StoreError(400, "pushToken is required");
+    await ensureDeviceSchema();
+    const pushSubscription = normalizePushSubscription(body.pushSubscription);
+    const pushToken = String(body.pushToken || pushSubscription?.endpoint || "").trim();
+    if (!pushToken) throw new StoreError(400, "pushToken is required");
     const platform = body.platform || "unknown";
     if (!["ios", "android", "web", "unknown"].includes(platform)) {
       throw new StoreError(400, `Invalid device platform: ${platform}`);
@@ -3153,19 +3186,23 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           profile_id,
           platform,
           push_token,
+          push_subscription,
           app_version,
           device_name,
+          user_agent,
           locale,
           timezone,
           last_seen_at
         )
-        VALUES ($1, $2::device_platform, $3, $4, $5, $6, $7, now())
+        VALUES ($1, $2::device_platform, $3, $4::jsonb, $5, $6, $7, $8, $9, now())
         ON CONFLICT (push_token)
         DO UPDATE SET
           profile_id = EXCLUDED.profile_id,
           platform = EXCLUDED.platform,
+          push_subscription = EXCLUDED.push_subscription,
           app_version = EXCLUDED.app_version,
           device_name = EXCLUDED.device_name,
+          user_agent = EXCLUDED.user_agent,
           locale = EXCLUDED.locale,
           timezone = EXCLUDED.timezone,
           last_seen_at = now(),
@@ -3175,8 +3212,10 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           profile_id::text,
           platform::text,
           push_token,
+          push_subscription,
           app_version,
           device_name,
+          user_agent,
           locale,
           timezone,
           last_seen_at,
@@ -3185,9 +3224,11 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       [
         profile.id,
         platform,
-        body.pushToken,
+        pushToken,
+        pushSubscription ? json(pushSubscription) : null,
         body.appVersion || null,
         body.deviceName || null,
+        body.userAgent || null,
         body.locale || profile.locale,
         body.timezone || profile.timezone,
       ],

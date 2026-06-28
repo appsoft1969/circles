@@ -56,7 +56,7 @@ Notes:
 - `auth_sessions` stores only token hashes; the raw session token is kept in an `HttpOnly` cookie.
 - `auth_oauth_states` stores short-lived state/nonce records for OAuth callbacks.
 - The migration does not add Supabase Row Level Security policies yet. Those should be added after auth flow decisions are stable.
-- `devices` is ready for Expo push tokens and notification delivery tracking.
+- `devices` is ready for Expo push tokens, Web Push subscription JSON, and notification delivery tracking.
 - `notification_preferences` stores per-profile in-app reminder preferences and future push quiet-hour settings.
 - `circle_notification_preferences` stores per-profile, per-circle reminder overrides such as temporary mute, important-only, announcement reminders, and message reminders.
 
@@ -122,7 +122,7 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
-Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, profile-level and circle-level notification preferences, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges and open conversation messages fresh with lightweight foreground polling, and has a conservative service worker for app-shell caching plus future push click handling. Preference rules affect future notification rows; they do not delete historical notification records. Real push delivery and Supabase Realtime/mobile subscriptions are still future work.
+Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, Web Push subscription storage, profile-level and circle-level notification preferences, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges and open conversation messages fresh with lightweight foreground polling, and has a conservative service worker for app-shell caching plus future push click handling. Preference rules affect future notification rows; they do not delete historical notification records. Real push delivery and Supabase Realtime/mobile subscriptions are still future work.
 
 ### Attachments And Audit
 
