@@ -72,6 +72,10 @@ a {
   border-bottom: 1px solid #dededb;
 }
 
+.topbar.has-action {
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+}
+
 .topbar-title {
   text-align: center;
   min-width: 0;
@@ -97,6 +101,20 @@ a {
 .topbar > div:last-child {
   display: grid;
   place-items: center;
+}
+
+.topbar-action-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  padding-right: 6px;
+}
+
+.topbar-action-group .icon-button {
+  width: 38px;
+  height: 42px;
+  text-decoration: none;
 }
 
 .brand-dot {

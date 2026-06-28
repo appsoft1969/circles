@@ -390,6 +390,20 @@ function shareCircleInvite(invite, setToast) {
   });
 }
 
+const taskPanelRouteSegments = {
+  responses: "responses",
+  discussion: "discussion",
+  setup: "settings",
+  history: "history",
+};
+
+const taskPanelFromRouteSegment = {
+  responses: "responses",
+  discussion: "discussion",
+  settings: "setup",
+  history: "history",
+};
+
 function resolveAppRoute(pathname, data = {}) {
   if (pathname === "/notifications") return { name: "notifications" };
   if (pathname === "/todos") return { name: "todos" };
@@ -398,9 +412,13 @@ function resolveAppRoute(pathname, data = {}) {
   if (pathname === "/create") return { name: "templates" };
   if (pathname === "/circles/new") return { name: "createCircle" };
 
-  const taskMatch = pathname.match(/^\/tasks\/([^/]+)/);
+  const taskMatch = pathname.match(/^\/tasks\/([^/]+)(?:\/([^/]+))?$/);
   if (taskMatch && data.tasks?.some((task) => task.id === taskMatch[1])) {
-    return { name: "manage", taskId: taskMatch[1] };
+    return {
+      name: "manage",
+      taskId: taskMatch[1],
+      taskPanel: taskPanelFromRouteSegment[taskMatch[2]] ?? "responses",
+    };
   }
 
   const circleChatMatch = pathname.match(/^\/circles\/([^/]+)\/chat/);
@@ -445,7 +463,10 @@ function pathForRoute(name, extra = {}, state = {}) {
   if (name === "templates") return "/create";
   if (name === "createCircle") return "/circles/new";
   if (name === "circleHome" && extra.circleId) return `/circles/${extra.circleId}`;
-  if (name === "manage" && extra.taskId) return `/tasks/${extra.taskId}`;
+  if (name === "manage" && extra.taskId) {
+    const panelSegment = taskPanelRouteSegments[extra.taskPanel];
+    return panelSegment ? `/tasks/${extra.taskId}/${panelSegment}` : `/tasks/${extra.taskId}`;
+  }
   if (name === "circleChat" && extra.circleId) return `/circles/${extra.circleId}/chat`;
   if (name === "circleSettings" && extra.circleId) return `/circles/${extra.circleId}/settings`;
   if (name === "circleAudit" && extra.circleId) return `/circles/${extra.circleId}/audit`;
@@ -712,6 +733,7 @@ function App() {
     manage: selectedTask ? (
       <TaskManage
         task={selectedTask}
+        panel={route.taskPanel}
         session={state.session}
         go={go}
         shareTask={shareTask}
@@ -920,7 +942,7 @@ function BottomNav({ routeName, unreadCount = 0, onNavigate }) {
 
 function Topbar({ title, subtitle, onBack, action }) {
   return (
-    <header className="topbar">
+    <header className={`topbar ${action ? "has-action" : ""}`}>
       <div>
         {onBack ? (
           <button className="icon-button" type="button" onClick={onBack} aria-label="返回">
@@ -5020,8 +5042,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask, onAuditChange
   );
 }
 
-function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
-  const [activePanel, setActivePanel] = useState("responses");
+function TaskManage({ task, panel = "responses", session, go, shareTask, setToast, updateTask }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
@@ -5056,7 +5077,6 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   }, [task.id]);
 
   useEffect(() => {
-    setActivePanel("responses");
     setFilter("all");
     setQuery("");
   }, [task.id]);
@@ -5204,6 +5224,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   const canManage = Boolean(permissions?.canManage);
   const canAnnounce = Boolean(permissions?.canAnnounce);
   const canExport = Boolean(permissions?.canExport);
+  const activePanel = taskPanelRouteSegments[panel] ? panel : "responses";
   const modeLabel = !permissionReady ? "確認權限" : canManage ? "管理模式" : "成員查看";
   const hasResponseFilter = filter !== "all" || Boolean(query.trim());
   const emptyResponseTitle = task.responses.length === 0 ? "還沒有人填寫" : "這裡目前沒有符合的名單";
@@ -5224,6 +5245,34 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
     canManage ? { id: "setup", step: "3", label: "設定", detail: task.status === "open" ? "編輯或關閉" : "重新開放" } : null,
     canManage ? { id: "history", step: "4", label: "紀錄", detail: `${auditEvents.length} 筆` } : null,
   ].filter(Boolean);
+  const activePanelItem = taskPanelItems.find((item) => item.id === activePanel);
+  const taskTopbarAction = !permissionReady ? (
+    <div className="topbar-action-group">
+      <button className="icon-button" type="button" disabled aria-label="確認權限" title="確認權限">
+        <Loader2 className="spin" size={18} />
+      </button>
+    </div>
+  ) : canManage ? (
+    <div className="topbar-action-group" aria-label="事項工具">
+      <button className="icon-button" type="button" onClick={() => shareTask(task)} aria-label="分享填單連結" title="分享填單連結">
+        <Share2 size={19} />
+      </button>
+      {canExport ? (
+        <a className="icon-button" href={`/api/tasks/${task.id}/export.csv`} aria-label="匯出 CSV" title="匯出 CSV">
+          <Download size={19} />
+        </a>
+      ) : null}
+      <button className="icon-button" type="button" onClick={() => go("join", { taskId: task.id })} aria-label="預覽填單" title="預覽填單">
+        <ExternalLink size={19} />
+      </button>
+    </div>
+  ) : (
+    <div className="topbar-action-group">
+      <button className="icon-button" type="button" onClick={() => go("join", { taskId: task.id })} aria-label="填寫 / 留言" title="填寫 / 留言">
+        <ExternalLink size={19} />
+      </button>
+    </div>
+  );
 
   function refreshTaskAudit() {
     setAuditRefreshKey((current) => current + 1);
@@ -5256,12 +5305,19 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
     };
   }, [task.id, canManage, auditRefreshKey]);
 
+  useEffect(() => {
+    if (permissionReady && !canManage && (activePanel === "setup" || activePanel === "history")) {
+      go("manage", { taskId: task.id, taskPanel: "responses" });
+    }
+  }, [activePanel, canManage, go, permissionReady, task.id]);
+
   return (
     <>
       <Topbar
         title={task.title}
         subtitle={`${task.circleName} · ${meta.label}`}
         onBack={() => (task.circleId ? go("circleHome", { circleId: task.circleId }) : go("dashboard"))}
+        action={taskTopbarAction}
       />
       <section className="manage-head">
         <span className={`status ${task.status}`}>{taskStatusLabel(task)}</span>
@@ -5276,32 +5332,13 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
           <span>無法讀取管理權限：{permissionError}</span>
         </section>
       ) : null}
-      <section className="action-row">
-        {!permissionReady ? (
-          <button type="button" disabled><Loader2 className="spin" size={18} />確認權限</button>
-        ) : canManage ? (
-          <>
-            <button type="button" onClick={() => shareTask(task)}><Share2 size={18} />分享填單連結</button>
-            {canExport ? <a href={`/api/tasks/${task.id}/export.csv`}><Download size={18} />匯出 CSV</a> : null}
-            <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />預覽填單</button>
-          </>
-        ) : (
-          <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />填寫 / 留言</button>
-        )}
-      </section>
       <ActionFeedback message={actionNotice} className="task-action-feedback" />
-      <section className="metric-grid">
-        <Metric value={task.stats.responses} label="回覆" />
-        <Metric value={money(task.stats.totalAmount)} label="總金額" />
-        <Metric value={task.stats.unpaid + task.stats.review} label="待付款" alert />
-        <Metric value={task.stats.pending} label={task.template === "activity" ? "待確認/參加" : "待處理"} />
-      </section>
       <section className="section task-panel-section">
         <div className="wizard-step-head">
           <span className="step-pill">處理</span>
           <div>
-            <h2>你現在要處理哪一塊？</h2>
-            <p>先選工作區，畫面只會顯示這一塊需要用到的內容。</p>
+            <h2>{activePanelItem ? `你現在在看：${activePanelItem.label}` : "你現在要處理哪一塊？"}</h2>
+            <p>點一下其他工作區，我會帶你到那一頁，只顯示那邊需要用到的內容。</p>
           </div>
         </div>
         <div className="task-panel-tabs" role="tablist" aria-label="事項工作區">
@@ -5311,8 +5348,9 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
               type="button"
               role="tab"
               aria-selected={activePanel === item.id}
+              aria-current={activePanel === item.id ? "page" : undefined}
               key={item.id}
-              onClick={() => setActivePanel(item.id)}
+              onClick={() => go("manage", { taskId: task.id, taskPanel: item.id })}
             >
               <span>{item.step}</span>
               <strong>{item.label}</strong>
