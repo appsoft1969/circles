@@ -330,6 +330,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
 - Push prompt rule: do not ask for push confirmation after every commit. Only remind the user to confirm a push when Codex judges the local commits are verified, coherent, and worth syncing to the remote repository now.
 - Do not create PRs unless explicitly requested.
 - When the user has already asked to continue autonomously, keep moving to the next concrete artifact instead of repeatedly asking for confirmation.
+- Completion update rule: after completing a task, include the recommended next progress step so the user understands what Codex plans to work on next.
 
 ## Verification Rules
 
