@@ -124,6 +124,12 @@ function circleNotificationStatus(preference) {
   return null;
 }
 
+function uniqueCircleMemberships(memberships = []) {
+  return memberships.filter(
+    (membership, index, list) => list.findIndex((item) => item.circleId === membership.circleId) === index,
+  );
+}
+
 async function api(path, options) {
   const response = await fetch(path, {
     ...options,
@@ -847,9 +853,7 @@ function CommunicationPanel({ notifications = [], session, go }) {
   const memberships = session?.memberships ?? [];
   if (!session?.authenticated || memberships.length === 0) return null;
 
-  const uniqueMemberships = memberships.filter(
-    (membership, index, list) => list.findIndex((item) => item.circleId === membership.circleId) === index,
-  );
+  const uniqueMemberships = uniqueCircleMemberships(memberships);
   const visibleMemberships = uniqueMemberships.slice(0, 4);
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
@@ -1443,6 +1447,10 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const unreadCount = unreadNotifications.length;
   const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
   const hasNotifications = notifications.length > 0;
+  const quietCircleStates = uniqueCircleMemberships(session?.memberships ?? [])
+    .map((membership) => ({ membership, status: circleNotificationStatus(membership.notificationPreference) }))
+    .filter((item) => item.status);
+  const visibleQuietCircleStates = quietCircleStates.slice(0, 3);
   const summaryTitle = !hasNotifications
     ? "這裡會放圈內提醒"
     : unreadCount > 0
@@ -1549,6 +1557,41 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
             </button>
           ) : null}
         </div>
+        {quietCircleStates.length > 0 ? (
+          <div className="notification-circle-status">
+            <div className="notification-preference-head">
+              <span className="notification-icon"><Bell size={18} /></span>
+              <div>
+                <strong>{quietCircleStates.length} 個圈子現在比較安靜</strong>
+                <small>你有設定靜音或只收部分提醒，普通討論可能不會出現在這裡。</small>
+              </div>
+            </div>
+            <div className="circle-status-list">
+              {visibleQuietCircleStates.map(({ membership, status }) => (
+                <button
+                  className="circle-status-row"
+                  type="button"
+                  key={membership.id}
+                  onClick={() => go("circleChat", { circleId: membership.circleId })}
+                >
+                  <span>
+                    <strong>{membership.circleName}</strong>
+                    <small>{membershipRoleLabels[membership.role] ?? membership.role} · 點一下去調整</small>
+                  </span>
+                  <span className={`circle-status-badge ${status.tone}`}>
+                    <Bell size={13} />
+                    {status.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+            {quietCircleStates.length > visibleQuietCircleStates.length ? (
+              <small className="circle-status-more">
+                還有 {quietCircleStates.length - visibleQuietCircleStates.length} 個圈子也有提醒設定
+              </small>
+            ) : null}
+          </div>
+        ) : null}
         {session?.authenticated ? (
           <div className="notification-preferences">
             <div className="notification-preference-head">
