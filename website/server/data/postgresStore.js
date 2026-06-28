@@ -65,6 +65,23 @@ function positiveInteger(value, fallback = 0) {
   return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
+function countValue(value) {
+  return Number(value || 0);
+}
+
+function webPushStatusAdminEmails() {
+  return new Set(
+    [
+      "appsoft.1969@gmail.com",
+      "kevin@example.com",
+      process.env.OPS_PROFILE_EMAIL,
+      ...(process.env.WEB_PUSH_STATUS_EMAILS || "").split(","),
+    ]
+      .map((email) => String(email || "").trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 const taskStatuses = new Set(["draft", "open", "closed", "completed", "cancelled", "archived"]);
 const paymentStatuses = new Set(["not_required", "unpaid", "review", "paid", "refunded", "cancelled", "failed"]);
 const fulfillmentStatuses = new Set(["pending", "picked_up", "attending", "maybe", "completed", "cancelled", "no_show"]);
@@ -426,6 +443,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   let notificationPreferenceSchemaReady = null;
   let circleNotificationPreferenceSchemaReady = null;
   let deviceSchemaReady = null;
+  let deliverySchemaReady = null;
 
   const taskSelect = `
     SELECT
@@ -568,6 +586,21 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       `);
     }
     await deviceSchemaReady;
+  }
+
+  async function ensureDeliverySchema() {
+    if (!deliverySchemaReady) {
+      deliverySchemaReady = pool.query(`
+        ALTER TABLE notification_deliveries
+          ADD COLUMN IF NOT EXISTS attempt_count int NOT NULL DEFAULT 0,
+          ADD COLUMN IF NOT EXISTS last_attempt_at timestamptz;
+
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_notification_deliveries_push_device
+          ON notification_deliveries (notification_id, device_id, channel)
+          WHERE device_id IS NOT NULL;
+      `);
+    }
+    await deliverySchemaReady;
   }
 
   async function getCircleNotificationPreferencesForProfile(profileId, circleId, client = pool) {
@@ -3237,6 +3270,78 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return deviceFromRow(result.rows[0]);
   }
 
+  async function getWebPushStatus(actor = {}) {
+    const profile = await requireProfile(actor);
+    const email = String(profile.email || "").trim().toLowerCase();
+    if (!email || !webPushStatusAdminEmails().has(email)) {
+      throw new StoreError(403, "Web Push status requires station admin access");
+    }
+
+    await ensureDeviceSchema();
+    await ensureDeliverySchema();
+
+    const [deviceCounts, deliveryCounts, recentFailures] = await Promise.all([
+      pool.query(`
+        SELECT
+          count(*)::int AS total,
+          count(*) FILTER (WHERE revoked_at IS NULL)::int AS active,
+          count(*) FILTER (WHERE revoked_at IS NOT NULL)::int AS revoked
+        FROM devices
+        WHERE push_subscription IS NOT NULL
+      `),
+      pool.query(`
+        SELECT status::text, count(*)::int
+        FROM notification_deliveries
+        WHERE channel = 'push'
+        GROUP BY status
+        ORDER BY status
+      `),
+      pool.query(`
+        SELECT
+          nd.id::text,
+          nd.notification_id::text,
+          nd.device_id::text,
+          nd.status::text,
+          nd.attempt_count,
+          nd.error_text,
+          nd.last_attempt_at,
+          nd.created_at,
+          n.title AS notification_title
+        FROM notification_deliveries nd
+        LEFT JOIN notifications n ON n.id = nd.notification_id
+        WHERE nd.channel = 'push'
+          AND nd.status = 'failed'
+        ORDER BY COALESCE(nd.last_attempt_at, nd.created_at) DESC
+        LIMIT 10
+      `),
+    ]);
+
+    const devices = deviceCounts.rows[0] || {};
+    return {
+      generatedAt: new Date().toISOString(),
+      configured: Boolean(process.env.WEB_PUSH_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY),
+      devices: {
+        total: countValue(devices.total),
+        active: countValue(devices.active),
+        revoked: countValue(devices.revoked),
+      },
+      deliveries: Object.fromEntries(
+        deliveryCounts.rows.map((row) => [row.status, countValue(row.count)]),
+      ),
+      recentFailures: recentFailures.rows.map((row) => ({
+        id: row.id,
+        notificationId: row.notification_id,
+        notificationTitle: row.notification_title,
+        deviceId: row.device_id,
+        status: row.status,
+        attemptCount: countValue(row.attempt_count),
+        errorText: row.error_text,
+        lastAttemptAt: toIso(row.last_attempt_at),
+        createdAt: toIso(row.created_at),
+      })),
+    };
+  }
+
   async function listNotifications(actor = {}) {
     const profile = await requireProfile(actor);
     const result = await pool.query(
@@ -3408,6 +3513,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     getCircleNotificationPreferences,
     updateCircleNotificationPreferences,
     registerDevice,
+    getWebPushStatus,
     listNotifications,
     markNotificationRead,
     markAllNotificationsRead,

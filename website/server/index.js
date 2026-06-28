@@ -399,6 +399,11 @@ app.get("/api/push/config", route(async (req, res) => {
   res.json(webPushConfig());
 }));
 
+app.get("/api/push/status", route(async (req, res) => {
+  const status = await store.getWebPushStatus(actorFromRequest(req));
+  res.json({ status });
+}));
+
 app.post("/api/devices", route(async (req, res) => {
   const device = await store.registerDevice({
     ...(req.body ?? {}),

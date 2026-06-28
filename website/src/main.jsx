@@ -83,8 +83,21 @@ const membershipRoleLabels = {
   guest: "訪客",
 };
 
+const pushDeliveryLabels = {
+  queued: "等著送",
+  sent: "已送出",
+  delivered: "已送達",
+  read: "已讀",
+  failed: "失敗",
+  cancelled: "已取消",
+};
+
 function money(value) {
   return `NT$${Number(value || 0).toLocaleString("zh-TW")}`;
+}
+
+function countText(value) {
+  return Number(value || 0).toLocaleString("zh-TW");
 }
 
 function formatDateTime(value) {
@@ -220,6 +233,7 @@ function shareCircleInvite(invite, setToast) {
 
 function resolveAppRoute(pathname, data = {}) {
   if (pathname === "/notifications") return { name: "notifications" };
+  if (pathname === "/ops/push") return { name: "pushOps" };
   if (pathname === "/create") return { name: "templates" };
   if (pathname === "/circles/new") return { name: "createCircle" };
 
@@ -244,6 +258,7 @@ function resolveAppRoute(pathname, data = {}) {
 function pathForRoute(name, extra = {}, state = {}) {
   if (name === "dashboard") return "/";
   if (name === "notifications") return "/notifications";
+  if (name === "pushOps") return "/ops/push";
   if (name === "templates") return "/create";
   if (name === "createCircle") return "/circles/new";
   if (name === "manage" && extra.taskId) return `/tasks/${extra.taskId}`;
@@ -474,6 +489,13 @@ function App() {
         session={state.session}
         go={go}
         refresh={refresh}
+        setToast={setToast}
+      />
+    ),
+    pushOps: (
+      <WebPushStatus
+        session={state.session}
+        go={go}
         setToast={setToast}
       />
     ),
@@ -1477,6 +1499,151 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
           )}
         </>
       )}
+    </>
+  );
+}
+
+function WebPushStatus({ session, go }) {
+  const [report, setReport] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  async function loadReport() {
+    if (!session?.authenticated) {
+      setReport(null);
+      setError("請先用站務帳號登入，登入後再回來看推播狀態。");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api("/api/push/status");
+      setReport(data.status);
+    } catch (loadError) {
+      setReport(null);
+      setError(loadError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadReport();
+  }, [session?.authenticated, session?.profile?.id]);
+
+  const failedCount = report?.deliveries?.failed ?? 0;
+  const activeDevices = report?.devices?.active ?? 0;
+  const summaryTitle = !report
+    ? "正在讀取推播狀態"
+    : !report.configured
+      ? "推播金鑰還沒設定好"
+      : failedCount > 0
+        ? `有 ${failedCount} 筆推播送失敗`
+        : activeDevices > 0
+          ? "目前推播看起來正常"
+          : "還沒有裝置登記推播";
+  const summaryBody = !report
+    ? "等一下就能看到目前裝置與派送狀態。"
+    : !report.configured
+      ? "先把 Web Push VAPID 金鑰放進正式環境，手機提醒才會開始送。"
+      : failedCount > 0
+        ? "先看下面最近失敗的原因，通常是瀏覽器訂閱過期或裝置拒收。"
+        : activeDevices > 0
+          ? "目前有可用裝置，新的圈內提醒會由排程送到支援的瀏覽器。"
+          : "等使用者在通知中心登記這台裝置後，這裡會開始出現可推播裝置。";
+
+  return (
+    <>
+      <Topbar title="推播狀態" subtitle="站務檢查" onBack={() => go("dashboard")} />
+      <section className="section ops-status-section">
+        {loading ? (
+          <div className="ops-status-summary">
+            <span className="notification-icon"><Loader2 className="spin" size={18} /></span>
+            <div>
+              <strong>正在幫你檢查推播狀態</strong>
+              <p>會看目前金鑰、已登記裝置、派送結果和最近失敗記錄。</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="ops-status-summary attention">
+            <span className="notification-icon"><ShieldCheck size={18} /></span>
+            <div>
+              <strong>目前不能看推播狀態</strong>
+              <p>{error === "Web Push status requires station admin access" ? "這個頁面只開放站務帳號查看。" : error}</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={`ops-status-summary ${failedCount > 0 || !report.configured ? "attention" : "ok"}`}>
+              <span className="notification-icon"><BellDot size={18} /></span>
+              <div>
+                <strong>{summaryTitle}</strong>
+                <p>{summaryBody}</p>
+                <small>最後更新：{formatDateTime(report.generatedAt)}</small>
+              </div>
+              <button className="secondary-button compact" type="button" onClick={loadReport}>
+                重新整理
+              </button>
+            </div>
+
+            <div className="ops-metric-grid">
+              <div className="ops-metric-card">
+                <span><Smartphone size={18} /> 可推播裝置</span>
+                <strong>{countText(report.devices.active)}</strong>
+                <small>全部 {countText(report.devices.total)} 台，停用 {countText(report.devices.revoked)} 台</small>
+              </div>
+              <div className="ops-metric-card">
+                <span><Bell size={18} /> 已送出</span>
+                <strong>{countText(report.deliveries.sent)}</strong>
+                <small>排隊 {countText(report.deliveries.queued)} 筆</small>
+              </div>
+              <div className="ops-metric-card">
+                <span><ShieldCheck size={18} /> 失敗</span>
+                <strong>{countText(failedCount)}</strong>
+                <small>會依排程自動重試，過期訂閱會被停用</small>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
+
+      {!loading && !error && report ? (
+        <section className="section ops-status-section">
+          <div className="notification-preference-head">
+            <span className="notification-icon"><ReceiptText size={18} /></span>
+            <div>
+              <strong>最近有沒有送失敗？</strong>
+              <small>這裡先列最近 10 筆，方便站務判斷是不是裝置訂閱過期或暫時送不出去。</small>
+            </div>
+          </div>
+
+          {report.recentFailures.length === 0 ? (
+            <p className="empty-note">目前沒有失敗記錄。</p>
+          ) : (
+            <div className="ops-failure-list">
+              {report.recentFailures.map((failure) => (
+                <article className="ops-failure-row" key={failure.id}>
+                  <div>
+                    <strong>{failure.notificationTitle || "圈內推播"}</strong>
+                    <small>{failure.errorText || "沒有錯誤訊息"} · 嘗試 {countText(failure.attemptCount)} 次</small>
+                  </div>
+                  <span>{formatDateTime(failure.lastAttemptAt || failure.createdAt)}</span>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <div className="ops-delivery-breakdown">
+            {Object.entries(pushDeliveryLabels).map(([status, label]) => (
+              <span key={status}>
+                <strong>{countText(report.deliveries[status])}</strong>
+                {label}
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

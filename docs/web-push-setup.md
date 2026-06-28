@@ -9,6 +9,7 @@ Current status:
 - `POST /api/devices` accepts both legacy `pushToken` values and full Web Push subscriptions.
 - The notification center can register the current browser/device when Web Push is configured and supported.
 - `npm run push:send` can deliver queued unread notification rows to registered Web Push devices.
+- `GET /api/push/status` and `/ops/push` expose a station-admin delivery report for device counts, delivery counts, and recent failures.
 - Notifications still rely on in-app rows and foreground polling as the primary MVP behavior until push delivery is scheduled and monitored.
 
 ## Generate VAPID Keys
@@ -66,6 +67,12 @@ cd website
 npm run push:status
 ```
 
+Check the same status inside the app with a station-admin session:
+
+```text
+https://useincircle.app/ops/push
+```
+
 Install or reload the local Mac scheduled delivery job:
 
 ```bash
@@ -82,10 +89,13 @@ The delivery script:
 - Retries failed deliveries up to `PUSH_MAX_ATTEMPTS` times, waiting `PUSH_RETRY_AFTER_MINUTES` between attempts.
 - Revokes expired browser subscriptions when the push provider returns `404` or `410`.
 
-## Next Delivery Step
+## In-App Delivery Report
 
-The next implementation step is delivery observability:
+The station-admin report at `/ops/push` shows:
 
-- Add a small admin-only in-app delivery report for failed/revoked push attempts.
+- whether Web Push keys are configured
+- total, active, and revoked Web Push browser devices
+- delivery counts by status
+- the 10 most recent failed Web Push deliveries
 
 `npm run ops:status` now checks that the local `com.useincircle.web-push` launchd job is loaded, exits cleanly, and has recent output.

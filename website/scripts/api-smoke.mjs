@@ -694,6 +694,13 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(webPushDevice.body.device.pushToken, webPushEndpoint);
       assert.equal(webPushDevice.body.device.pushSubscription.endpoint, webPushEndpoint);
 
+      const pushStatus = await request(baseUrl, "/api/push/status", { headers: sessionHeaders });
+      assert.equal(typeof pushStatus.body.status.configured, "boolean");
+      assert.equal(typeof pushStatus.body.status.devices.active, "number");
+      assert.ok(pushStatus.body.status.devices.active >= 1, `${label}: expected active Web Push device count`);
+      assert.equal(typeof pushStatus.body.status.deliveries, "object");
+      assert.ok(Array.isArray(pushStatus.body.status.recentFailures), `${label}: expected recent push failures array`);
+
       const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
 
@@ -984,7 +991,13 @@ async function main() {
   await assertPostgresReady();
   await runApiFlow({
     label: "postgres",
-    env: { DATA_STORE: "postgres", DATABASE_URL: postgresUrl, AUTH_DEV_LOGIN_ENABLED: "1", AUTH_COOKIE_SECURE: "0" },
+    env: {
+      DATA_STORE: "postgres",
+      DATABASE_URL: postgresUrl,
+      AUTH_DEV_LOGIN_ENABLED: "1",
+      AUTH_COOKIE_SECURE: "0",
+      WEB_PUSH_STATUS_EMAILS: "kevin@example.com",
+    },
     cleanupCreatedTask: cleanupPostgresTask,
     cleanupCreatedPushToken: cleanupPostgresPushToken,
     cleanupCreatedInviteData: cleanupPostgresInviteData,
