@@ -59,6 +59,13 @@ cd website
 npm run push:send
 ```
 
+Install or reload the local Mac scheduled delivery job:
+
+```bash
+cd website
+npm run launchd:push:reload
+```
+
 The delivery script:
 
 - Reads queued unread `notifications`.
@@ -71,6 +78,5 @@ The delivery script:
 
 The next implementation step is scheduling and monitoring:
 
-- Add a launchd job for `npm run push:send`.
 - Include push-delivery health in `npm run ops:status`.
 - Decide retry policy for transient failed deliveries.

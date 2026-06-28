@@ -14,6 +14,8 @@
     "ops:status": "node --no-warnings scripts/ops-health-check.mjs",
     "launchd:api:install": "node --no-warnings scripts/install-local-api-launchagent.mjs",
     "launchd:api:reload": "node --no-warnings scripts/install-local-api-launchagent.mjs --reload",
+    "launchd:push:install": "node --no-warnings scripts/install-local-push-launchagent.mjs",
+    "launchd:push:reload": "node --no-warnings scripts/install-local-push-launchagent.mjs --reload",
     "membership:grant": "node --no-warnings scripts/grant-circle-access.mjs",
     "test:api": "node --no-warnings scripts/api-smoke.mjs",
     "icons:pwa": "node --no-warnings scripts/generate-pwa-icons.mjs",
