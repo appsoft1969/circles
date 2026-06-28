@@ -1616,19 +1616,23 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
     <>
       <Topbar title="圈內討論" subtitle={circleName} onBack={() => go("dashboard")} />
       {loading ? (
-        <section className="section"><p className="empty-note">讀取討論...</p></section>
+        <section className="section"><p className="empty-note">我正在幫你讀取討論...</p></section>
       ) : error ? (
-        <section className="section"><p className="empty-note">無法讀取討論：{error}</p></section>
+        <section className="section"><p className="empty-note">這個討論暫時讀不到：{error}</p></section>
       ) : (
         <>
           <section className="section conversation-section">
-            <SectionTitle title="討論串" action="新增" onClick={createConversation} />
+            <SectionTitle title="討論串" action="開一串" onClick={createConversation} />
             {conversations.length === 0 ? (
-              <div className="empty-action">
-                <p className="empty-note">目前沒有討論。</p>
+              <div className="empty-action conversation-empty">
+                <span className="conversation-icon"><MessageCircle size={18} /></span>
+                <div>
+                  <strong>還沒有圈內討論</strong>
+                  <p>臨時要通知大家、約時間、問誰方便，都可以先開一串。</p>
+                </div>
                 <button className="primary-button" type="button" onClick={createConversation}>
                   <MessageCircle size={18} />
-                  建立圈內討論
+                  開一串討論
                 </button>
               </div>
             ) : (
@@ -1654,8 +1658,13 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
           {selectedConversation ? (
             <section className="section message-section">
               <SectionTitle title={selectedConversation.title} />
-              {messagesLoading ? <p className="empty-note">讀取訊息...</p> : null}
-              {!messagesLoading && messages.length === 0 ? <p className="empty-note">目前沒有訊息。</p> : null}
+              {messagesLoading ? <p className="empty-note">我正在讀這串訊息...</p> : null}
+              {!messagesLoading && messages.length === 0 ? (
+                <div className="message-empty">
+                  <strong>這串還沒有人說話</strong>
+                  <small>可以直接留下集合時間、取餐提醒，或需要大家回覆的事項。</small>
+                </div>
+              ) : null}
               <div className="message-list">
                 {messages.map((message) => (
                   <article
@@ -1672,11 +1681,11 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
                 <textarea
                   value={messageBody}
                   onChange={(event) => setMessageBody(event.target.value)}
-                  placeholder="輸入圈內訊息"
+                  placeholder="例如：今天 12:20 在一樓集合"
                 />
                 <button className="primary-button" type="button" onClick={sendMessage} disabled={sending || !messageBody.trim()}>
                   {sending ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-                  送出
+                  送出訊息
                 </button>
               </div>
             </section>
