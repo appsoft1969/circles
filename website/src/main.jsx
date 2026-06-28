@@ -400,6 +400,7 @@ const taskPanelRouteSegments = {
 const taskPanelFromRouteSegment = {
   responses: "responses",
   discussion: "discussion",
+  setup: "setup",
   settings: "setup",
   history: "history",
 };
@@ -5436,10 +5437,38 @@ function TaskManage({ task, panel = "responses", session, go, shareTask, setToas
             ? "目前沒有待處理的名單。"
             : "目前沒有符合條件的名單。";
   const taskPanelItems = [
-    { id: "responses", step: "1", label: "名單/付款", detail: `${task.responses.length} 筆` },
-    { id: "discussion", step: "2", label: "公告討論", detail: task.announcements?.length ? `${task.announcements.length} 則公告` : "通知與留言" },
-    canManage ? { id: "setup", step: "3", label: "設定", detail: task.status === "open" ? "編輯或關閉" : "重新開放" } : null,
-    canManage ? { id: "history", step: "4", label: "紀錄", detail: `${auditEvents.length} 筆` } : null,
+    {
+      id: "responses",
+      step: "1",
+      label: "名單/付款",
+      detail: `${task.responses.length} 筆`,
+      headline: "先看誰填了、誰還沒處理",
+      description: "名單、付款與取貨狀態都放在這裡；要換工作區，再點下面的選項。",
+    },
+    {
+      id: "discussion",
+      step: "2",
+      label: "公告討論",
+      detail: task.announcements?.length ? `${task.announcements.length} 則公告` : "通知與留言",
+      headline: "要通知大家或接著討論嗎？",
+      description: "臨時改地點、取餐提醒或補充說明，都先放在這裡和圈內同步。",
+    },
+    canManage ? {
+      id: "setup",
+      step: "3",
+      label: "設定",
+      detail: task.status === "open" ? "編輯或關閉" : "重新開放",
+      headline: "要調整這件事的設定嗎？",
+      description: "只有主揪或管理者會看到這裡；細節需要改時再進來處理。",
+    } : null,
+    canManage ? {
+      id: "history",
+      step: "4",
+      label: "紀錄",
+      detail: `${auditEvents.length} 筆`,
+      headline: "想回頭看誰改了什麼？",
+      description: "最近的付款、公告、設定和成員相關變更，會整理在這裡。",
+    } : null,
   ].filter(Boolean);
   const activePanelItem = taskPanelItems.find((item) => item.id === activePanel);
   const taskTopbarAction = !permissionReady ? (
@@ -5533,8 +5562,8 @@ function TaskManage({ task, panel = "responses", session, go, shareTask, setToas
         <div className="wizard-step-head">
           <span className="step-pill">處理</span>
           <div>
-            <h2>{activePanelItem ? `你現在在看：${activePanelItem.label}` : "你現在要處理哪一塊？"}</h2>
-            <p>要換工作區，點下面切換；畫面只保留目前這一塊要用到的內容。</p>
+            <h2>{activePanelItem?.headline ?? "你現在要處理哪一塊？"}</h2>
+            <p>{activePanelItem?.description ?? "先選一個工作區，畫面只會保留這一塊需要用到的內容。"}</p>
           </div>
         </div>
         <div className="task-panel-tabs" role="tablist" aria-label="事項工作區">
