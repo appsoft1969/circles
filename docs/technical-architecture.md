@@ -416,6 +416,7 @@ npm run push:vapid
 npm run push:send -- --dry-run
 npm run push:status
 npm run build
+npm run verify
 ```
 
 `npm run test:api` starts temporary API servers on free ports and verifies the core task workflow against both SQLite and local Postgres:

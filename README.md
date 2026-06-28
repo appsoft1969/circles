@@ -81,6 +81,15 @@ npm run test:api
 
 This runs the same create-task, task edit, interest-check conversion, announcement, comment, share-response, status-update, and CSV flow against SQLite and local Postgres. It also verifies session/membership/permission APIs, plus Postgres-only conversation, message read, notification-list, and device-registration scaffolding.
 
+Standard verified checkpoint:
+
+```bash
+cd website
+npm run verify
+```
+
+This runs the production frontend build, API smoke tests, Web Push delivery dry-run, and public ops status check.
+
 Postgres backup and restore drill:
 
 ```bash

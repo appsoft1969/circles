@@ -23,6 +23,7 @@
     "push:send": "node --no-warnings scripts/send-web-push-notifications.mjs",
     "push:status": "node --no-warnings scripts/web-push-status.mjs",
     "build": "vite build",
+    "verify": "npm run build && npm run test:api && npm run push:send -- --dry-run && npm run ops:status",
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {

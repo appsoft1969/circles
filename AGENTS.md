@@ -348,6 +348,14 @@ docker compose --profile postgres --profile tools --profile storage up -d
 
 ## Verification Rules
 
+- For a standard verified checkpoint after low-risk website/API work, run from `website/`:
+
+```bash
+npm run verify
+```
+
+This runs the production frontend build, SQLite/Postgres API smoke tests, Web Push delivery dry-run, and public ops status check.
+
 - For website changes, run from `website/`:
 
 ```bash
