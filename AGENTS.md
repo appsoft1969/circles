@@ -325,7 +325,9 @@ docker compose --profile postgres --profile tools --profile storage up -d
 - Task announcements, task comments, and Postgres conversations are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.
 - Do not enforce auth on public share-link response submission yet; the participant no-install `/join/:token` flow is still a core MVP constraint.
 - Do not remove or overwrite user-created work.
-- Do not commit, stage, push, or create PRs unless explicitly requested.
+- Commit rule: when a coherent, verified unit of work is complete and committing would reduce risk or preserve a stable checkpoint, Codex may proactively stage and commit that unit without waiting for another explicit user prompt.
+- Push rule: never push without asking the user for confirmation first, even when the local commit is ready.
+- Do not create PRs unless explicitly requested.
 - When the user has already asked to continue autonomously, keep moving to the next concrete artifact instead of repeatedly asking for confirmation.
 
 ## Verification Rules
@@ -343,6 +345,7 @@ npm run seed
 npm run test:api
 curl -s http://127.0.0.1:8787/api/health
 curl -s http://127.0.0.1:8787/api/bootstrap
+curl -s -H "x-incircle-profile-email: kevin@example.com" http://127.0.0.1:8787/api/bootstrap
 ```
 
 - `npm run test:api` expects local Homebrew Postgres at `127.0.0.1:5434` unless `API_SMOKE_DATABASE_URL` overrides it or `SKIP_POSTGRES_SMOKE=1` is explicitly set.

@@ -108,8 +108,19 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(health.ok, true);
     log(`${label}: ${health.backend} API ready on ${port}`);
 
-    const bootstrap = await request(baseUrl, "/api/bootstrap");
-    assert.ok(bootstrap.body.circles.length >= 1, `${label}: expected at least one circle`);
+    const anonymousBootstrap = await request(baseUrl, "/api/bootstrap");
+    assert.ok(
+      anonymousBootstrap.body.templates.some((template) => template.id === "interest_check"),
+      `${label}: expected anonymous bootstrap interest_check template`,
+    );
+    if (label === "postgres") {
+      assert.equal(anonymousBootstrap.body.circles.length, 0, `${label}: anonymous bootstrap should not expose circles`);
+      assert.equal(anonymousBootstrap.body.tasks.length, 0, `${label}: anonymous bootstrap should not expose tasks`);
+    }
+
+    const bootstrap = await request(baseUrl, "/api/bootstrap", { headers: actorHeaders });
+    assert.ok(bootstrap.body.circles.length >= 1, `${label}: expected at least one visible circle`);
+    assert.ok(bootstrap.body.tasks.length >= 1, `${label}: expected at least one visible task`);
     assert.ok(bootstrap.body.templates.length >= 9, `${label}: expected task templates`);
     assert.ok(
       bootstrap.body.templates.some((template) => template.id === "interest_check"),
@@ -156,6 +167,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(cookieSession.body.authenticated, true);
       assert.equal(cookieSession.body.profile.email, "kevin@example.com");
 
+      const cookieBootstrap = await request(baseUrl, "/api/bootstrap", { headers: sessionHeaders });
+      assert.ok(cookieBootstrap.body.circles.length >= 1, `${label}: expected cookie bootstrap circles`);
+      assert.ok(cookieBootstrap.body.tasks.length >= 1, `${label}: expected cookie bootstrap tasks`);
+
       const anonymousCreate = await fetch(`${baseUrl}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -167,6 +182,9 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         }),
       });
       assert.equal(anonymousCreate.status, 401, `${label}: anonymous task creation should require login`);
+
+      const anonymousTaskRead = await fetch(`${baseUrl}/api/tasks/${cookieBootstrap.body.tasks[0].id}`);
+      assert.equal(anonymousTaskRead.status, 401, `${label}: anonymous direct task read should require login`);
     }
 
     const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });

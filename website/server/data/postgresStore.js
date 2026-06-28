@@ -789,6 +789,32 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return { profile, task };
   }
 
+  async function requireTaskReader(taskId, actor = {}, client = pool) {
+    const profile = await requireProfile(actor, client);
+    const result = await client.query(
+      `
+        SELECT
+          t.id::text,
+          t.circle_id::text,
+          cm.role::text AS membership_role
+        FROM tasks t
+        JOIN circles c ON c.id = t.circle_id
+        JOIN circle_memberships cm
+          ON cm.circle_id = t.circle_id
+         AND cm.profile_id = $2
+         AND cm.status = 'active'
+        WHERE t.id::text = $1
+          AND t.archived_at IS NULL
+          AND c.archived_at IS NULL
+        LIMIT 1
+      `,
+      [taskId, profile.id],
+    );
+    const task = result.rows[0];
+    if (!task) throw new StoreError(404, "Task not found");
+    return { profile, task };
+  }
+
   function normalizeInviteCode(code) {
     const cleaned = String(code || "").trim();
     if (!cleaned) throw new StoreError(400, "Invite code is required");
@@ -1246,7 +1272,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       profileId: profile?.id ?? null,
       circleId: task.circle_id,
       role: membership?.role ?? null,
-      canRead: true,
+      canRead: Boolean(membership),
       canComment: Boolean(membership) || task.status === "open",
       canRespond: task.status === "open",
       canManage,
@@ -1389,12 +1415,32 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     });
   }
 
-  async function listTasks() {
-    const result = await pool.query(`${taskSelect} ORDER BY t.created_at DESC`);
+  async function listTasks(actor = null) {
+    if (!actor) {
+      const result = await pool.query(`${taskSelect} ORDER BY t.created_at DESC`);
+      return hydrateTasks(result.rows);
+    }
+
+    const profile = await requireProfile(actor);
+    const result = await pool.query(
+      `
+        ${taskSelect}
+          AND EXISTS (
+            SELECT 1
+            FROM circle_memberships cm
+            WHERE cm.circle_id = t.circle_id
+              AND cm.profile_id::text = $1
+              AND cm.status = 'active'
+          )
+        ORDER BY t.created_at DESC
+      `,
+      [profile.id],
+    );
     return hydrateTasks(result.rows);
   }
 
-  async function getTask(taskId) {
+  async function getTask(taskId, actor = null) {
+    if (actor) await requireTaskReader(taskId, actor);
     const result = await pool.query(`${taskSelect} AND t.id::text = $1 LIMIT 1`, [taskId]);
     const tasks = await hydrateTasks(result.rows);
     return tasks[0] ?? null;
@@ -1406,30 +1452,51 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return tasks[0] ?? null;
   }
 
-  async function getBootstrap() {
-    const [circlesResult, templatesResult, tasks] = await Promise.all([
-      pool.query(`
+  async function getBootstrap(actor = {}) {
+    const profile = await resolveProfile(actor);
+    const templatesResult = await pool.query(`
+      SELECT id, display_name
+      FROM task_templates
+      WHERE is_active = true
+      ORDER BY sort_order ASC
+    `);
+
+    if (!profile) {
+      return {
+        circles: [],
+        tasks: [],
+        templates: templatesResult.rows.map((template) => ({
+          id: template.id,
+          label: template.display_name,
+        })),
+      };
+    }
+
+    const [circlesResult, tasks] = await Promise.all([
+      pool.query(
+        `
         SELECT
           c.id::text,
           c.name,
           c.description,
           c.invite_code,
-          COUNT(cm.id)::int AS member_count
+          (
+            SELECT COUNT(active_cm.id)::int
+            FROM circle_memberships active_cm
+            WHERE active_cm.circle_id = c.id
+              AND active_cm.status = 'active'
+          ) AS member_count
         FROM circles c
-        LEFT JOIN circle_memberships cm
-          ON cm.circle_id = c.id
-         AND cm.status = 'active'
+        JOIN circle_memberships viewer_cm
+          ON viewer_cm.circle_id = c.id
+         AND viewer_cm.profile_id = $1
+         AND viewer_cm.status = 'active'
         WHERE c.archived_at IS NULL
-        GROUP BY c.id
         ORDER BY c.created_at ASC
-      `),
-      pool.query(`
-        SELECT id, display_name
-        FROM task_templates
-        WHERE is_active = true
-        ORDER BY sort_order ASC
-      `),
-      listTasks(),
+      `,
+        [profile.id],
+      ),
+      listTasks({ profileId: profile.id }),
     ]);
 
     return {

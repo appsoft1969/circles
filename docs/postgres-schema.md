@@ -193,7 +193,7 @@ The initial migration has been verified locally with:
 - 1 seeded task comment.
 - Re-runnable migration behavior.
 - Re-runnable seed behavior.
-- Postgres API task reads through `GET /api/bootstrap`, `GET /api/tasks/:taskId`, and `GET /api/share/:token`.
+- Postgres API task reads through member-scoped `GET /api/bootstrap`, member-scoped `GET /api/tasks/:taskId`, and public `GET /api/share/:token`.
 - Postgres API session/membership support through `GET /api/session`, `GET /api/circles/:circleId/members`, and `GET /api/tasks/:taskId/permissions`.
 - Postgres API task creation through `POST /api/tasks`, requiring authenticated `owner` / `admin` circle membership.
 - Postgres API task edits through `PATCH /api/tasks/:taskId`, requiring the task creator or active circle `owner` / `admin`.

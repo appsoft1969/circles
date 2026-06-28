@@ -28,6 +28,7 @@ const maxBackupAgeHours = Number(process.env.MAX_BACKUP_AGE_HOURS || 36);
 const minCircles = Number(process.env.MIN_BOOTSTRAP_CIRCLES || 1);
 const minTasks = Number(process.env.MIN_BOOTSTRAP_TASKS || 1);
 const minTemplates = Number(process.env.MIN_BOOTSTRAP_TEMPLATES || 9);
+const opsProfileEmail = process.env.OPS_PROFILE_EMAIL || "appsoft.1969@gmail.com";
 
 function log(message) {
   console.log(`[ops-health] ${message}`);
@@ -39,14 +40,14 @@ function assertPositiveNumber(name, value) {
   }
 }
 
-async function fetchJson(path) {
+async function fetchJson(path, headers = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
 
   try {
     const response = await fetch(`${publicBaseUrl}${path}`, {
       signal: controller.signal,
-      headers: { accept: "application/json" },
+      headers: { accept: "application/json", ...headers },
     });
     const text = await response.text();
     let json = null;
@@ -65,6 +66,10 @@ async function fetchJson(path) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function opsProfileHeaders() {
+  return opsProfileEmail ? { "x-incircle-profile-email": opsProfileEmail } : {};
 }
 
 async function fetchText(path = "/") {
@@ -286,25 +291,58 @@ async function checkApiHealth(failures) {
 
 async function checkBootstrap(failures) {
   try {
-    const result = await fetchJson("/api/bootstrap");
-    const circles = result.json?.circles || [];
-    const tasks = result.json?.tasks || [];
-    const templates = result.json?.templates || [];
+    const anonymous = await fetchJson("/api/bootstrap");
+    const anonymousCircles = anonymous.json?.circles || [];
+    const anonymousTasks = anonymous.json?.tasks || [];
+    const anonymousTemplates = anonymous.json?.templates || [];
+    const scoped = await fetchJson("/api/bootstrap", opsProfileHeaders());
+    const circles = scoped.json?.circles || [];
+    const tasks = scoped.json?.tasks || [];
+    const templates = scoped.json?.templates || [];
 
-    if (!result.ok) pushFailure(failures, `bootstrap returned HTTP ${result.status}`);
+    if (!anonymous.ok) pushFailure(failures, `anonymous bootstrap returned HTTP ${anonymous.status}`);
+    if (!Array.isArray(anonymousTemplates) || anonymousTemplates.length < minTemplates) {
+      pushFailure(failures, `anonymous bootstrap templates count is below ${minTemplates}`);
+    }
+    if (expectedBackend === "postgres") {
+      if (Array.isArray(anonymousCircles) && anonymousCircles.length > 0) {
+        pushFailure(failures, "anonymous bootstrap exposed circles");
+      }
+      if (Array.isArray(anonymousTasks) && anonymousTasks.length > 0) {
+        pushFailure(failures, "anonymous bootstrap exposed tasks");
+      }
+    }
+
+    if (!scoped.ok) pushFailure(failures, `scoped bootstrap returned HTTP ${scoped.status}`);
     if (!Array.isArray(circles) || circles.length < minCircles) {
-      pushFailure(failures, `bootstrap circles count is below ${minCircles}`);
+      pushFailure(failures, `scoped bootstrap circles count is below ${minCircles}`);
     }
     if (!Array.isArray(tasks) || tasks.length < minTasks) {
-      pushFailure(failures, `bootstrap tasks count is below ${minTasks}`);
+      pushFailure(failures, `scoped bootstrap tasks count is below ${minTasks}`);
     }
     if (!Array.isArray(templates) || templates.length < minTemplates) {
-      pushFailure(failures, `bootstrap templates count is below ${minTemplates}`);
+      pushFailure(failures, `scoped bootstrap templates count is below ${minTemplates}`);
     }
 
     return {
-      ok: result.ok,
-      status: result.status,
+      ok: anonymous.ok && scoped.ok,
+      profileEmail: opsProfileEmail || null,
+      anonymous: {
+        status: anonymous.status,
+        counts: {
+          circles: Array.isArray(anonymousCircles) ? anonymousCircles.length : 0,
+          tasks: Array.isArray(anonymousTasks) ? anonymousTasks.length : 0,
+          templates: Array.isArray(anonymousTemplates) ? anonymousTemplates.length : 0,
+        },
+      },
+      scoped: {
+        status: scoped.status,
+        counts: {
+          circles: Array.isArray(circles) ? circles.length : 0,
+          tasks: Array.isArray(tasks) ? tasks.length : 0,
+          templates: Array.isArray(templates) ? templates.length : 0,
+        },
+      },
       counts: {
         circles: Array.isArray(circles) ? circles.length : 0,
         tasks: Array.isArray(tasks) ? tasks.length : 0,

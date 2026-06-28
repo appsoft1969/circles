@@ -115,8 +115,8 @@ app.get("/api/health", route(async (_req, res) => {
   res.json(await store.health());
 }));
 
-app.get("/api/bootstrap", route(async (_req, res) => {
-  res.json(await store.getBootstrap());
+app.get("/api/bootstrap", route(async (req, res) => {
+  res.json(await store.getBootstrap(actorFromRequest(req)));
 }));
 
 app.get("/api/session", route(async (req, res) => {
@@ -224,7 +224,7 @@ app.patch("/api/circles/:circleId/invites/:inviteId", route(async (req, res) => 
 }));
 
 app.get("/api/tasks/:taskId", route(async (req, res) => {
-  const task = await store.getTask(req.params.taskId);
+  const task = await store.getTask(req.params.taskId, actorFromRequest(req));
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.json({ task });
 }));

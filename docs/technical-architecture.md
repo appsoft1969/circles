@@ -189,7 +189,7 @@ Postgres environment variables:
 Current Postgres store status:
 
 - `GET /api/health`: implemented.
-- `GET /api/bootstrap`: implemented for circles, task templates, tasks, options, responses, and stats.
+- `GET /api/bootstrap`: implemented for task templates plus member-scoped circles, tasks, options, responses, and stats. Anonymous Postgres calls return no circles or tasks.
 - `GET /api/session`: implemented for cookie sessions plus temporary profile-header development scaffolding.
 - `GET /api/auth/providers`: implemented for Apple, Google, and LINE provider state.
 - `GET /api/auth/:provider/start`: implemented for configured OAuth/OIDC providers.
@@ -203,7 +203,7 @@ Current Postgres store status:
 - `GET /api/circles/:circleId/invites`: implemented for owner/admin invite management.
 - `POST /api/circles/:circleId/invites`: implemented for owner/admin invite creation.
 - `PATCH /api/circles/:circleId/invites/:inviteId`: implemented for owner/admin invite revocation.
-- `GET /api/tasks/:taskId`: implemented.
+- `GET /api/tasks/:taskId`: implemented with active circle membership requirement. Public task reads must use `/api/share/:token`.
 - `GET /api/tasks/:taskId/permissions`: implemented for read/respond/manage/announce/close/export flags.
 - `POST /api/tasks`: implemented with authenticated owner/admin circle role requirement.
 - `PATCH /api/tasks/:taskId`: implemented for editable task details and active options with task-manager authorization.
@@ -263,11 +263,11 @@ Checks API and database path.
 
 ### `GET /api/bootstrap`
 
-Returns circles, tasks, templates, stats, options, and responses.
+Returns task templates for every caller. In Postgres, authenticated members also receive only their active circles and those circles' tasks, stats, options, responses, announcements, and comments. Anonymous callers receive no circles or tasks.
 
 ### `GET /api/tasks/:taskId`
 
-Returns one task with options, responses, and stats.
+Returns one task with options, responses, and stats for an active member of the task circle. Public participant access must use `GET /api/share/:token`.
 
 ### `GET /api/tasks/:taskId/permissions`
 

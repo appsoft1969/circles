@@ -101,7 +101,7 @@ Expected behavior:
 - `http://useincircle.app` redirects to HTTPS.
 - `https://useincircle.app` serves the InCircle website.
 - `https://useincircle.app/api/health` returns API health JSON with `backend` set to `postgres`.
-- `https://useincircle.app/api/bootstrap` returns the current public circles, tasks, templates, stats, options, and responses from Postgres.
+- `https://useincircle.app/api/bootstrap` returns task templates anonymously; with a valid member session or development profile header, it returns only that member's circles, tasks, stats, options, and responses from Postgres.
 - `https://www.useincircle.app` redirects to `https://useincircle.app`.
 - `https://useincircle.com`, `https://www.useincircle.com`, `https://useincircle.info`, and `https://www.useincircle.info` redirect to `https://useincircle.app`.
 
@@ -161,8 +161,9 @@ It checks:
 - `https://useincircle.app` returns HTML.
 - `https://www.useincircle.app`, `https://useincircle.com`, `https://www.useincircle.com`, `https://useincircle.info`, and `https://www.useincircle.info` permanently redirect to `https://useincircle.app`.
 - `/api/health` returns `backend: "postgres"`.
-- `/api/bootstrap` returns at least one circle, one task, and nine templates.
-- A live share link from bootstrap can be read through `/api/share/:token`.
+- Anonymous `/api/bootstrap` returns no circles or tasks and still returns at least nine templates.
+- Scoped `/api/bootstrap` using the health-check profile returns at least one circle, one task, and nine templates.
+- A live share link from scoped bootstrap can be read through `/api/share/:token`.
 - `website/artifacts/postgres-backup-status.json` reports a healthy, recent backup.
 
 Manual check:
