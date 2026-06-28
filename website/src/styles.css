@@ -600,6 +600,13 @@ a {
   border-color: #c96a24;
 }
 
+.primary-button.compact,
+.secondary-button.compact {
+  min-height: 38px;
+  padding: 0 11px;
+  font-size: 13px;
+}
+
 .secondary-button {
   background: #fff;
   color: #2b2c31;
@@ -2314,9 +2321,109 @@ a {
   line-height: 1.3;
 }
 
+.similar-task-warning {
+  border: 1px solid #f0c58c;
+  border-radius: 8px;
+  background: #fff8ee;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.warning-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.warning-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #bd641d;
+  background: #ffe9c7;
+}
+
+.warning-head strong,
+.warning-head small {
+  display: block;
+}
+
+.warning-head strong {
+  color: #2b2c31;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+
+.warning-head small {
+  margin-top: 3px;
+  color: #785434;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.similar-task-list {
+  display: grid;
+  gap: 8px;
+}
+
+.similar-task-row {
+  border: 1px solid #e8d4b5;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 66px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.similar-task-row strong,
+.similar-task-row small {
+  display: block;
+}
+
+.similar-task-row strong {
+  font-size: 15px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.similar-task-row small {
+  margin-top: 3px;
+  color: #62646b;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.similar-task-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.similar-task-actions .primary-button {
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 430px) {
   .create-summary {
     grid-template-columns: 1fr;
+  }
+
+  .similar-task-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .similar-task-actions .primary-button {
+    grid-column: auto;
   }
 
   .member-remove-confirm {
@@ -2374,11 +2481,12 @@ a {
 
 .task-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 9px;
   align-items: center;
-  min-height: 82px;
+  min-height: 92px;
   border-bottom: 1px solid #dededb;
+  padding: 8px 0;
 }
 
 .task-main {
@@ -2390,6 +2498,7 @@ a {
   gap: 10px;
   align-items: center;
   min-width: 0;
+  padding: 0;
   cursor: pointer;
 }
 
@@ -2406,6 +2515,7 @@ a {
 .response-main strong {
   display: block;
   font-weight: 900;
+  line-height: 1.25;
 }
 
 .task-main small,
@@ -2415,6 +2525,41 @@ a {
   color: #666870;
   font-size: 13px;
   line-height: 1.4;
+}
+
+.task-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.task-meta-line em {
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #62646b;
+  font-size: 11px;
+  line-height: 1.15;
+  font-style: normal;
+  font-weight: 850;
+  padding: 4px 6px;
+}
+
+.task-meta-line .status-mini.open {
+  color: #128f57;
+  background: #eaf7ef;
+}
+
+.task-meta-line .status-mini.closed,
+.task-meta-line .status-mini.completed {
+  color: #62646b;
+  background: #ececea;
+}
+
+.task-meta-line .status-mini.cancelled,
+.task-meta-line .status-mini.archived {
+  color: #9a4c43;
+  background: #fff0ee;
 }
 
 .task-stats {
@@ -2429,9 +2574,11 @@ a {
 .manage-head {
   padding: 16px 20px 6px;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   align-items: center;
   color: #55575d;
+  font-size: 13px;
 }
 
 .status {
@@ -2451,6 +2598,19 @@ a {
 .status.closed {
   color: #6b6d74;
   background: #f1f2f4;
+}
+
+.status.completed {
+  color: #2e62d4;
+  border-color: #b9c9f6;
+  background: #f2f6ff;
+}
+
+.status.cancelled,
+.status.archived {
+  color: #9a4c43;
+  border-color: #efb8b1;
+  background: #fff8f7;
 }
 
 .permission-note {

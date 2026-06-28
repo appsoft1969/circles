@@ -105,10 +105,88 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+function taskStatusLabel(task) {
+  const labels = {
+    draft: "草稿",
+    open: "進行中",
+    closed: "已關閉",
+    completed: "已完成",
+    cancelled: "已取消",
+    archived: "已封存",
+  };
+  return labels[task?.status] ?? task?.status ?? "未設定";
+}
+
+function taskCreatorName(task) {
+  return task?.createdByName || task?.metadata?.seller || "主揪";
+}
+
+function taskDeadlineLabel(task) {
+  return task?.deadlineAt ? `截止 ${formatDateTime(task.deadlineAt)}` : "未設定截止";
+}
+
+function taskContextLine(task, meta = templateMeta[task?.template] ?? null) {
+  const parts = [
+    task?.circleName || "圈內",
+    meta?.label || task?.templateLabel || "事項",
+    `${taskCreatorName(task)}發起`,
+  ].filter(Boolean);
+  return parts.filter((part, index) => parts.findIndex((item) => item === part) === index).join(" · ");
+}
+
 function shortText(value, maxLength = 32) {
   const text = String(value || "").trim();
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength)}...`;
+}
+
+function normalizeTaskTitle(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[「」『』【】（）()［］\[\]{}]/g, "")
+    .replace(/[，,。．.、／/｜|:：;；\s_-]+/g, "")
+    .trim();
+}
+
+function titleSimilarityScore(a, b) {
+  const left = normalizeTaskTitle(a);
+  const right = normalizeTaskTitle(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.includes(right) || right.includes(left)) {
+    return Math.min(left.length, right.length) / Math.max(left.length, right.length);
+  }
+  const grams = (text) => {
+    if (text.length <= 1) return [text];
+    return Array.from({ length: text.length - 1 }, (_, index) => text.slice(index, index + 2));
+  };
+  const leftGrams = grams(left);
+  const rightGrams = grams(right);
+  const rightCounts = new Map();
+  rightGrams.forEach((gram) => rightCounts.set(gram, (rightCounts.get(gram) ?? 0) + 1));
+  const overlap = leftGrams.reduce((sum, gram) => {
+    const count = rightCounts.get(gram) ?? 0;
+    if (count <= 0) return sum;
+    rightCounts.set(gram, count - 1);
+    return sum + 1;
+  }, 0);
+  return (overlap * 2) / (leftGrams.length + rightGrams.length);
+}
+
+function findSimilarOpenTasks(tasks = [], { circleId, template, title, excludeTaskId = "" } = {}) {
+  if (!circleId || !template || !title) return [];
+  return tasks
+    .filter((task) => (
+      task.id !== excludeTaskId &&
+      task.circleId === circleId &&
+      task.template === template &&
+      task.status === "open"
+    ))
+    .map((task) => ({ task, score: titleSimilarityScore(task.title, title) }))
+    .filter((item) => item.score >= 0.38)
+    .sort((a, b) => b.score - a.score || new Date(b.task.createdAt || 0) - new Date(a.task.createdAt || 0))
+    .slice(0, 3)
+    .map((item) => item.task);
 }
 
 function isFutureTime(value) {
@@ -546,6 +624,7 @@ function App() {
     templates: (
       <TemplatePicker
         circles={state.circles}
+        tasks={state.tasks}
         session={state.session}
         go={go}
         refresh={refresh}
@@ -1056,6 +1135,11 @@ function ProfileHub({ session, authProviders, go, refresh, setToast }) {
 
 function CircleHome({ circle, membership, tasks, notifications, go, shareTask }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
+  const recentClosedTasks = tasks
+    .filter((task) => task.status !== "open")
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0))
+    .slice(0, 3);
+  const attentionItems = buildAttentionItems(tasks, notifications);
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   return (
@@ -1106,7 +1190,24 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
         </div>
       </section>
       <section className="section">
-        <SectionTitle title="這個圈子的事項" action="建立事項" onClick={() => go("templates")} />
+        <SectionTitle title="需要注意" />
+        {attentionItems.length > 0 ? (
+          <div className="attention-list">
+            {attentionItems.slice(0, 3).map((item) => (
+              <AttentionCard key={item.id} item={item} go={go} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Check}
+            title="這個圈子目前沒有急著處理的事"
+            body="如果有重要公告、未讀討論、待付款或待確認事項，會先放在這裡。"
+            className="home-empty-state"
+          />
+        )}
+      </section>
+      <section className="section">
+        <SectionTitle title="進行中的事項" action="建立事項" onClick={() => go("templates")} />
         {activeTasks.length > 0 ? (
           <div className="task-list">
             {activeTasks.map((task) => (
@@ -1118,6 +1219,23 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
             icon={ClipboardList}
             title="這個圈子目前沒有進行中的事項"
             body="要訂飲料、揪活動或統計票券時，可以從建立事項開始。"
+            className="home-empty-state"
+          />
+        )}
+      </section>
+      <section className="section">
+        <SectionTitle title="最近結束" />
+        {recentClosedTasks.length > 0 ? (
+          <div className="task-list">
+            {recentClosedTasks.map((task) => (
+              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={ClipboardList}
+            title="還沒有結束的事項"
+            body="關閉或完成的事項會留在這裡，之後要查名單或複製類似事項會比較好找。"
             className="home-empty-state"
           />
         )}
@@ -3459,18 +3577,24 @@ function SectionTitle({ title, action, onClick, disabled = false, busy = false }
 function TaskRow({ task, onOpen, onShare }) {
   const meta = templateMeta[task.template] ?? templateMeta.group_buy;
   const Icon = meta.icon;
+  const pendingCount = task.stats.unpaid + task.stats.review;
   return (
     <article className="task-row">
       <button type="button" onClick={onOpen} className="task-main">
         <span className={`task-icon ${meta.accent}`}><Icon size={19} /></span>
         <span>
           <strong>{task.title}</strong>
-          <small>{task.circleName} · {meta.label} · {task.stats.responses} 筆回覆</small>
+          <small>{taskContextLine(task, meta)}</small>
+          <span className="task-meta-line">
+            <em className={`status-mini ${task.status}`}>{taskStatusLabel(task)}</em>
+            <em>{taskDeadlineLabel(task)}</em>
+            <em>{task.stats.responses} 筆回覆</em>
+          </span>
         </span>
       </button>
       <div className="task-stats">
         <b>{money(task.stats.totalAmount)}</b>
-        <span>{task.stats.unpaid + task.stats.review} 待付款</span>
+        <span>{pendingCount} 待付款</span>
       </div>
       <button className="icon-button" type="button" aria-label="分享填單連結" onClick={onShare}>
         <Share2 size={19} />
@@ -3479,7 +3603,7 @@ function TaskRow({ task, onOpen, onShare }) {
   );
 }
 
-function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, selectedTemplate = "" }) {
+function TemplatePicker({ circles, tasks = [], session, go, refresh, setToast, updateTask, selectedTemplate = "" }) {
   const manageableCircleIds = new Set(
     (session?.memberships ?? [])
       .filter((membership) => ["owner", "admin"].includes(membership.role))
@@ -3492,8 +3616,15 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
   const [step, setStep] = useState(selectedTemplate ? "circle" : "template");
   const [createdTask, setCreatedTask] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [similarWarningDismissed, setSimilarWarningDismissed] = useState(false);
   const meta = template ? templateMeta[template] : null;
   const selectedCircle = manageableCircles.find((circle) => circle.id === circleId) ?? null;
+  const plannedDefaults = useMemo(() => (template ? getTemplateDefaults(template) : null), [template]);
+  const similarOpenTasks = useMemo(() => findSimilarOpenTasks(tasks, {
+    circleId,
+    template,
+    title: plannedDefaults?.title,
+  }), [tasks, circleId, template, plannedDefaults?.title]);
   const hasManageableCircles = manageableCircles.length > 0;
   const activeStepIndex = step === "done" ? createTaskSteps.length : Math.max(0, createTaskSteps.findIndex((item) => item.id === step));
   const templateIsSelected = Boolean(meta) && step !== "template";
@@ -3502,6 +3633,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
   function chooseTemplate(nextTemplate) {
     const nextDefaultCircle = getDefaultCircleForTemplate(manageableCircles, nextTemplate);
     setCreatedTask(null);
+    setSimilarWarningDismissed(false);
     setTemplate(nextTemplate);
     setCircleId((current) => {
       if (current && manageableCircles.some((circle) => circle.id === current)) return current;
@@ -3510,7 +3642,12 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
     setStep("circle");
   }
 
-  async function createTask() {
+  function chooseCircle(nextCircleId) {
+    setCircleId(nextCircleId);
+    setSimilarWarningDismissed(false);
+  }
+
+  async function createTask({ force = false, sourceTask = null } = {}) {
     if (creating) return;
     if (!template || !meta) {
       setToast("請先選擇要建立的事項類型");
@@ -3520,7 +3657,24 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
       setToast("請先加入可管理的圈子");
       return;
     }
-    const defaults = getTemplateDefaults(template);
+    if (similarOpenTasks.length > 0 && !similarWarningDismissed && !force && !sourceTask) {
+      setToast("這個圈子裡已有類似的進行中事項，先看一下再決定。");
+      return;
+    }
+    const defaults = sourceTask ? {
+      title: `${sourceTask.title}（複製）`,
+      description: sourceTask.description || "",
+      deadlineAt: new Date(Date.now() + 1000 * 60 * 60 * 4).toISOString(),
+      paymentInstructions: sourceTask.paymentInstructions || "",
+      pickupInstructions: sourceTask.pickupInstructions || "",
+      metadata: { ...(sourceTask.metadata ?? {}), copiedFromTaskId: sourceTask.id },
+      options: sourceTask.options.map((option) => ({
+        title: option.title,
+        subtitle: option.subtitle || "",
+        unitPrice: option.unitPrice || 0,
+        metadata: option.metadata || {},
+      })),
+    } : plannedDefaults;
     setCreating(true);
     try {
       const data = await api("/api/tasks", {
@@ -3531,7 +3685,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
       await refresh();
       setCreatedTask(data.task);
       setStep("done");
-      setToast(`已建立${meta.label}`);
+      setToast(sourceTask ? `已用「${sourceTask.title}」複製一份` : `已建立${meta.label}`);
     } catch (error) {
       setToast(error.message);
     } finally {
@@ -3684,7 +3838,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
               ) : null}
               {manageableCircles.map((circle) => (
                 <label key={circle.id} className="radio-row">
-                  <input type="radio" checked={circleId === circle.id} onChange={() => setCircleId(circle.id)} />
+                  <input type="radio" checked={circleId === circle.id} onChange={() => chooseCircle(circle.id)} />
                   <span>
                     <strong>{circle.name}</strong>
                     <small>{circle.description}</small>
@@ -3715,6 +3869,18 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
               <strong>{selectedCircle.name}</strong>
             </div>
           </div>
+          {similarOpenTasks.length > 0 ? (
+            <SimilarTaskWarning
+              tasks={similarOpenTasks}
+              onOpen={(task) => go("manage", { taskId: task.id })}
+              onCopy={(task) => createTask({ force: true, sourceTask: task })}
+              onCreateAnyway={() => {
+                setSimilarWarningDismissed(true);
+                createTask({ force: true });
+              }}
+              creating={creating}
+            />
+          ) : null}
         </section>
       ) : null}
 
@@ -3736,6 +3902,50 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
         </>
       )}
     </>
+  );
+}
+
+function SimilarTaskWarning({ tasks, onOpen, onCopy, onCreateAnyway, creating }) {
+  if (!tasks.length) return null;
+  const firstTask = tasks[0];
+  return (
+    <div className="similar-task-warning">
+      <div className="warning-head">
+        <span className="warning-icon"><Search size={18} /></span>
+        <span>
+          <strong>這個圈子裡，已經有很像的事項正在進行</strong>
+          <small>名稱可以重複，但先看一下可以避免大家填錯地方。</small>
+        </span>
+      </div>
+      <div className="similar-task-list">
+        {tasks.map((task) => {
+          const meta = templateMeta[task.template] ?? templateMeta.group_buy;
+          return (
+            <button className="similar-task-row" type="button" key={task.id} onClick={() => onOpen(task)}>
+              <span className={`task-icon ${meta.accent}`}><meta.icon size={18} /></span>
+              <span>
+                <strong>{task.title}</strong>
+                <small>{taskContextLine(task, meta)} · {taskDeadlineLabel(task)}</small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+          );
+        })}
+      </div>
+      <div className="similar-task-actions">
+        <button className="secondary-button compact" type="button" onClick={() => onOpen(firstTask)}>
+          查看現有事項
+        </button>
+        <button className="secondary-button compact" type="button" onClick={() => onCopy(firstTask)} disabled={creating}>
+          {creating ? <Loader2 className="spin" size={16} /> : <ReceiptText size={16} />}
+          用它複製一份
+        </button>
+        <button className="primary-button compact" type="button" onClick={onCreateAnyway} disabled={creating}>
+          {creating ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
+          仍建立新的
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -4618,11 +4828,17 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
 
   return (
     <>
-      <Topbar title={task.title} subtitle={`${task.circleName} · ${meta.label}`} onBack={() => go("dashboard")} />
+      <Topbar
+        title={task.title}
+        subtitle={`${task.circleName} · ${meta.label}`}
+        onBack={() => (task.circleId ? go("circleHome", { circleId: task.circleId }) : go("dashboard"))}
+      />
       <section className="manage-head">
-        <span className={`status ${task.status}`}>{task.status === "open" ? "進行中" : "已關閉"}</span>
+        <span className={`status ${task.status}`}>{taskStatusLabel(task)}</span>
         <span className={`role-badge ${canManage ? "manager" : ""}`}>{modeLabel}</span>
-        <span>截止 {task.deadlineAt ? new Date(task.deadlineAt).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未設定"}</span>
+        <span>{taskDeadlineLabel(task)}</span>
+        <span>{taskCreatorName(task)}發起</span>
+        {task.createdAt ? <span>建立 {formatDateTime(task.createdAt)}</span> : null}
       </section>
       {permissionError ? (
         <section className="permission-note">

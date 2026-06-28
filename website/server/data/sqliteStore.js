@@ -546,6 +546,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
 
   function taskFromRow(row) {
     const circle = db.prepare("SELECT * FROM circles WHERE id = ?").get(row.circle_id);
+    const metadata = parseJson(row.metadata_json);
     const options = db
       .prepare("SELECT * FROM task_options WHERE task_id = ? AND is_active = 1 ORDER BY sort_order ASC")
       .all(row.id)
@@ -588,6 +589,8 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
       circleName: circle?.name ?? "",
       template: row.template,
       templateLabel: templateLabels[row.template] ?? row.template,
+      createdByProfileId: "",
+      createdByName: metadata?.seller || "主揪",
       title: row.title,
       description: row.description,
       deadlineAt: row.deadline_at,
@@ -595,7 +598,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
       shareToken: row.share_token,
       paymentInstructions: row.payment_instructions,
       pickupInstructions: row.pickup_instructions,
-      metadata: parseJson(row.metadata_json),
+      metadata,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       options,

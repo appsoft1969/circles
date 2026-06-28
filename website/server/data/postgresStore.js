@@ -396,6 +396,8 @@ function taskFromRow(row, options = [], responses = [], announcements = [], comm
     circleName: row.circle_name ?? "",
     template: row.template_id,
     templateLabel: row.template_label ?? templateLabels[row.template_id] ?? row.template_id,
+    createdByProfileId: row.created_by_profile_id ?? "",
+    createdByName: row.created_by_name ?? "",
     title: row.title,
     description: row.description,
     deadlineAt: toIso(row.deadline_at),
@@ -478,12 +480,15 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       t.payment_instructions,
       t.pickup_instructions,
       t.metadata,
+      t.created_by_profile_id::text,
       t.created_at,
       t.updated_at,
       c.name AS circle_name,
+      creator.display_name AS created_by_name,
       tt.display_name AS template_label
     FROM tasks t
     JOIN circles c ON c.id = t.circle_id
+    LEFT JOIN profiles creator ON creator.id = t.created_by_profile_id
     LEFT JOIN task_templates tt ON tt.id = t.template_id
     WHERE t.archived_at IS NULL
   `;
