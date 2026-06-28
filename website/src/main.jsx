@@ -945,6 +945,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [expireDays, setExpireDays] = useState(30);
   const [showInviteSettings, setShowInviteSettings] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState("");
+  const [managingMemberId, setManagingMemberId] = useState("");
   const [editingMemberId, setEditingMemberId] = useState("");
   const [memberNameDraft, setMemberNameDraft] = useState("");
   const [memberContactDraft, setMemberContactDraft] = useState("");
@@ -1065,6 +1066,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       } else {
         setMembers((current) => current.filter((item) => item.id !== data.member.id));
         setConfirmRemoveId("");
+        setManagingMemberId("");
       }
       await refresh();
       setToast("成員設定已更新");
@@ -1075,6 +1077,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
 
   function startEditingMember(member) {
     setConfirmRemoveId("");
+    setManagingMemberId(member.id);
     setEditingMemberId(member.id);
     setMemberNameDraft(member.displayName || "");
     setMemberContactDraft(member.contactHint || "");
@@ -1090,6 +1093,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       contactHint: memberContactDraft.trim(),
     });
     setEditingMemberId("");
+    setManagingMemberId("");
   }
 
   function canEdit(member) {
@@ -1244,6 +1248,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
               {members.map((member) => {
                 const editable = canEdit(member);
                 const editingThisMember = editingMemberId === member.id;
+                const managingThisMember = managingMemberId === member.id;
                 return (
                   <article className="member-row" key={member.id}>
                     <span className="member-avatar"><UserCircle size={22} /></span>
@@ -1251,19 +1256,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                       <strong>{member.displayName}</strong>
                       <small>{member.contactHint || member.circleName}</small>
                     </div>
-                    {editable ? (
-                      <select
-                        value={member.role}
-                        aria-label={`${member.displayName} 角色`}
-                        onChange={(event) => updateMember(member, { role: event.target.value })}
-                      >
-                        {currentMembership?.role === "owner" ? <option value="admin">管理</option> : null}
-                        <option value="member">成員</option>
-                        <option value="guest">訪客</option>
-                      </select>
-                    ) : (
-                      <span className="role-badge">{membershipRoleLabels[member.role] ?? member.role}</span>
-                    )}
+                    <span className={`role-badge ${member.role === "admin" ? "manager" : ""}`}>{membershipRoleLabels[member.role] ?? member.role}</span>
                     {editable ? (
                       editingThisMember ? (
                         <div className="member-edit-panel">
@@ -1308,17 +1301,48 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                             確定移除
                           </button>
                         </div>
+                      ) : managingThisMember ? (
+                        <div className="member-manage-panel">
+                          <label>
+                            這位成員的角色
+                            <select
+                              value={member.role}
+                              aria-label={`${member.displayName} 角色`}
+                              onChange={(event) => updateMember(member, { role: event.target.value })}
+                            >
+                              {currentMembership?.role === "owner" ? <option value="admin">管理</option> : null}
+                              <option value="member">成員</option>
+                              <option value="guest">訪客</option>
+                            </select>
+                          </label>
+                          <div className="member-row-actions">
+                            <button className="secondary-button compact" type="button" onClick={() => setManagingMemberId("")}>
+                              完成
+                            </button>
+                            <button className="secondary-button compact" type="button" onClick={() => startEditingMember(member)}>
+                              編輯資料
+                            </button>
+                            <button
+                              className="secondary-button compact danger"
+                              type="button"
+                              onClick={() => setConfirmRemoveId(member.id)}
+                            >
+                              移除
+                            </button>
+                          </div>
+                        </div>
                       ) : (
-                        <div className="member-row-actions">
-                          <button className="secondary-button compact" type="button" onClick={() => startEditingMember(member)}>
-                            編輯資料
-                          </button>
+                        <div className="member-row-actions single">
                           <button
-                            className="secondary-button compact danger"
+                            className="secondary-button compact"
                             type="button"
-                            onClick={() => setConfirmRemoveId(member.id)}
+                            onClick={() => {
+                              setEditingMemberId("");
+                              setConfirmRemoveId("");
+                              setManagingMemberId(member.id);
+                            }}
                           >
-                            移除
+                            管理
                           </button>
                         </div>
                       )
