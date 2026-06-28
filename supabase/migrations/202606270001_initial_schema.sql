@@ -618,8 +618,10 @@ CREATE TABLE IF NOT EXISTS notification_deliveries (
   provider text NOT NULL DEFAULT '',
   provider_message_id text,
   status notification_status NOT NULL DEFAULT 'queued',
+  attempt_count int NOT NULL DEFAULT 0,
   error_text text,
   created_at timestamptz NOT NULL DEFAULT now(),
+  last_attempt_at timestamptz,
   sent_at timestamptz,
   delivered_at timestamptz,
   opened_at timestamptz

@@ -72,12 +72,13 @@ The delivery script:
 - Fans out to active `devices` with `push_subscription`.
 - Inserts one `notification_deliveries` row per notification/device/channel.
 - Marks deliveries `sent` or `failed`.
+- Retries failed deliveries up to `PUSH_MAX_ATTEMPTS` times, waiting `PUSH_RETRY_AFTER_MINUTES` between attempts.
 - Revokes expired browser subscriptions when the push provider returns `404` or `410`.
 
 ## Next Delivery Step
 
-The next implementation step is scheduling and monitoring:
+The next implementation step is delivery observability:
 
-- Decide retry policy for transient failed deliveries.
+- Add a small admin-only delivery report for failed/revoked push attempts.
 
 `npm run ops:status` now checks that the local `com.useincircle.web-push` launchd job is loaded, exits cleanly, and has recent output.

@@ -13,6 +13,8 @@ const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const limitArg = process.argv.find((arg) => arg.startsWith("--limit="));
 const limit = Math.max(1, Math.min(500, Number(limitArg?.split("=")[1] || process.env.PUSH_DELIVERY_LIMIT || 100)));
+const maxAttempts = Math.max(1, Math.min(10, Number(process.env.PUSH_MAX_ATTEMPTS || 3)));
+const retryAfterMinutes = Math.max(1, Math.min(1440, Number(process.env.PUSH_RETRY_AFTER_MINUTES || 5)));
 const defaultConnectionString = "postgres://incircle:incircle_local_password@127.0.0.1:5434/incircle_local";
 
 function log(message) {
@@ -63,6 +65,10 @@ function notificationPayload(row) {
 
 async function ensureDeliverySchema(pool) {
   await pool.query(`
+    ALTER TABLE notification_deliveries
+      ADD COLUMN IF NOT EXISTS attempt_count int NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS last_attempt_at timestamptz;
+
     CREATE UNIQUE INDEX IF NOT EXISTS ux_notification_deliveries_push_device
       ON notification_deliveries (notification_id, device_id, channel)
       WHERE device_id IS NOT NULL;
@@ -72,34 +78,72 @@ async function ensureDeliverySchema(pool) {
 async function pendingDeliveries(pool) {
   const result = await pool.query(
     `
-      SELECT
-        n.id::text AS notification_id,
-        n.circle_id::text,
-        n.task_id::text,
-        n.type,
-        n.title,
-        n.body,
-        n.data,
-        d.id::text AS device_id,
-        d.push_subscription
-      FROM notifications n
-      JOIN devices d
-        ON d.profile_id = n.recipient_profile_id
-       AND d.revoked_at IS NULL
-       AND d.push_subscription IS NOT NULL
-      WHERE n.cancelled_at IS NULL
-        AND n.read_at IS NULL
-        AND NOT EXISTS (
-          SELECT 1
-          FROM notification_deliveries nd
-          WHERE nd.notification_id = n.id
-            AND nd.device_id = d.id
-            AND nd.channel = 'push'
-        )
-      ORDER BY n.created_at ASC
+      WITH new_deliveries AS (
+        SELECT
+          NULL::text AS delivery_id,
+          false AS retry,
+          n.id::text AS notification_id,
+          n.circle_id::text,
+          n.task_id::text,
+          n.type,
+          n.title,
+          n.body,
+          n.data,
+          d.id::text AS device_id,
+          d.push_subscription
+        FROM notifications n
+        JOIN devices d
+          ON d.profile_id = n.recipient_profile_id
+         AND d.revoked_at IS NULL
+         AND d.push_subscription IS NOT NULL
+        WHERE n.cancelled_at IS NULL
+          AND n.read_at IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM notification_deliveries nd
+            WHERE nd.notification_id = n.id
+              AND nd.device_id = d.id
+              AND nd.channel = 'push'
+          )
+      ),
+      retry_deliveries AS (
+        SELECT
+          nd.id::text AS delivery_id,
+          true AS retry,
+          n.id::text AS notification_id,
+          n.circle_id::text,
+          n.task_id::text,
+          n.type,
+          n.title,
+          n.body,
+          n.data,
+          d.id::text AS device_id,
+          d.push_subscription
+        FROM notification_deliveries nd
+        JOIN notifications n ON n.id = nd.notification_id
+        JOIN devices d ON d.id = nd.device_id
+        WHERE nd.channel = 'push'
+          AND nd.status = 'failed'
+          AND nd.attempt_count < $2
+          AND (
+            nd.last_attempt_at IS NULL
+            OR nd.last_attempt_at <= now() - ($3::int * interval '1 minute')
+          )
+          AND n.cancelled_at IS NULL
+          AND n.read_at IS NULL
+          AND d.revoked_at IS NULL
+          AND d.push_subscription IS NOT NULL
+      )
+      SELECT *
+      FROM (
+        SELECT * FROM new_deliveries
+        UNION ALL
+        SELECT * FROM retry_deliveries
+      ) pending
+      ORDER BY retry ASC, notification_id ASC
       LIMIT $1
     `,
-    [limit],
+    [limit, maxAttempts, retryAfterMinutes],
   );
   return result.rows;
 }
@@ -123,6 +167,11 @@ async function createDelivery(pool, row) {
   return result.rows[0]?.id ?? null;
 }
 
+async function ensureAttempt(pool, row) {
+  if (row.delivery_id) return row.delivery_id;
+  return createDelivery(pool, row);
+}
+
 async function markDelivery(pool, deliveryId, status, fields = {}) {
   await pool.query(
     `
@@ -131,6 +180,8 @@ async function markDelivery(pool, deliveryId, status, fields = {}) {
         status = $2::notification_status,
         provider_message_id = COALESCE($3, provider_message_id),
         error_text = $4,
+        attempt_count = attempt_count + 1,
+        last_attempt_at = now(),
         sent_at = CASE WHEN $2::notification_status = 'sent' THEN now() ELSE sent_at END
       WHERE id::text = $1
     `,
@@ -159,15 +210,18 @@ async function main() {
     await ensureDeliverySchema(pool);
     const candidates = await pendingDeliveries(pool);
     if (dryRun) {
-      log(`dry-run: ${candidates.length} pending push deliveries`);
+      const retries = candidates.filter((candidate) => candidate.retry).length;
+      log(`dry-run: ${candidates.length} pending push deliveries (${retries} retries)`);
       return;
     }
 
     let sent = 0;
     let failed = 0;
+    let retried = 0;
     for (const row of candidates) {
-      const deliveryId = await createDelivery(pool, row);
+      const deliveryId = await ensureAttempt(pool, row);
       if (!deliveryId) continue;
+      if (row.retry) retried += 1;
       try {
         const response = await webpush.sendNotification(row.push_subscription, notificationPayload(row));
         await markDelivery(pool, deliveryId, "sent", {
@@ -183,7 +237,7 @@ async function main() {
         failed += 1;
       }
     }
-    log(`sent ${sent}, failed ${failed}, scanned ${candidates.length}`);
+    log(`sent ${sent}, failed ${failed}, retried ${retried}, scanned ${candidates.length}`);
   } finally {
     await pool.end();
   }
