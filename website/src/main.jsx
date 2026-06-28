@@ -312,6 +312,8 @@ function shareCircleInvite(invite, setToast) {
 
 function resolveAppRoute(pathname, data = {}) {
   if (pathname === "/notifications") return { name: "notifications" };
+  if (pathname === "/todos") return { name: "todos" };
+  if (pathname === "/me") return { name: "profile" };
   if (pathname === "/ops/push") return { name: "pushOps" };
   if (pathname === "/create") return { name: "templates" };
   if (pathname === "/circles/new") return { name: "createCircle" };
@@ -331,15 +333,23 @@ function resolveAppRoute(pathname, data = {}) {
     return { name: "members", circleId: circleMembersMatch[1] };
   }
 
+  const circleHomeMatch = pathname.match(/^\/circles\/([^/]+)$/);
+  if (circleHomeMatch && data.circles?.some((circle) => circle.id === circleHomeMatch[1])) {
+    return { name: "circleHome", circleId: circleHomeMatch[1] };
+  }
+
   return { name: "dashboard" };
 }
 
 function pathForRoute(name, extra = {}, state = {}) {
   if (name === "dashboard") return "/";
   if (name === "notifications") return "/notifications";
+  if (name === "todos") return "/todos";
+  if (name === "profile") return "/me";
   if (name === "pushOps") return "/ops/push";
   if (name === "templates") return "/create";
   if (name === "createCircle") return "/circles/new";
+  if (name === "circleHome" && extra.circleId) return `/circles/${extra.circleId}`;
   if (name === "manage" && extra.taskId) return `/tasks/${extra.taskId}`;
   if (name === "circleChat" && extra.circleId) return `/circles/${extra.circleId}/chat`;
   if (name === "members" && extra.circleId) return `/circles/${extra.circleId}/members`;
@@ -464,6 +474,10 @@ function App() {
     if (route.taskId) return state.tasks.find((task) => task.id === route.taskId);
     return state.tasks[0];
   }, [route.taskId, state.tasks]);
+  const selectedCircle = useMemo(() => {
+    if (!route.circleId) return null;
+    return state.circles.find((circle) => circle.id === route.circleId) ?? null;
+  }, [route.circleId, state.circles]);
 
   function go(name, extra = {}) {
     const nextRoute = { name, ...extra };
@@ -521,6 +535,14 @@ function App() {
         setToast={setToast}
       />
     ),
+    todos: (
+      <TodoHub
+        tasks={state.tasks}
+        notifications={state.notifications}
+        go={go}
+        shareTask={shareTask}
+      />
+    ),
     templates: (
       <TemplatePicker
         circles={state.circles}
@@ -572,6 +594,15 @@ function App() {
         setToast={setToast}
       />
     ),
+    profile: (
+      <ProfileHub
+        session={state.session}
+        authProviders={state.authProviders}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
     pushOps: (
       <WebPushStatus
         session={state.session}
@@ -590,6 +621,16 @@ function App() {
         setToast={setToast}
       />
     ),
+    circleHome: selectedCircle ? (
+      <CircleHome
+        circle={selectedCircle}
+        membership={state.session?.memberships?.find((membership) => membership.circleId === selectedCircle.id)}
+        tasks={state.tasks.filter((task) => task.circleId === selectedCircle.id)}
+        notifications={state.notifications.filter((notification) => notification.circleId === selectedCircle.id)}
+        go={go}
+        shareTask={shareTask}
+      />
+    ) : null,
     members: (
       <CircleMembers
         circle={state.circles.find((circle) => circle.id === route.circleId)}
@@ -613,7 +654,17 @@ function App() {
   };
 
   return (
-    <Shell toast={toast} clearToast={() => setToast("")}>
+    <Shell
+      toast={toast}
+      clearToast={() => setToast("")}
+      bottomNav={(
+        <BottomNav
+          routeName={route.name}
+          unreadCount={state.notifications.filter((notification) => !notification.readAt).length}
+          onNavigate={go}
+        />
+      )}
+    >
       {screens[route.name] ?? screens.dashboard}
     </Shell>
   );
@@ -626,10 +677,13 @@ function upsertTask(tasks, task) {
   return [task, ...tasks];
 }
 
-function Shell({ children, toast, clearToast }) {
+function Shell({ children, toast, clearToast, bottomNav = null }) {
   return (
     <main className="site-shell">
-      <div className="app-frame">{children}</div>
+      <div className="app-frame">
+        {children}
+        {bottomNav}
+      </div>
       {toast ? (
         <div className="toast">
           <Check size={16} />
@@ -638,6 +692,48 @@ function Shell({ children, toast, clearToast }) {
         </div>
       ) : null}
     </main>
+  );
+}
+
+function BottomNav({ routeName, unreadCount = 0, onNavigate }) {
+  const items = [
+    { id: "dashboard", label: "圈子", icon: Users },
+    { id: "todos", label: "待辦", icon: ClipboardList },
+    { id: "templates", label: "建立", icon: Plus, primary: true },
+    { id: "notifications", label: "通知", icon: Bell },
+    { id: "profile", label: "我的", icon: UserCircle },
+  ];
+  const activeGroup = {
+    circleHome: "dashboard",
+    circleChat: "dashboard",
+    members: "dashboard",
+    manage: "todos",
+    join: "todos",
+    createCircle: "profile",
+  }[routeName] ?? routeName;
+
+  return (
+    <nav className="bottom-nav" aria-label="主要功能">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const active = activeGroup === item.id;
+        return (
+          <button
+            className={["bottom-nav-item", active ? "active" : "", item.primary ? "primary" : ""].filter(Boolean).join(" ")}
+            type="button"
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+            aria-current={active ? "page" : undefined}
+          >
+            <span className="bottom-nav-icon">
+              <Icon size={item.primary ? 22 : 20} />
+              {item.id === "notifications" && unreadCount > 0 ? <b>{unreadCount > 99 ? "99+" : unreadCount}</b> : null}
+            </span>
+            <small>{item.label}</small>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -662,68 +758,369 @@ function Topbar({ title, subtitle, onBack, action }) {
   );
 }
 
+function buildCircleSummaries({ circles = [], tasks = [], notifications = [], session = null }) {
+  const memberships = uniqueCircleMemberships(session?.memberships ?? []);
+  const circleById = new Map(circles.map((circle) => [circle.id, circle]));
+  const circleIds = [...new Set([...memberships.map((membership) => membership.circleId), ...circles.map((circle) => circle.id)])];
+  return circleIds.map((circleId) => {
+    const circle = circleById.get(circleId);
+    const membership = memberships.find((item) => item.circleId === circleId);
+    const circleTasks = tasks.filter((task) => task.circleId === circleId);
+    const activeTasks = circleTasks.filter((task) => task.status === "open");
+    const unpaid = circleTasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
+    const unread = notifications.filter((notification) => notification.circleId === circleId && !notification.readAt);
+    const priorityUnread = unread.filter((notification) => notificationPriority(notification));
+    const recentTask = activeTasks[0] ?? circleTasks[0] ?? null;
+    const notificationStatus = circleNotificationStatus(membership?.notificationPreference);
+    return {
+      id: circleId,
+      name: circle?.name ?? membership?.circleName ?? "未命名圈子",
+      description: circle?.description ?? "",
+      role: membership?.role ?? "member",
+      memberCount: circle?.memberCount ?? null,
+      activeCount: activeTasks.length,
+      taskCount: circleTasks.length,
+      unpaid,
+      unreadCount: unread.length,
+      priorityUnreadCount: priorityUnread.length,
+      recentTask,
+      notificationStatus,
+    };
+  });
+}
+
+function buildAttentionItems(tasks = [], notifications = []) {
+  const notificationItems = notifications
+    .filter((notification) => !notification.readAt)
+    .slice(0, 4)
+    .map((notification) => ({
+      id: `notification:${notification.id}`,
+      title: notification.title,
+      body: notification.body,
+      badge: notificationBadgeLabel(notification),
+      tone: notificationPriority(notification) || notification.type,
+      icon: notificationPriority(notification) ? BellDot : Bell,
+      route: notification.taskId
+        ? { name: "manage", taskId: notification.taskId }
+        : notification.circleId
+          ? { name: "circleChat", circleId: notification.circleId, conversationId: notification.data?.conversationId }
+          : { name: "notifications" },
+    }));
+  const taskItems = tasks
+    .filter((task) => task.status === "open" && (task.stats.unpaid + task.stats.review + task.stats.pending > 0))
+    .slice(0, 4)
+    .map((task) => ({
+      id: `task:${task.id}`,
+      title: task.title,
+      body: `${task.circleName} · ${task.stats.unpaid + task.stats.review} 待付款/確認 · ${task.stats.pending} 待處理`,
+      badge: templateMeta[task.template]?.label ?? "事項",
+      tone: "task",
+      icon: templateMeta[task.template]?.icon ?? ClipboardList,
+      route: { name: "manage", taskId: task.id },
+    }));
+  return [...notificationItems, ...taskItems].slice(0, 5);
+}
+
+function HomeTopbar({ session, circleCount, unreadCount, go }) {
+  const signedIn = Boolean(session?.authenticated);
+  const displayName = session?.profile?.displayName || "圈內成員";
+  return (
+    <header className="home-topbar">
+      <button className="home-identity" type="button" onClick={() => go("profile")}>
+        <span className="home-avatar">{signedIn ? <UserCircle size={21} /> : <Users size={21} />}</span>
+        <span>
+          <strong>{signedIn ? displayName : "圈內 InCircle"}</strong>
+          <small>{signedIn ? `${circleCount} 個圈子` : "熟人圈的生活辦事空間"}</small>
+        </span>
+      </button>
+      <button className="icon-button home-notification-button" type="button" onClick={() => go("notifications")} aria-label="通知中心">
+        {unreadCount > 0 ? <BellDot size={21} /> : <Bell size={21} />}
+        {unreadCount > 0 ? <b>{unreadCount > 99 ? "99+" : unreadCount}</b> : null}
+      </button>
+    </header>
+  );
+}
+
 function Dashboard({ circles, tasks, notifications, session, authProviders, go, shareTask, refresh, setToast }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
-  const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
-  const templates = Object.entries(templateMeta);
+  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
+  const attentionItems = buildAttentionItems(tasks, notifications);
+  const circleSummaries = buildCircleSummaries({ circles, tasks, notifications, session });
 
   return (
     <>
-      <Topbar
-        title="圈內 InCircle"
-        subtitle="熟人圈的生活辦事空間"
-        action={<AuthStatusButton session={session} />}
-      />
-      <section className="hero">
-        <h1>把群裡的 +1，變成清楚的名單與統計。</h1>
-        <p>訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。</p>
-        <button className="primary-button" type="button" onClick={() => go("templates")}>
-          <Plus size={18} />
-          建立事項
-        </button>
+      <HomeTopbar session={session} circleCount={circleSummaries.length} unreadCount={unreadCount} go={go} />
+      <section className="home-intro">
+        <span>我的圈子</span>
+        <h1>先看熟人圈裡正在辦的事</h1>
+        <p>訂飲料、揪吃飯、團購、票券或活動，都先放進對的圈子裡。</p>
+        <small>聊天裡喊 +1 的事，圈內會順手整理成名單與統計。</small>
       </section>
 
-      <AuthPanel
-        session={session}
-        providers={authProviders}
-        go={go}
-        refresh={refresh}
-        setToast={setToast}
-      />
+      {!session?.authenticated ? (
+        <AuthPanel
+          session={session}
+          providers={authProviders}
+          go={go}
+          refresh={refresh}
+          setToast={setToast}
+        />
+      ) : null}
 
-      <section className="metric-grid">
-        <Metric value={circles.length} label="圈子" />
-        <Metric value={activeTasks.length} label="進行中" />
-        <Metric value={unpaid} label="待付款/確認" alert />
-        <Metric value={tasks.length} label="事項紀錄" />
+      <section className="home-status-strip">
+        <span>
+          <strong>{circleSummaries.length}</strong>
+          圈子
+        </span>
+        <span>
+          <strong>{activeTasks.length}</strong>
+          進行中
+        </span>
+        <span className={unreadCount > 0 ? "alert" : ""}>
+          <strong>{unreadCount}</strong>
+          未讀
+        </span>
       </section>
 
-      <CommunicationPanel
-        notifications={notifications}
-        session={session}
-        go={go}
-      />
+      <section className="section home-attention-section">
+        <SectionTitle title="需要你看一下" action={attentionItems.length > 0 ? "全部" : ""} onClick={() => go("todos")} />
+        {attentionItems.length > 0 ? (
+          <div className="attention-list">
+            {attentionItems.slice(0, 3).map((item) => (
+              <AttentionCard key={item.id} item={item} go={go} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Check}
+            title="目前沒有急著處理的事"
+            body="之後有未讀公告、待付款或待確認事項，會先放在這裡。"
+            className="home-empty-state"
+          />
+        )}
+      </section>
 
-      <section className="section">
-        <SectionTitle title="常用模板" action="建立事項" onClick={() => go("templates")} />
-        <div className="template-grid">
-          {templates.slice(0, 4).map(([key, meta]) => (
-            <button className={`template-card ${meta.accent}`} type="button" key={key} onClick={() => go("templates", { selectedTemplate: key })}>
-              <meta.icon size={22} />
-              <strong>{meta.label}</strong>
-              <span>{meta.description}</span>
-            </button>
-          ))}
+      <section className="section circle-overview-section">
+        <SectionTitle title="我的圈子" action="建立圈子" onClick={() => go("createCircle")} />
+        {circleSummaries.length > 0 ? (
+          <div className="circle-overview-list">
+            {circleSummaries.map((circle) => (
+              <CircleOverviewCard key={circle.id} circle={circle} go={go} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Users}
+            title="先加入或建立一個圈子"
+            body="圈內的第一層不是功能，而是你的熟人圈。收到邀請可以直接加入，也可以先建立自己的圈子。"
+            centered
+            className="home-empty-state"
+            action={(
+              <button className="primary-button" type="button" onClick={() => go("createCircle")}>
+                <Plus size={18} />
+                建立圈子
+              </button>
+            )}
+          />
+        )}
+      </section>
+    </>
+  );
+}
+
+function AttentionCard({ item, go }) {
+  const Icon = item.icon ?? Bell;
+  return (
+    <button className={`attention-card ${item.tone ?? ""}`} type="button" onClick={() => go(item.route.name, item.route)}>
+      <span className="attention-icon"><Icon size={18} /></span>
+      <span>
+        <strong>{item.title}</strong>
+        <small>{item.body}</small>
+      </span>
+      <b>{item.badge}</b>
+    </button>
+  );
+}
+
+function CircleOverviewCard({ circle, go }) {
+  const hasAttention = circle.unreadCount > 0 || circle.unpaid > 0 || circle.priorityUnreadCount > 0;
+  const statusText = circle.priorityUnreadCount > 0
+    ? `${circle.priorityUnreadCount} 則重要提醒`
+    : circle.unreadCount > 0
+      ? `${circle.unreadCount} 則未讀`
+      : circle.unpaid > 0
+        ? `${circle.unpaid} 待付款/確認`
+        : circle.activeCount > 0
+          ? `${circle.activeCount} 件進行中`
+          : "目前安靜";
+  return (
+    <button className={`circle-overview-card ${hasAttention ? "has-attention" : ""}`} type="button" onClick={() => go("circleHome", { circleId: circle.id })}>
+      <span className="circle-overview-icon"><Users size={20} /></span>
+      <span className="circle-overview-main">
+        <strong>{circle.name}</strong>
+        <small>{circle.description || (circle.recentTask ? `最近：${circle.recentTask.title}` : "點進去看事項、討論與成員")}</small>
+        <span className="circle-overview-meta">
+          <em>{membershipRoleLabels[circle.role] ?? circle.role}</em>
+          {circle.memberCount !== null ? <em>{circle.memberCount} 人</em> : null}
+          <em>{circle.taskCount} 件事項</em>
+        </span>
+      </span>
+      <span className={`circle-overview-status ${hasAttention ? "alert" : ""}`}>
+        {statusText}
+      </span>
+    </button>
+  );
+}
+
+function TodoHub({ tasks, notifications, go, shareTask }) {
+  const activeTasks = tasks.filter((task) => task.status === "open");
+  const attentionItems = buildAttentionItems(tasks, notifications);
+  return (
+    <>
+      <Topbar title="待辦" subtitle="需要你看一下的事" onBack={() => go("dashboard")} />
+      <section className="section todo-summary-section">
+        <div className="notification-summary">
+          <div>
+            <strong>{attentionItems.length > 0 ? `${attentionItems.length} 件需要注意` : "目前沒有急件"}</strong>
+            <p>這裡先整理跨圈子的未讀提醒、待付款與待確認事項。</p>
+          </div>
         </div>
       </section>
-
+      <section className="section">
+        <SectionTitle title="需要處理" />
+        {attentionItems.length > 0 ? (
+          <div className="attention-list">
+            {attentionItems.map((item) => <AttentionCard key={item.id} item={item} go={go} />)}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Check}
+            title="現在沒有需要你處理的事"
+            body="有新的公告、待付款或待確認事項時，會先放在這裡。"
+            className="home-empty-state"
+          />
+        )}
+      </section>
       <section className="section">
         <SectionTitle title="進行中的事項" />
-        <div className="task-list">
-          {activeTasks.map((task) => (
-            <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
-          ))}
+        {activeTasks.length > 0 ? (
+          <div className="task-list">
+            {activeTasks.map((task) => (
+              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={ClipboardList}
+            title="目前沒有進行中的事項"
+            body="等圈內開始訂飲料、揪活動或團購時，進行中的事項會放在這裡。"
+            className="home-empty-state"
+          />
+        )}
+      </section>
+    </>
+  );
+}
+
+function ProfileHub({ session, authProviders, go, refresh, setToast }) {
+  return (
+    <>
+      <Topbar title="我的" subtitle="帳號與圈子設定" onBack={() => go("dashboard")} />
+      <AuthPanel session={session} providers={authProviders} go={go} refresh={refresh} setToast={setToast} />
+      {session?.authenticated ? (
+        <section className="section profile-shortcuts">
+          <SectionTitle title="常用設定" />
+          <div className="profile-shortcut-list">
+            <button className="selected-summary" type="button" onClick={() => go("notifications")}>
+              <Bell size={20} />
+              <span>
+                <strong>通知與手機提醒</strong>
+                <small>調整通知中心、重要提醒與推播裝置</small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+            <button className="selected-summary" type="button" onClick={() => go("createCircle")}>
+              <Users size={20} />
+              <span>
+                <strong>建立新圈子</strong>
+                <small>先開一個熟人圈，再邀請成員加入</small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+function CircleHome({ circle, membership, tasks, notifications, go, shareTask }) {
+  const activeTasks = tasks.filter((task) => task.status === "open");
+  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
+  const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
+  return (
+    <>
+      <Topbar title={circle.name} subtitle="圈子首頁" onBack={() => go("dashboard")} />
+      <section className="circle-home-hero">
+        <span className="circle-overview-icon"><Users size={22} /></span>
+        <div>
+          <h1>{circle.name}</h1>
+          <p>{circle.description || "這個圈子的事項、討論、成員都整理在這裡。"}</p>
+          <div className="circle-overview-meta">
+            <em>{membershipRoleLabels[membership?.role] ?? "成員"}</em>
+            <em>{circle.memberCount ?? 0} 人</em>
+            <em>{activeTasks.length} 件進行中</em>
+          </div>
         </div>
+      </section>
+      <section className="home-status-strip">
+        <span>
+          <strong>{activeTasks.length}</strong>
+          進行中
+        </span>
+        <span className={unpaid > 0 ? "alert" : ""}>
+          <strong>{unpaid}</strong>
+          待付款
+        </span>
+        <span className={unreadCount > 0 ? "alert" : ""}>
+          <strong>{unreadCount}</strong>
+          未讀
+        </span>
+      </section>
+      <section className="section circle-home-actions">
+        <div className="success-action-grid">
+          <button className="success-action-card primary" type="button" onClick={() => go("circleChat", { circleId: circle.id })}>
+            <MessageCircle size={20} />
+            <span>
+              <strong>圈內討論</strong>
+              <small>公告、臨時通知、大家討論</small>
+            </span>
+          </button>
+          <button className="success-action-card" type="button" onClick={() => go("members", { circleId: circle.id })}>
+            <Users size={20} />
+            <span>
+              <strong>成員與邀請</strong>
+              <small>看成員、建立邀請連結</small>
+            </span>
+          </button>
+        </div>
+      </section>
+      <section className="section">
+        <SectionTitle title="這個圈子的事項" action="建立事項" onClick={() => go("templates")} />
+        {activeTasks.length > 0 ? (
+          <div className="task-list">
+            {activeTasks.map((task) => (
+              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={ClipboardList}
+            title="這個圈子目前沒有進行中的事項"
+            body="要訂飲料、揪活動或統計票券時，可以從建立事項開始。"
+            className="home-empty-state"
+          />
+        )}
       </section>
     </>
   );
