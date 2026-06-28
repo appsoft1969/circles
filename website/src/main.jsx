@@ -514,7 +514,13 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
             {extraMemberships > 0 ? <span className="membership-chip more">+{extraMemberships}</span> : null}
           </div>
         ) : (
-          <p className="auth-note">尚未加入圈子。可透過邀請連結加入，或由圈主管理成員。</p>
+          <div className="membership-empty-card">
+            <UserPlus size={20} />
+            <span>
+              <strong>你還沒有加入圈子</strong>
+              <small>收到圈主分享的邀請連結後，打開連結就能加入。還沒有連結的話，請圈主在成員頁建立邀請給你。</small>
+            </span>
+          </div>
         )}
       </section>
     );
