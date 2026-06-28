@@ -289,6 +289,7 @@ function App() {
     join: selectedTask ? (
       <JoinTask
         task={selectedTask}
+        session={state.session}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -2286,9 +2287,14 @@ function TaskDiscussion({ task, compact = false }) {
   );
 }
 
-function JoinTask({ task, go, refresh, setToast, updateTask }) {
+function participantNameFromSession(session) {
+  return session?.authenticated ? (session.profile?.displayName || "").trim() : "";
+}
+
+function JoinTask({ task, session, go, refresh, setToast, updateTask }) {
+  const suggestedParticipantName = participantNameFromSession(session);
   const [step, setStep] = useState("items");
-  const [name, setName] = useState("王小明");
+  const [name, setName] = useState(() => suggestedParticipantName);
   const [note, setNote] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [showComment, setShowComment] = useState(false);
@@ -2303,12 +2309,13 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
 
   useEffect(() => {
     setStep("items");
+    setName(suggestedParticipantName);
     setNote("");
     setCommentBody("");
     setShowComment(false);
     setSubmitted(null);
     setQuantities(defaultJoinQuantities());
-  }, [task.id]);
+  }, [task.id, suggestedParticipantName]);
 
   function defaultJoinQuantities() {
     return Object.fromEntries(task.options.map((option, index) => [option.id, index === 0 ? 1 : 0]));
@@ -2519,12 +2526,12 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
             <span className="step-pill">2/3</span>
             <div>
               <h2>填寫資料</h2>
-              <p>只需要主揪辨識得出你是誰；備註有需要再填。</p>
+              <p>{suggestedParticipantName ? "已用會員名稱帶入；若幫別人填，也可以直接改名。" : "只需要主揪辨識得出你是誰；備註有需要再填。"}</p>
             </div>
           </div>
           {step === "details" ? (
             <>
-              <label>姓名<input value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <label>姓名<input value={name} onChange={(event) => setName(event.target.value)} placeholder="請填姓名或暱稱" /></label>
               <label>備註<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：不要辣、微糖少冰、可到時間..." /></label>
             </>
           ) : (
