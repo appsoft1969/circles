@@ -497,6 +497,33 @@ a {
   gap: 12px;
 }
 
+.home-invitation-panel {
+  border: 1px solid #b9d8c8;
+  border-radius: 8px;
+  background: #f6fbf8;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.home-invitation-panel .wizard-step-head {
+  padding: 0;
+}
+
+.home-invitation-panel .wizard-step-head h2 {
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.home-invitation-panel .wizard-step-head p {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.home-invitation-panel > .secondary-button {
+  justify-self: start;
+}
+
 .member-invitation-card {
   border: 1px solid #a7d9bd;
   border-radius: 8px;

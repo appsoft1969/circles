@@ -699,11 +699,14 @@ function App() {
         circles={state.circles}
         tasks={state.tasks}
         notifications={state.notifications}
+        memberInvitations={state.memberInvitations}
         session={state.session}
         authProviders={state.authProviders}
         go={go}
         refresh={refresh}
         setToast={setToast}
+        respondMemberInvitation={respondMemberInvitation}
+        memberInvitationBusyId={memberInvitationBusyId}
       />
     ),
     todos: (
@@ -1067,9 +1070,22 @@ function HomeTopbar({ session, circleCount, unreadCount, go }) {
   );
 }
 
-function Dashboard({ circles, tasks, notifications, session, authProviders, go, refresh, setToast }) {
+function Dashboard({
+  circles,
+  tasks,
+  notifications,
+  memberInvitations = [],
+  session,
+  authProviders,
+  go,
+  refresh,
+  setToast,
+  respondMemberInvitation,
+  memberInvitationBusyId = "",
+}) {
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
   const circleSummaries = buildCircleSummaries({ circles, tasks, notifications, session });
+  const pendingInvitations = memberInvitations.filter((invitation) => invitation.status === "pending");
 
   return (
     <>
@@ -1098,6 +1114,30 @@ function Dashboard({ circles, tasks, notifications, session, authProviders, go, 
             {circleSummaries.map((circle) => (
               <CircleOverviewCard key={circle.id} circle={circle} go={go} />
             ))}
+          </div>
+        ) : pendingInvitations.length > 0 ? (
+          <div className="home-invitation-panel">
+            <div className="wizard-step-head">
+              <span className="step-pill">入圈邀請</span>
+              <div>
+                <h2>有人邀你進熟人圈</h2>
+                <p>先看是不是你認識的圈子，再決定要加入或婉拒。</p>
+              </div>
+            </div>
+            <div className="member-invitation-list">
+              {pendingInvitations.map((invitation) => (
+                <MemberInvitationCard
+                  key={invitation.id}
+                  invitation={invitation}
+                  onRespond={respondMemberInvitation}
+                  busyId={memberInvitationBusyId}
+                />
+              ))}
+            </div>
+            <button className="secondary-button compact" type="button" onClick={() => go("createCircle")}>
+              <Plus size={16} />
+              也可以先建立自己的圈子
+            </button>
           </div>
         ) : (
           <EmptyState
