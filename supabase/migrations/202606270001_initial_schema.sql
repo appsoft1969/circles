@@ -152,6 +152,24 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_devices_push_token
 CREATE INDEX IF NOT EXISTS ix_devices_profile_id
   ON devices (profile_id);
 
+CREATE TABLE IF NOT EXISTS notification_preferences (
+  profile_id uuid PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+  in_app_enabled boolean NOT NULL DEFAULT true,
+  important_only boolean NOT NULL DEFAULT false,
+  announcement_enabled boolean NOT NULL DEFAULT true,
+  message_enabled boolean NOT NULL DEFAULT true,
+  quiet_hours_enabled boolean NOT NULL DEFAULT false,
+  quiet_hours_start time NOT NULL DEFAULT '22:00',
+  quiet_hours_end time NOT NULL DEFAULT '08:00',
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+DROP TRIGGER IF EXISTS trg_notification_preferences_updated_at ON notification_preferences;
+CREATE TRIGGER trg_notification_preferences_updated_at
+BEFORE UPDATE ON notification_preferences
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE TABLE IF NOT EXISTS circles (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   owner_profile_id uuid NOT NULL REFERENCES profiles(id),

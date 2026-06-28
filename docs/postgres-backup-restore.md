@@ -42,6 +42,7 @@ Each run performs a backup and restore check:
 The restore check verifies these tables:
 
 - `profiles`
+- `notification_preferences`
 - `circles`
 - `circle_memberships`
 - `task_templates`

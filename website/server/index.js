@@ -387,6 +387,19 @@ app.get("/api/notifications", route(async (req, res) => {
   res.json({ notifications });
 }));
 
+app.get("/api/notifications/preferences", route(async (req, res) => {
+  const preferences = await store.getNotificationPreferences(actorFromRequest(req));
+  res.json({ preferences });
+}));
+
+app.patch("/api/notifications/preferences", route(async (req, res) => {
+  const preferences = await store.updateNotificationPreferences({
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json({ preferences });
+}));
+
 app.patch("/api/notifications/read-all", route(async (req, res) => {
   const notifications = await store.markAllNotificationsRead(actorFromRequest(req));
   res.json({ count: notifications.length, notifications });

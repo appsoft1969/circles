@@ -43,6 +43,7 @@ Tables:
 - `auth_sessions`
 - `auth_oauth_states`
 - `devices`
+- `notification_preferences`
 - `circles`
 - `circle_memberships`
 - `circle_invites`
@@ -55,6 +56,7 @@ Notes:
 - `auth_oauth_states` stores short-lived state/nonce records for OAuth callbacks.
 - The migration does not add Supabase Row Level Security policies yet. Those should be added after auth flow decisions are stable.
 - `devices` is ready for Expo push tokens and notification delivery tracking.
+- `notification_preferences` stores per-profile in-app reminder preferences and future push quiet-hour settings.
 
 ### Task Engine
 
@@ -105,6 +107,7 @@ Tables:
 - `conversations`
 - `messages`
 - `message_reads`
+- `notification_preferences`
 - `notifications`
 - `notification_deliveries`
 
@@ -116,7 +119,7 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
-Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges fresh with lightweight foreground polling. Real push delivery, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
+Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, notification preferences, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges fresh with lightweight foreground polling. Preference rules affect future notification rows; they do not delete historical notification records. Real push delivery and Supabase Realtime/mobile subscriptions are still future work.
 
 ### Attachments And Audit
 
@@ -184,7 +187,7 @@ Current local connection:
 
 The initial migration has been verified locally with:
 
-- 21 base tables.
+- 22 base tables.
 - 9 task templates.
 - 4 seeded demo circles.
 - 6 seeded demo tasks.
@@ -206,9 +209,9 @@ The initial migration has been verified locally with:
 - Postgres API announcement confirmation through `POST /api/announcements/:announcementId/confirm`, requiring active circle membership and updating the matching notification read state.
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
 - Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
-- Postgres API push scaffolding through device registration, notification listing, per-notification read state, and bulk notification read state.
+- Postgres API push scaffolding through device registration, notification preference read/write, notification listing, per-notification read state, and bulk notification read state.
 - Postgres CSV export through `GET /api/tasks/:taskId/export.csv`, requiring task-manager authorization.
-- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, anonymous authorization rejection, conversations, message reads, notifications, and devices.
+- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, anonymous authorization rejection, conversations, message reads, notification preferences, notifications, and devices.
 - SQLite-to-Postgres migration through `website/scripts/migrate-sqlite-to-postgres.mjs`.
 - Daily local backup and restore drill through `website/scripts/postgres-backup-restore.mjs`, with verified artifacts copied to iCloud Drive.
 - Public Mac API health verified with `backend: "postgres"`.

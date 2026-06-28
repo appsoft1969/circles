@@ -114,6 +114,8 @@ Every template should share the same core flow:
   - Phase 3: lightweight circle chat where it supports task coordination.
 - Chat features must remain tied to circle/task operations. Avoid a standalone social chat product.
 - Important notifications should not require members to leave InCircle for an external chat app.
+- Notification preferences should affect future reminder creation, not delete or hide historical notification records retroactively.
+- Current web notification preferences cover in-app notification rows. Quiet hours are recorded now so later APNs/FCM push delivery can respect them; do not claim current web quiet hours silence OS-level push because real push delivery is not implemented yet.
 
 ## Mobile And App Direction
 

@@ -523,6 +523,25 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         `${label}: expected created conversation in list`,
       );
 
+      const defaultPreferences = await request(baseUrl, "/api/notifications/preferences", { headers: sessionHeaders });
+      const originalPreferences = defaultPreferences.body.preferences;
+      assert.equal(typeof defaultPreferences.body.preferences.inAppEnabled, "boolean");
+      assert.equal(typeof defaultPreferences.body.preferences.importantOnly, "boolean");
+      assert.equal(typeof defaultPreferences.body.preferences.messageEnabled, "boolean");
+
+      const patchedPreferences = await request(baseUrl, "/api/notifications/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({
+          quietHoursEnabled: true,
+          quietHoursStart: "21:30",
+          quietHoursEnd: "07:15",
+        }),
+      });
+      assert.equal(patchedPreferences.body.preferences.quietHoursEnabled, true);
+      assert.equal(patchedPreferences.body.preferences.quietHoursStart, "21:30");
+      assert.equal(patchedPreferences.body.preferences.quietHoursEnd, "07:15");
+
       const message = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...sessionHeaders },
@@ -549,6 +568,27 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         });
         assert.equal(readNotification.body.notification.id, memberNotification.id);
         assert.ok(readNotification.body.notification.readAt, `${label}: expected notification read timestamp`);
+
+        const memberPreferences = await request(baseUrl, "/api/notifications/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+          body: JSON.stringify({ importantOnly: true }),
+        });
+        assert.equal(memberPreferences.body.preferences.importantOnly, true);
+
+        const quietMessage = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...sessionHeaders },
+          body: JSON.stringify({
+            body: `${label} 測試訊息：這則普通討論不應通知只收重要的成員。`,
+            metadata: { smoke: true, preferenceCheck: true },
+          }),
+        });
+        const quietNotifications = await request(baseUrl, "/api/notifications", { headers: invitedMemberHeaders });
+        assert.ok(
+          !quietNotifications.body.notifications.some((notification) => notification.messageId === quietMessage.body.message.id),
+          `${label}: expected important-only member to skip normal message notification`,
+        );
       }
 
       const messages = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
@@ -584,6 +624,20 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
 
       const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
+
+      await request(baseUrl, "/api/notifications/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({
+          inAppEnabled: originalPreferences.inAppEnabled,
+          importantOnly: originalPreferences.importantOnly,
+          announcementEnabled: originalPreferences.announcementEnabled,
+          messageEnabled: originalPreferences.messageEnabled,
+          quietHoursEnabled: originalPreferences.quietHoursEnabled,
+          quietHoursStart: originalPreferences.quietHoursStart,
+          quietHoursEnd: originalPreferences.quietHoursEnd,
+        }),
+      });
     }
 
     const response = submitted.body.task.responses.find((item) => item.participantName === `${label} 測試成員`);

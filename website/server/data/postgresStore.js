@@ -72,6 +72,7 @@ const announcementPriorities = new Set(["normal", "important", "urgent"]);
 const inviteRoles = new Set(["member", "guest"]);
 const memberRoles = new Set(["admin", "member", "guest"]);
 const membershipStatuses = new Set(["active", "muted", "left", "removed"]);
+const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 function groupBy(rows, key) {
   return rows.reduce((groups, row) => {
@@ -288,6 +289,20 @@ function notificationFromRow(row) {
   };
 }
 
+function notificationPreferenceFromRow(row) {
+  return {
+    profileId: row.profile_id,
+    inAppEnabled: Boolean(row.in_app_enabled),
+    importantOnly: Boolean(row.important_only),
+    announcementEnabled: Boolean(row.announcement_enabled),
+    messageEnabled: Boolean(row.message_enabled),
+    quietHoursEnabled: Boolean(row.quiet_hours_enabled),
+    quietHoursStart: String(row.quiet_hours_start || "22:00").slice(0, 5),
+    quietHoursEnd: String(row.quiet_hours_end || "08:00").slice(0, 5),
+    updatedAt: toIso(row.updated_at),
+  };
+}
+
 function sessionFromRow(row) {
   return {
     id: row.id,
@@ -359,8 +374,22 @@ function buildCsv(task) {
   return rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
 }
 
+function normalizeTimeValue(value, fallback) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const text = String(value).trim();
+  if (!timePattern.test(text)) {
+    throw new StoreError(400, `Invalid time value: ${text}`);
+  }
+  return text;
+}
+
+function boolOrCurrent(value, current) {
+  return typeof value === "boolean" ? value : current;
+}
+
 export function createPostgresStore({ connectionString = defaultConnectionString } = {}) {
   const pool = new Pool({ connectionString });
+  let notificationPreferenceSchemaReady = null;
 
   const taskSelect = `
     SELECT
@@ -408,6 +437,62 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     } finally {
       client.release();
     }
+  }
+
+  async function ensureNotificationPreferenceSchema() {
+    if (!notificationPreferenceSchemaReady) {
+      notificationPreferenceSchemaReady = pool.query(`
+        CREATE TABLE IF NOT EXISTS notification_preferences (
+          profile_id uuid PRIMARY KEY REFERENCES profiles(id) ON DELETE CASCADE,
+          in_app_enabled boolean NOT NULL DEFAULT true,
+          important_only boolean NOT NULL DEFAULT false,
+          announcement_enabled boolean NOT NULL DEFAULT true,
+          message_enabled boolean NOT NULL DEFAULT true,
+          quiet_hours_enabled boolean NOT NULL DEFAULT false,
+          quiet_hours_start time NOT NULL DEFAULT '22:00',
+          quiet_hours_end time NOT NULL DEFAULT '08:00',
+          updated_at timestamptz NOT NULL DEFAULT now()
+        );
+
+        DROP TRIGGER IF EXISTS trg_notification_preferences_updated_at ON notification_preferences;
+        CREATE TRIGGER trg_notification_preferences_updated_at
+        BEFORE UPDATE ON notification_preferences
+        FOR EACH ROW
+        EXECUTE FUNCTION set_updated_at();
+      `);
+    }
+    await notificationPreferenceSchemaReady;
+  }
+
+  async function getNotificationPreferencesForProfile(profileId, client = pool) {
+    await ensureNotificationPreferenceSchema();
+    await client.query(
+      `
+        INSERT INTO notification_preferences (profile_id)
+        VALUES ($1::uuid)
+        ON CONFLICT (profile_id) DO NOTHING
+      `,
+      [profileId],
+    );
+    const result = await client.query(
+      `
+        SELECT
+          profile_id::text,
+          in_app_enabled,
+          important_only,
+          announcement_enabled,
+          message_enabled,
+          quiet_hours_enabled,
+          quiet_hours_start::text,
+          quiet_hours_end::text,
+          updated_at
+        FROM notification_preferences
+        WHERE profile_id::text = $1
+        LIMIT 1
+      `,
+      [profileId],
+    );
+    return notificationPreferenceFromRow(result.rows[0]);
   }
 
   async function profileBySessionToken(token, client = pool) {
@@ -2264,6 +2349,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     const priority = body.priority || "normal";
     if (!announcementPriorities.has(priority)) throw new StoreError(400, `Invalid announcement priority: ${priority}`);
     if (!body.body) throw new StoreError(400, "Announcement body is required");
+    await ensureNotificationPreferenceSchema();
 
     const updatedTaskId = await withTransaction(async (client) => {
       const { profile, task: managedTask } = await requireTaskManager(taskId, body.actor, client);
@@ -2405,10 +2491,18 @@ export function createPostgresStore({ connectionString = defaultConnectionString
             $6,
             $7::jsonb
           FROM circle_memberships cm
+          LEFT JOIN notification_preferences np
+            ON np.profile_id = cm.profile_id
           WHERE cm.circle_id = $2::uuid
             AND cm.status = 'active'
             AND cm.profile_id IS NOT NULL
             AND cm.profile_id <> $1::uuid
+            AND COALESCE(np.in_app_enabled, true)
+            AND COALESCE(np.announcement_enabled, true)
+            AND (
+              NOT COALESCE(np.important_only, false)
+              OR $8 IN ('important', 'urgent')
+            )
         `,
         [
           authorProfileId,
@@ -2418,6 +2512,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           body.title || "事項公告",
           body.body.slice(0, 160),
           json({ taskId: managedTask.id, conversationId, priority }),
+          priority,
         ],
       );
 
@@ -2695,6 +2790,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
 
   async function createConversationMessage(conversationId, body = {}) {
     if (!body.body) throw new StoreError(400, "Message body is required");
+    await ensureNotificationPreferenceSchema();
 
     return withTransaction(async (client) => {
       const { conversation, profile } = await conversationAccess(conversationId, body.actor, client);
@@ -2747,10 +2843,15 @@ export function createPostgresStore({ connectionString = defaultConnectionString
             $6,
             $7::jsonb
           FROM circle_memberships cm
+          LEFT JOIN notification_preferences np
+            ON np.profile_id = cm.profile_id
           WHERE cm.circle_id = $2::uuid
             AND cm.status = 'active'
             AND cm.profile_id IS NOT NULL
             AND cm.profile_id <> $1::uuid
+            AND COALESCE(np.in_app_enabled, true)
+            AND COALESCE(np.message_enabled, true)
+            AND NOT COALESCE(np.important_only, false)
         `,
         [
           profile.id,
@@ -2803,6 +2904,62 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       profileId: result.rows[0].profile_id,
       readAt: toIso(result.rows[0].read_at),
     };
+  }
+
+  async function getNotificationPreferences(actor = {}) {
+    const profile = await requireProfile(actor);
+    return getNotificationPreferencesForProfile(profile.id);
+  }
+
+  async function updateNotificationPreferences(body = {}) {
+    const profile = await requireProfile(body.actor);
+    const current = await getNotificationPreferencesForProfile(profile.id);
+    const next = {
+      inAppEnabled: boolOrCurrent(body.inAppEnabled, current.inAppEnabled),
+      importantOnly: boolOrCurrent(body.importantOnly, current.importantOnly),
+      announcementEnabled: boolOrCurrent(body.announcementEnabled, current.announcementEnabled),
+      messageEnabled: boolOrCurrent(body.messageEnabled, current.messageEnabled),
+      quietHoursEnabled: boolOrCurrent(body.quietHoursEnabled, current.quietHoursEnabled),
+      quietHoursStart: normalizeTimeValue(body.quietHoursStart, current.quietHoursStart),
+      quietHoursEnd: normalizeTimeValue(body.quietHoursEnd, current.quietHoursEnd),
+    };
+
+    const result = await pool.query(
+      `
+        UPDATE notification_preferences
+        SET
+          in_app_enabled = $2,
+          important_only = $3,
+          announcement_enabled = $4,
+          message_enabled = $5,
+          quiet_hours_enabled = $6,
+          quiet_hours_start = $7::time,
+          quiet_hours_end = $8::time
+        WHERE profile_id::text = $1
+        RETURNING
+          profile_id::text,
+          in_app_enabled,
+          important_only,
+          announcement_enabled,
+          message_enabled,
+          quiet_hours_enabled,
+          quiet_hours_start::text,
+          quiet_hours_end::text,
+          updated_at
+      `,
+      [
+        profile.id,
+        next.inAppEnabled,
+        next.importantOnly,
+        next.announcementEnabled,
+        next.messageEnabled,
+        next.quietHoursEnabled,
+        next.quietHoursStart,
+        next.quietHoursEnd,
+      ],
+    );
+
+    return notificationPreferenceFromRow(result.rows[0]);
   }
 
   async function registerDevice(body = {}) {
@@ -3028,6 +3185,8 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     listConversationMessages,
     createConversationMessage,
     markMessageRead,
+    getNotificationPreferences,
+    updateNotificationPreferences,
     registerDevice,
     listNotifications,
     markNotificationRead,

@@ -67,4 +67,4 @@ PGPASSWORD=incircle_local_password /opt/homebrew/opt/postgresql@16/bin/psql \
 - `task_templates` is seeded by the initial migration because those IDs are part of the product contract.
 - `seed.sql` is for local development and demos; do not treat it as production data.
 - `tasks` is the central object. Templates such as group buy, member sale, meal order, drink order, activity, poll, and expense split share the same engine.
-- `conversations`, `messages`, `message_reads`, `devices`, and `notifications` now have API scaffolding in the Postgres store. Supabase Realtime subscriptions and APNs/FCM delivery are still future work.
+- `conversations`, `messages`, `message_reads`, `devices`, `notification_preferences`, and `notifications` now have API scaffolding in the Postgres store. Supabase Realtime subscriptions and APNs/FCM delivery are still future work.

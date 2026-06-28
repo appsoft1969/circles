@@ -1234,6 +1234,8 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     listConversationMessages: postgresOnlyRealtime,
     createConversationMessage: postgresOnlyRealtime,
     markMessageRead: postgresOnlyRealtime,
+    getNotificationPreferences: postgresOnlyRealtime,
+    updateNotificationPreferences: postgresOnlyRealtime,
     registerDevice: postgresOnlyRealtime,
     listNotifications: postgresOnlyRealtime,
     markNotificationRead: postgresOnlyRealtime,

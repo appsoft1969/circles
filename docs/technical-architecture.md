@@ -245,6 +245,8 @@ Current Postgres store status:
 - `POST /api/messages/:messageId/read`: implemented in Postgres with membership check.
 - `POST /api/devices`: implemented in Postgres for push-token registration.
 - `GET /api/notifications`: implemented in Postgres.
+- `GET /api/notifications/preferences`: implemented in Postgres.
+- `PATCH /api/notifications/preferences`: implemented in Postgres.
 - `PATCH /api/notifications/:notificationId/read`: implemented in Postgres.
 
 Do not treat `DATA_STORE=postgres` as fully production-ready until auth, RLS/access policies, deployment hardening, backups, monitoring, and operational verification are implemented.
@@ -338,7 +340,7 @@ Opens or closes a task.
 
 ### `POST /api/tasks/:taskId/announcements`
 
-Publishes a task-level announcement for organizer notices. In Postgres, this also creates announcement receipts, queues in-app notifications for other active circle members, and mirrors the announcement into the task conversation so follow-up discussion has a clear context. Announcements can require member confirmation through `requiresConfirmation`; members confirm with `POST /api/announcements/:announcementId/confirm`, which updates the receipt and marks the matching notification read.
+Publishes a task-level announcement for organizer notices. In Postgres, this also creates announcement receipts, queues in-app notifications for other active circle members according to their notification preferences, and mirrors the announcement into the task conversation so follow-up discussion has a clear context. Announcements can require member confirmation through `requiresConfirmation`; members confirm with `POST /api/announcements/:announcementId/confirm`, which updates the receipt and marks the matching notification read.
 
 ### `POST /api/tasks/:taskId/comments`
 
@@ -359,10 +361,12 @@ The Postgres store now supports:
 - `POST /api/messages/:messageId/read`
 - `POST /api/devices`
 - `GET /api/notifications`
+- `GET /api/notifications/preferences`
+- `PATCH /api/notifications/preferences`
 - `PATCH /api/notifications/read-all`
 - `PATCH /api/notifications/:notificationId/read`
 
-These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, bulk read action, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. SQLite returns `501` for these realtime/push routes.
+These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, notification preferences, bulk read action, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Notification preferences affect future in-app notification rows; quiet hours are recorded for later push delivery and do not currently silence OS-level notifications. SQLite returns `501` for these realtime/push routes.
 
 ## Local Commands
 

@@ -25,6 +25,7 @@ const restoreDbName = `incircle_restore_${timestamp}`;
 
 const tablesToVerify = [
   "profiles",
+  "notification_preferences",
   "circles",
   "circle_memberships",
   "task_templates",

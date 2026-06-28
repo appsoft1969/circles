@@ -494,6 +494,95 @@ a {
   white-space: nowrap;
 }
 
+.notification-preferences {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.notification-preference-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.notification-preference-head strong,
+.notification-preference-head small {
+  display: block;
+}
+
+.notification-preference-head strong {
+  font-size: 17px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.notification-preference-head small {
+  margin-top: 4px;
+  color: #74767c;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.notification-preference-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.preference-toggle {
+  border: 1px solid #e3e3df;
+  border-radius: 8px;
+  background: #fbfbfa;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.preference-toggle input {
+  width: 22px;
+  height: 22px;
+  margin: 2px 0 0;
+}
+
+.preference-toggle strong,
+.preference-toggle small {
+  display: block;
+}
+
+.preference-toggle strong {
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+
+.preference-toggle small {
+  margin-top: 3px;
+  color: #62646b;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.preference-time-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.preference-time-grid label {
+  display: grid;
+  gap: 6px;
+  color: #3e4148;
+  font-size: 14px;
+  font-weight: 850;
+}
+
 .notification-empty {
   border: 1px solid #d6d6d1;
   border-radius: 8px;
@@ -603,6 +692,10 @@ a {
 
   .notification-summary .secondary-button {
     width: 100%;
+  }
+
+  .preference-time-grid {
+    grid-template-columns: 1fr;
   }
 }
 

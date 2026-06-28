@@ -419,6 +419,7 @@ function App() {
       <NotificationCenter
         notifications={state.notifications}
         circles={state.circles}
+        session={state.session}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -1394,9 +1395,12 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
   );
 }
 
-function NotificationCenter({ notifications = [], circles = [], go, refresh, setToast }) {
+function NotificationCenter({ notifications = [], circles = [], session, go, refresh, setToast }) {
   const circleNames = new Map(circles.map((circle) => [circle.id, circle.name]));
   const [markingAll, setMarkingAll] = useState(false);
+  const [preferences, setPreferences] = useState(null);
+  const [loadingPreferences, setLoadingPreferences] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
   const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
@@ -1413,6 +1417,25 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
       : unreadCount > 0
         ? "點開一則通知，就會帶你回到相關事項或討論串。"
         : "之後有新消息，這裡會自動更新，不用一直重新整理。";
+
+  useEffect(() => {
+    if (!session?.authenticated) return undefined;
+    let cancelled = false;
+    setLoadingPreferences(true);
+    api("/api/notifications/preferences")
+      .then((data) => {
+        if (!cancelled) setPreferences(data.preferences);
+      })
+      .catch(() => {
+        if (!cancelled) setPreferences(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPreferences(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.authenticated, session?.profile?.id]);
 
   async function openNotification(notification) {
     try {
@@ -1452,6 +1475,26 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
     }
   }
 
+  async function updatePreferences(patch) {
+    if (!preferences || savingPreferences) return;
+    const nextPreferences = { ...preferences, ...patch };
+    setPreferences(nextPreferences);
+    setSavingPreferences(true);
+    try {
+      const data = await api("/api/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setPreferences(data.preferences);
+      setToast("通知偏好已更新");
+    } catch (error) {
+      setPreferences(preferences);
+      setToast(error.message);
+    } finally {
+      setSavingPreferences(false);
+    }
+  }
+
   return (
     <>
       <Topbar title="通知中心" subtitle="圈內訊息與提醒" onBack={() => go("dashboard")} />
@@ -1468,6 +1511,112 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
             </button>
           ) : null}
         </div>
+        {session?.authenticated ? (
+          <div className="notification-preferences">
+            <div className="notification-preference-head">
+              <span className="notification-icon"><Bell size={18} /></span>
+              <div>
+                <strong>你想怎麼收圈內提醒？</strong>
+                <small>先設定通知中心的提醒規則，之後接手機推播時也會沿用這裡。</small>
+              </div>
+            </div>
+            {loadingPreferences ? <p className="empty-note">我正在讀你的通知偏好...</p> : null}
+            {preferences ? (
+              <div className="notification-preference-controls">
+                <label className="preference-toggle">
+                  <input
+                    type="checkbox"
+                    checked={preferences.inAppEnabled}
+                    disabled={savingPreferences}
+                    onChange={(event) => updatePreferences({ inAppEnabled: event.target.checked })}
+                  />
+                  <span>
+                    <strong>通知中心先收提醒</strong>
+                    <small>關掉後，之後的一般提醒就不會進通知中心。</small>
+                  </span>
+                </label>
+                {preferences.inAppEnabled ? (
+                  <>
+                    <label className="preference-toggle">
+                      <input
+                        type="checkbox"
+                        checked={preferences.importantOnly}
+                        disabled={savingPreferences}
+                        onChange={(event) => updatePreferences({ importantOnly: event.target.checked })}
+                      />
+                      <span>
+                        <strong>我只想先看重要提醒</strong>
+                        <small>只保留重要或緊急公告，普通討論先不打擾。</small>
+                      </span>
+                    </label>
+                    {!preferences.importantOnly ? (
+                      <>
+                        <label className="preference-toggle">
+                          <input
+                            type="checkbox"
+                            checked={preferences.announcementEnabled}
+                            disabled={savingPreferences}
+                            onChange={(event) => updatePreferences({ announcementEnabled: event.target.checked })}
+                          />
+                          <span>
+                            <strong>主揪公告要提醒我</strong>
+                            <small>例如改地點、取餐、集合、付款確認。</small>
+                          </span>
+                        </label>
+                        <label className="preference-toggle">
+                          <input
+                            type="checkbox"
+                            checked={preferences.messageEnabled}
+                            disabled={savingPreferences}
+                            onChange={(event) => updatePreferences({ messageEnabled: event.target.checked })}
+                          />
+                          <span>
+                            <strong>圈內討論也提醒我</strong>
+                            <small>有人在討論串回覆時，放進通知中心。</small>
+                          </span>
+                        </label>
+                      </>
+                    ) : null}
+                    <label className="preference-toggle">
+                      <input
+                        type="checkbox"
+                        checked={preferences.quietHoursEnabled}
+                        disabled={savingPreferences}
+                        onChange={(event) => updatePreferences({ quietHoursEnabled: event.target.checked })}
+                      />
+                      <span>
+                        <strong>晚上先不要吵我</strong>
+                        <small>目前先記錄偏好，之後接手機推播時會照這個時段。</small>
+                      </span>
+                    </label>
+                    {preferences.quietHoursEnabled ? (
+                      <div className="preference-time-grid">
+                        <label>
+                          開始
+                          <input
+                            type="time"
+                            value={preferences.quietHoursStart}
+                            disabled={savingPreferences}
+                            onChange={(event) => updatePreferences({ quietHoursStart: event.target.value })}
+                          />
+                        </label>
+                        <label>
+                          結束
+                          <input
+                            type="time"
+                            value={preferences.quietHoursEnd}
+                            disabled={savingPreferences}
+                            onChange={(event) => updatePreferences({ quietHoursEnd: event.target.value })}
+                          />
+                        </label>
+                      </div>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {!hasNotifications ? (
           <div className="notification-empty">
             <span className="notification-icon"><Bell size={18} /></span>
