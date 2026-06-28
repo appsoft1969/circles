@@ -1204,6 +1204,10 @@ function AuditEventList({ events = [] }) {
     return groups;
   }, [filteredEvents]);
 
+  if (events.length === 0) {
+    return <p className="empty-note">目前還沒有管理紀錄。等有人新增邀請、改付款狀態或發布公告，這裡就會整理給你看。</p>;
+  }
+
   return (
     <>
       <div className="audit-filter-bar" aria-label="管理紀錄篩選">
@@ -1220,8 +1224,7 @@ function AuditEventList({ events = [] }) {
         ))}
       </div>
       <div className="audit-list">
-        {events.length === 0 ? <p className="empty-note">目前還沒有管理紀錄。</p> : null}
-        {events.length > 0 && filteredEvents.length === 0 ? <p className="empty-note">這一類目前還沒有紀錄。</p> : null}
+        {filteredEvents.length === 0 ? <p className="empty-note">這一類目前還沒有紀錄。</p> : null}
         {groupedEvents.map((group) => (
           <div className="audit-day-group" key={group.label}>
             <span className="audit-date-label">{group.label}</span>
