@@ -1356,6 +1356,35 @@ a {
   margin-top: 12px;
 }
 
+.join-success {
+  padding: 24px 20px 18px;
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+}
+
+.join-success-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #e6f6ec;
+  color: #128f57;
+}
+
+.join-success h1 {
+  margin: 4px 0 0;
+  font-size: 28px;
+  line-height: 1.15;
+}
+
+.join-success p {
+  margin: 0;
+  color: #666870;
+  line-height: 1.55;
+}
+
 .option-list {
   display: grid;
   gap: 10px;

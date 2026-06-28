@@ -2292,7 +2292,9 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
   const [note, setNote] = useState("");
   const [commentBody, setCommentBody] = useState("");
   const [showComment, setShowComment] = useState(false);
-  const [quantities, setQuantities] = useState(() => Object.fromEntries(task.options.map((option, index) => [option.id, index === 0 ? 1 : 0])));
+  const [submitted, setSubmitted] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [quantities, setQuantities] = useState(() => defaultJoinQuantities());
   const selectedItems = task.options
     .map((option) => ({ ...option, quantity: Number(quantities[option.id] || 0) }))
     .filter((option) => option.quantity > 0);
@@ -2304,10 +2306,27 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
     setNote("");
     setCommentBody("");
     setShowComment(false);
-    setQuantities(Object.fromEntries(task.options.map((option, index) => [option.id, index === 0 ? 1 : 0])));
+    setSubmitted(null);
+    setQuantities(defaultJoinQuantities());
   }, [task.id]);
 
+  function defaultJoinQuantities() {
+    return Object.fromEntries(task.options.map((option, index) => [option.id, index === 0 ? 1 : 0]));
+  }
+
+  function resetForAnotherPerson() {
+    setSubmitted(null);
+    setStep("items");
+    setName("");
+    setNote("");
+    setCommentBody("");
+    setShowComment(false);
+    setQuantities(defaultJoinQuantities());
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   async function submit() {
+    if (submitting) return;
     if (!name.trim()) {
       setToast("請先填寫姓名");
       setStep("details");
@@ -2318,17 +2337,37 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
       setStep("items");
       return;
     }
-    await api(`/api/share/${task.shareToken}/responses`, {
-      method: "POST",
-      body: JSON.stringify({
-        participantName: name.trim(),
-        note: note.trim(),
-        items: Object.entries(quantities).map(([optionId, quantity]) => ({ optionId, quantity })),
-      }),
-    });
-    await refresh();
-    setToast("已送出，團主會在圈內看到統計");
-    go("manage", { taskId: task.id });
+    const submittedSnapshot = {
+      participantName: name.trim(),
+      note: note.trim(),
+      items: selectedItems.map((item) => ({
+        id: item.id,
+        title: item.title,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      total,
+    };
+    setSubmitting(true);
+    try {
+      const data = await api(`/api/share/${task.shareToken}/responses`, {
+        method: "POST",
+        body: JSON.stringify({
+          participantName: submittedSnapshot.participantName,
+          note: submittedSnapshot.note,
+          items: submittedSnapshot.items.map((item) => ({ optionId: item.id, quantity: item.quantity })),
+        }),
+      });
+      updateTask(data.task);
+      setSubmitted(submittedSnapshot);
+      setToast("已送出，主揪會在圈內看到統計");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      refresh().catch(() => {});
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function sendComment() {
@@ -2359,6 +2398,50 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
       return;
     }
     setStep("confirm");
+  }
+
+  if (submitted) {
+    return (
+      <>
+        <Topbar title="已送出" subtitle="成員填單" onBack={() => go("manage", { taskId: task.id })} />
+        <section className="join-success">
+          <span className="join-success-icon"><Check size={26} /></span>
+          <h1>你的填單已送出</h1>
+          <p>主揪會在圈內看到你的名單與統計。若內容需要更改，請直接留言或聯絡主揪。</p>
+        </section>
+        <section className="section wizard-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">完成</span>
+            <div>
+              <h2>送出內容</h2>
+              <p>{submitted.participantName}{submitted.note ? ` · ${submitted.note}` : ""}</p>
+            </div>
+          </div>
+          <div className="join-summary-list">
+            {submitted.items.map((item) => (
+              <div className="join-summary-row" key={item.id}>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.unitPrice > 0 ? money(item.unitPrice) : "不計費"}</small>
+                </span>
+                <b>x {item.quantity}</b>
+              </div>
+            ))}
+          </div>
+          <div className="total-box compact">
+            <span>預估總額</span>
+            <strong>{money(submitted.total)}</strong>
+            <small>{task.paymentInstructions || "付款方式由團主通知。"}</small>
+          </div>
+        </section>
+        <div className="sticky-actions two">
+          <button className="secondary-button" type="button" onClick={resetForAnotherPerson}>再填另一人</button>
+          <button className="primary-button green" type="button" onClick={() => go("manage", { taskId: task.id })}>
+            查看事項
+          </button>
+        </div>
+      </>
+    );
   }
 
   return (
@@ -2499,8 +2582,8 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
           </button>
         ) : null}
         {step === "confirm" ? (
-          <button className="primary-button green" type="button" onClick={submit}>
-            <Send size={18} />
+          <button className="primary-button green" type="button" onClick={submit} disabled={submitting}>
+            {submitting ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
             送出
           </button>
         ) : null}
