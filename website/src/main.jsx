@@ -1096,8 +1096,8 @@ function Dashboard({
       <section className="home-intro">
         <span>我的圈子</span>
         <h1>先看你的圈子正在辦什麼</h1>
-        <p>聊天裡喊 +1 的事，圈內會幫你整理成名單與統計。</p>
-        <small>訂飲料、揪吃飯、團購、票券或活動，先放進對的圈子裡就好。</small>
+        <p>每天先進熟悉的圈子，看今天有沒有人正在揪。</p>
+        <small>想跟就填，誰要、幾份、誰付了，圈內會整理清楚。</small>
       </section>
 
       {!session?.authenticated ? (

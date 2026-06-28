@@ -18,8 +18,11 @@ These rules apply to the whole repository unless a nested `AGENTS.md` adds more 
 - Treat InCircle as a chat-group companion, not a chat app replacement.
 - Stable principle:
   - `把群裡的 +1，變成清楚的名單與統計。`
+- Daily-use principle:
+  - `每天打開圈內，不是先想要建立一件事，而是先進熟悉的圈子，看今天有沒有人正在揪；想跟就直接填，圈內負責把名單、數量、付款與後續狀態整理清楚。`
 - Supporting copy:
   - `訂飲料、揪吃飯、團購、票券、KTV，誰要、幾份、誰付了，圈內幫你整理清楚。`
+- The circle is the primary user entrance. A task is a temporary activity inside a familiar circle. Homepage and navigation should make users feel they first choose a circle, then decide whether to join or start today's activity.
 - InCircle owns structured task workflows:
   - Signup.
   - Order or item selection.

@@ -8,6 +8,8 @@
 
 InCircle is a lightweight tool for people who already have small real-life groups and need to get things done together. The product is designed to complement existing chat groups: conversation can stay where it already happens, while InCircle handles structured signup, counting, payment status, and reusable records.
 
+The daily-use mental model is circle-first. People do not usually open InCircle because they already decided to create a new task; they open a familiar circle to see whether anyone is ordering drinks, getting lunch, asking about tickets, or planning something today. If they want to join, they fill in directly. If nobody has started the thing yet, a trusted member can start it from inside that circle.
+
 The first version focuses on group-buy workflows that usually happen inside chat groups, but the product should eventually support other familiar-circle tasks such as interest checks, claim registration for free tickets or perks, circle-only member sales, office meal orders, drink orders, KTV signups, activity planning, polls, and expense splits.
 
 The product should not start as a social network. It should work as an external helper for existing chat groups.
@@ -25,6 +27,10 @@ The product should not start as a social network. It should work as an external 
 **Hero copy:**
 
 > 把群裡的 +1，變成清楚的名單與統計。
+
+**Daily-use spirit:**
+
+> 每天打開圈內，先進熟悉的圈子，看今天有沒有人正在揪；想跟就直接填，圈內幫大家整理清楚。
 
 **Supporting copy:**
 
