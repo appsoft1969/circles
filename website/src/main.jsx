@@ -939,6 +939,7 @@ function BottomNav({ routeName, unreadCount = 0, onNavigate }) {
     manage: "todos",
     join: "todos",
     createCircle: "profile",
+    notificationSettings: "notifications",
   }[routeName] ?? routeName;
 
   return (
