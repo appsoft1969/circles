@@ -835,17 +835,18 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
             {extraMemberships > 0 ? <span className="membership-chip more">+{extraMemberships}</span> : null}
           </div>
         ) : (
-          <div className="membership-empty-card">
-            <UserPlus size={20} />
-            <div>
-              <strong>你還沒有加入圈子</strong>
-              <small>收到圈主分享的邀請連結後，打開連結就能加入。還沒有連結的話，請圈主在成員頁建立邀請給你。</small>
+          <EmptyState
+            icon={UserPlus}
+            title="你還沒有加入圈子"
+            body="收到圈主分享的邀請連結後，打開連結就能加入。還沒有連結的話，請圈主在成員頁建立邀請給你。"
+            className="membership-empty-card"
+            action={(
               <button className="secondary-button compact" type="button" onClick={() => go("createCircle")}>
                 <Plus size={16} />
                 建立自己的圈子
               </button>
-            </div>
-          </div>
+            )}
+          />
         )}
         {memberships.length > 0 ? (
           <button className="secondary-button compact membership-create-button" type="button" onClick={() => go("createCircle")}>
@@ -1592,11 +1593,13 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
               </div>
               <div className="invite-list">
                 {invites.length === 0 ? (
-                  <div className="member-empty-state">
-                    <UserPlus size={22} />
-                    <strong>還沒有邀請連結</strong>
-                    <small>要加人時，按上方按鈕就能建立並分享；建立後會先複製連結，再開啟手機分享面板。</small>
-                  </div>
+                  <EmptyState
+                    icon={UserPlus}
+                    title="還沒有邀請連結"
+                    body="要加人時，按上方按鈕就能建立並分享；建立後會先複製連結，再開啟手機分享面板。"
+                    centered
+                    className="member-empty-state"
+                  />
                 ) : null}
                 {invites.map((invite) => (
                   <article className="invite-row" key={invite.id}>
@@ -1623,11 +1626,13 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
             <SectionTitle title={`成員名單 (${members.length})`} />
             <div className="member-list">
               {members.length === 0 ? (
-                <div className="member-empty-state">
-                  <Users size={22} />
-                  <strong>目前還沒有成員資料</strong>
-                  <small>如果你剛加入或剛建立圈子，稍後重新整理就會看到名單。</small>
-                </div>
+                <EmptyState
+                  icon={Users}
+                  title="目前還沒有成員資料"
+                  body="如果你剛加入或剛建立圈子，稍後重新整理就會看到名單。"
+                  centered
+                  className="member-empty-state"
+                />
               ) : null}
               {members.map((member) => {
                 const editable = canEdit(member);
@@ -2562,13 +2567,12 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
           </div>
         ) : null}
         {!hasNotifications ? (
-          <div className="notification-empty">
-            <span className="notification-icon"><Bell size={18} /></span>
-            <div>
-              <strong>現在沒有需要你處理的提醒</strong>
-              <small>等主揪發布公告，或圈內有人回覆討論時，會放到這裡。</small>
-            </div>
-          </div>
+          <EmptyState
+            icon={Bell}
+            title="現在沒有需要你處理的提醒"
+            body="等主揪發布公告，或圈內有人回覆討論時，會放到這裡。"
+            className="notification-empty"
+          />
         ) : null}
         <div className="notification-list">
           {filteredNotifications.map((notification) => {
@@ -2596,13 +2600,13 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
           })}
         </div>
         {hasNotifications && filteredNotifications.length === 0 ? (
-          <div className="notification-empty compact-empty">
-            <span className="notification-icon"><Bell size={18} /></span>
-            <div>
-              <strong>{filteredEmptyText}</strong>
-              <small>可以切到「全部」看看以前的提醒。</small>
-            </div>
-          </div>
+          <EmptyState
+            icon={Bell}
+            title={filteredEmptyText}
+            body="可以切到「全部」看看以前的提醒。"
+            className="notification-empty"
+            dashed
+          />
         ) : null}
       </section>
     </>
@@ -2928,17 +2932,18 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
               busy={creatingConversation}
             />
             {conversations.length === 0 ? (
-              <div className="empty-action conversation-empty">
-                <span className="conversation-icon"><MessageCircle size={18} /></span>
-                <div>
-                  <strong>還沒有圈內討論</strong>
-                  <p>臨時要通知大家、約時間、問誰方便，都可以先開一串。</p>
-                </div>
-                <button className="primary-button" type="button" onClick={createConversation} disabled={creatingConversation}>
-                  {creatingConversation ? <Loader2 className="spin" size={18} /> : <MessageCircle size={18} />}
-                  {creatingConversation ? "開串中" : "開一串討論"}
-                </button>
-              </div>
+              <EmptyState
+                icon={MessageCircle}
+                title="還沒有圈內討論"
+                body="臨時要通知大家、約時間、問誰方便，都可以先開一串。"
+                className="conversation-empty"
+                action={(
+                  <button className="primary-button" type="button" onClick={createConversation} disabled={creatingConversation}>
+                    {creatingConversation ? <Loader2 className="spin" size={18} /> : <MessageCircle size={18} />}
+                    {creatingConversation ? "開串中" : "開一串討論"}
+                  </button>
+                )}
+              />
             ) : (
               <div className="conversation-list">
                 {conversations.map((conversation) => (
@@ -2965,10 +2970,12 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
               <ActionFeedback message={chatNotice} />
               {messagesLoading ? <p className="empty-note">我正在讀這串訊息...</p> : null}
               {!messagesLoading && messages.length === 0 ? (
-                <div className="message-empty">
-                  <strong>這串還沒有人說話</strong>
-                  <small>可以直接留下集合時間、取餐提醒，或需要大家回覆的事項。</small>
-                </div>
+                <EmptyState
+                  icon={MessageSquare}
+                  title="這串還沒有人說話"
+                  body="可以直接留下集合時間、取餐提醒，或需要大家回覆的事項。"
+                  className="message-empty"
+                />
               ) : null}
               <div className="message-list">
                 {messages.map((message) => (
@@ -3007,6 +3014,23 @@ function ActionFeedback({ message, saving = false, className = "" }) {
     <div className={["action-feedback", saving ? "saving" : "", className].filter(Boolean).join(" ")} role="status">
       {saving ? <Loader2 className="spin" size={17} /> : <Check size={17} />}
       <span>{message}</span>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, title, body, action = null, centered = false, dashed = false, className = "" }) {
+  return (
+    <div className={["empty-state", centered ? "centered" : "inline", dashed ? "dashed" : "", className].filter(Boolean).join(" ")}>
+      {Icon ? (
+        <span className="empty-state-icon">
+          <Icon size={22} />
+        </span>
+      ) : null}
+      <div className="empty-state-body">
+        <strong>{title}</strong>
+        <small>{body}</small>
+        {action ? <div className="empty-state-action">{action}</div> : null}
+      </div>
     </div>
   );
 }
@@ -3254,13 +3278,12 @@ function TemplatePicker({ circles, session, go, refresh, setToast, updateTask, s
           ) : (
             <div className="circle-choice-list">
               {manageableCircles.length === 0 ? (
-                <div className="membership-empty-card">
-                  <ShieldCheck size={20} />
-                  <span>
-                    <strong>你現在還沒有管理權限</strong>
-                    <small>如果只是要填單，打開主揪分享的填單連結就可以。若要建立事項，請圈主在成員頁把你設為管理。</small>
-                  </span>
-                </div>
+                <EmptyState
+                  icon={ShieldCheck}
+                  title="你現在還沒有管理權限"
+                  body="如果只是要填單，打開主揪分享的填單連結就可以。若要建立事項，請圈主在成員頁把你設為管理。"
+                  className="membership-empty-card"
+                />
               ) : null}
               {manageableCircles.map((circle) => (
                 <label key={circle.id} className="radio-row">
@@ -4295,11 +4318,13 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       </section>
       <section className="response-list">
         {visibleResponses.length === 0 ? (
-          <div className="response-empty-state">
-            <ReceiptText size={22} />
-            <strong>{emptyResponseTitle}</strong>
-            <small>{emptyResponseText}</small>
-            {hasResponseFilter ? (
+          <EmptyState
+            icon={ReceiptText}
+            title={emptyResponseTitle}
+            body={emptyResponseText}
+            centered
+            className="response-empty-state"
+            action={hasResponseFilter ? (
               <button className="secondary-button compact" type="button" onClick={clearResponseFilter}>
                 清除篩選
               </button>
@@ -4308,7 +4333,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
                 分享填單連結
               </button>
             ) : null}
-          </div>
+          />
         ) : visibleResponses.map((response) => {
           const paymentBusy = responseBusyId === `${response.id}:payment`;
           const fulfillmentBusy = responseBusyId === `${response.id}:fulfillment`;
