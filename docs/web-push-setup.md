@@ -11,6 +11,7 @@ Current status:
 - `npm run push:send` can deliver queued unread notification rows to registered Web Push devices.
 - `GET /api/push/status` and `/ops/push` expose a station-admin delivery report for device counts, delivery counts, and recent failures.
 - `POST /api/push/test` creates a user-triggered self test notification; the notification center shows a test button after the browser subscription is registered.
+- `DELETE /api/devices` revokes the current user's browser subscription; the notification center shows a stop button after registration.
 - In-app rows and foreground polling remain the primary MVP behavior; Web Push is an additional delivery channel after a user registers a supported browser.
 
 ## Generate VAPID Keys

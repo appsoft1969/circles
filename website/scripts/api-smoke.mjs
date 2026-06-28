@@ -710,6 +710,14 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(testPush.body.notification.type, "test");
       assert.equal(testPush.body.notification.data.priority, "important");
 
+      const revokedWebPushDevice = await request(baseUrl, "/api/devices", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({ pushToken: webPushEndpoint }),
+      });
+      assert.equal(revokedWebPushDevice.body.device.pushToken, webPushEndpoint);
+      assert.ok(revokedWebPushDevice.body.device.revokedAt, `${label}: expected revoked device timestamp`);
+
       const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
 

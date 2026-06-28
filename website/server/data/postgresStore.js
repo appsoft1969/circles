@@ -295,6 +295,7 @@ function deviceFromRow(row) {
     timezone: row.timezone,
     lastSeenAt: toIso(row.last_seen_at),
     createdAt: toIso(row.created_at),
+    revokedAt: toIso(row.revoked_at),
   };
 }
 
@@ -3252,7 +3253,8 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           locale,
           timezone,
           last_seen_at,
-          created_at
+          created_at,
+          revoked_at
       `,
       [
         profile.id,
@@ -3267,6 +3269,40 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       ],
     );
 
+    return deviceFromRow(result.rows[0]);
+  }
+
+  async function revokeRegisteredDevice(body = {}) {
+    const profile = await requireProfile(body.actor);
+    const pushToken = String(body.pushToken || "").trim();
+    if (!pushToken) throw new StoreError(400, "pushToken is required");
+
+    const result = await pool.query(
+      `
+        UPDATE devices
+        SET revoked_at = now()
+        WHERE profile_id::text = $1
+          AND push_token = $2
+          AND revoked_at IS NULL
+        RETURNING
+          id::text,
+          profile_id::text,
+          platform::text,
+          push_token,
+          push_subscription,
+          app_version,
+          device_name,
+          user_agent,
+          locale,
+          timezone,
+          last_seen_at,
+          created_at,
+          revoked_at
+      `,
+      [profile.id, pushToken],
+    );
+
+    if (!result.rows[0]) throw new StoreError(404, "Registered device not found");
     return deviceFromRow(result.rows[0]);
   }
 
@@ -3555,6 +3591,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     getCircleNotificationPreferences,
     updateCircleNotificationPreferences,
     registerDevice,
+    revokeRegisteredDevice,
     getWebPushStatus,
     listNotifications,
     createTestPushNotification,

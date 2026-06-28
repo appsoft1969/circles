@@ -417,6 +417,14 @@ app.post("/api/devices", route(async (req, res) => {
   res.status(201).json({ device });
 }));
 
+app.delete("/api/devices", route(async (req, res) => {
+  const device = await store.revokeRegisteredDevice({
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json({ device });
+}));
+
 app.get("/api/notifications", route(async (req, res) => {
   const notifications = await store.listNotifications(actorFromRequest(req));
   res.json({ notifications });

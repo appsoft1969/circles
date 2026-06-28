@@ -248,6 +248,7 @@ Current Postgres store status:
 - `GET /api/push/status`: implemented in Postgres for station-admin Web Push delivery observability.
 - `POST /api/push/test`: implemented in Postgres for user-triggered self test notifications.
 - `POST /api/devices`: implemented in Postgres for push-token and Web Push subscription registration.
+- `DELETE /api/devices`: implemented in Postgres for revoking the current user's registered push device.
 - `GET /api/notifications`: implemented in Postgres.
 - `GET /api/notifications/preferences`: implemented in Postgres.
 - `PATCH /api/notifications/preferences`: implemented in Postgres.
@@ -369,6 +370,7 @@ The Postgres store now supports:
 - `GET /api/push/status`
 - `POST /api/push/test`
 - `POST /api/devices`
+- `DELETE /api/devices`
 - `GET /api/notifications`
 - `GET /api/notifications/preferences`
 - `PATCH /api/notifications/preferences`
@@ -377,7 +379,7 @@ The Postgres store now supports:
 - `PATCH /api/notifications/read-all`
 - `PATCH /api/notifications/:notificationId/read`
 
-These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, device-level Web Push subscription registration, a user-triggered test reminder, an admin-only `/ops/push` delivery report, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows, and Web Push delivery also re-checks current profile/circle preferences plus quiet hours before creating a browser push delivery. SQLite returns `501` for these realtime/push routes.
+These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, device-level Web Push subscription registration/revocation, a user-triggered test reminder, an admin-only `/ops/push` delivery report, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows, and Web Push delivery also re-checks current profile/circle preferences plus quiet hours before creating a browser push delivery. SQLite returns `501` for these realtime/push routes.
 
 ## Local Commands
 

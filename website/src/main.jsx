@@ -1659,6 +1659,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const [pushStatus, setPushStatus] = useState("checking");
   const [enablingPush, setEnablingPush] = useState(false);
   const [sendingTestPush, setSendingTestPush] = useState(false);
+  const [revokingPush, setRevokingPush] = useState(false);
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
   const priorityNotifications = notifications.filter((notification) => notificationPriority(notification));
@@ -1877,6 +1878,32 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
     }
   }
 
+  async function disableWebPush() {
+    if (revokingPush) return;
+    setRevokingPush(true);
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager.getSubscription();
+      if (!subscription) {
+        setPushStatus("idle");
+        setToast("這台裝置目前沒有登記推播");
+        return;
+      }
+      const subscriptionJson = subscription.toJSON();
+      await api("/api/devices", {
+        method: "DELETE",
+        body: JSON.stringify({ pushToken: subscriptionJson.endpoint }),
+      });
+      await subscription.unsubscribe().catch(() => {});
+      setPushStatus("idle");
+      setToast("已停止這台裝置的手機提醒");
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setRevokingPush(false);
+    }
+  }
+
   const pushStatusText = {
     checking: "正在確認這台裝置是否能收提醒...",
     idle: pushConfig?.configured ? "可以登記這台裝置，之後就能接手機提醒。" : "推播金鑰還沒設定，現在先使用通知中心提醒。",
@@ -2071,10 +2098,21 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
                   className="secondary-button compact"
                   type="button"
                   onClick={sendTestPush}
-                  disabled={sendingTestPush || !preferences?.inAppEnabled}
+                  disabled={sendingTestPush || revokingPush || !preferences?.inAppEnabled}
                 >
                   {sendingTestPush ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
                   傳一則測試提醒
+                </button>
+              ) : null}
+              {pushStatus === "registered" ? (
+                <button
+                  className="secondary-button compact danger"
+                  type="button"
+                  onClick={disableWebPush}
+                  disabled={revokingPush || sendingTestPush}
+                >
+                  {revokingPush ? <Loader2 className="spin" size={16} /> : <Bell size={16} />}
+                  停止這台裝置提醒
                 </button>
               ) : null}
               {pushStatus === "registered" && preferences && !preferences.inAppEnabled ? (
