@@ -1003,11 +1003,7 @@ function buildAttentionItems(tasks = [], notifications = []) {
       badge: notificationBadgeLabel(notification),
       tone: notificationPriority(notification) || notification.type,
       icon: notificationPriority(notification) ? BellDot : Bell,
-      route: notification.taskId
-        ? { name: "manage", taskId: notification.taskId }
-        : notification.circleId
-          ? { name: "circleChat", circleId: notification.circleId, conversationId: notification.data?.conversationId }
-          : { name: "notifications" },
+      route: notificationRoute(notification),
     }));
   const taskItems = tasks
     .filter((task) => task.status === "open" && (task.stats.unpaid + task.stats.review + task.stats.pending > 0))
@@ -1019,7 +1015,7 @@ function buildAttentionItems(tasks = [], notifications = []) {
       badge: templateMeta[task.template]?.label ?? "事項",
       tone: "task",
       icon: templateMeta[task.template]?.icon ?? ClipboardList,
-      route: { name: "manage", taskId: task.id },
+      route: { name: "manage", taskId: task.id, taskPanel: taskAttentionPanel(task) },
     }));
   return [...notificationItems, ...taskItems].slice(0, 5);
 }
@@ -1079,14 +1075,14 @@ function Dashboard({ circles, tasks, notifications, session, authProviders, go, 
         ) : (
           <EmptyState
             icon={Users}
-            title="先加入或建立一個圈子"
-            body="圈內的第一層不是功能，而是你的熟人圈。收到邀請可以直接加入，也可以先建立自己的圈子。"
+            title="這裡只會出現你的熟人圈"
+            body="圈內不是公開社群探索。收到熟人的入圈邀請就能加入，也可以先開一個自己的圈子。"
             centered
             className="home-empty-state"
             action={(
               <button className="primary-button" type="button" onClick={() => go("createCircle")}>
                 <Plus size={18} />
-                建立圈子
+                建立自己的圈子
               </button>
             )}
           />
@@ -1223,7 +1219,7 @@ function TodoHub({ tasks, notifications, memberInvitations = [], go, shareTask, 
         {activeTasks.length > 0 ? (
           <div className="task-list">
             {activeTasks.map((task) => (
-              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
+              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })} onShare={() => shareTask(task)} />
             ))}
           </div>
         ) : (
@@ -1369,7 +1365,7 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
         {activeTasks.length > 0 ? (
           <div className="task-list">
             {activeTasks.map((task) => (
-              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
+              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })} onShare={() => shareTask(task)} />
             ))}
           </div>
         ) : (
@@ -1386,7 +1382,7 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
         {recentClosedTasks.length > 0 ? (
           <div className="task-list">
             {recentClosedTasks.map((task) => (
-              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id })} onShare={() => shareTask(task)} />
+              <TaskRow key={task.id} task={task} onOpen={() => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })} onShare={() => shareTask(task)} />
             ))}
           </div>
         ) : (
@@ -1595,7 +1591,7 @@ function CircleCreator({ session, providers, go, refresh, setToast }) {
         <Topbar title="建立圈子" subtitle="先登入" onBack={() => go("dashboard")} />
         <section className="join-hero">
           <h1>先確認你是誰，再建立圈子</h1>
-          <p>圈子建立後，你會成為圈主，可以再分享邀請連結給熟人加入。</p>
+          <p>圈子不會公開被搜尋。建立後，你會成為圈主，再邀請認識的人加入。</p>
         </section>
         <AuthPanel session={session} providers={providers} go={go} refresh={refresh} setToast={setToast} />
       </>
@@ -1606,14 +1602,14 @@ function CircleCreator({ session, providers, go, refresh, setToast }) {
     <>
       <Topbar title="建立圈子" subtitle="先開一個熟人圈" onBack={() => go("dashboard")} />
       <section className="section wizard-overview">
-        <p>先建立一個熟人圈，再邀請成員進來。之後訂飲料、揪活動、統計付款，都可以放在這個圈子裡。</p>
+        <p>圈子不會公開探索，只有你邀請的人或收到連結的人才會加入。之後訂飲料、揪活動、統計付款，都可以放在這裡。</p>
       </section>
       <section className="section wizard-section form-section">
         <div className="wizard-step-head">
           <span className="step-pill">1/1</span>
           <div>
-            <h2>這個圈子叫什麼？</h2>
-            <p>先取一個大家一看就知道的名字，說明可以之後再補。</p>
+            <h2>這個熟人圈叫什麼？</h2>
+            <p>取一個大家一看就知道的名字，例如辦公室午餐圈、下班放鬆圈。</p>
           </div>
         </div>
         <label>
@@ -1719,6 +1715,29 @@ function notificationBadgeLabel(notification) {
   if (notification.type === "announcement") return "公告";
   if (notification.type === "message") return "討論";
   return "通知";
+}
+
+function taskAttentionPanel(task) {
+  if (!task) return "responses";
+  if ((task.stats?.unpaid ?? 0) + (task.stats?.review ?? 0) + (task.stats?.pending ?? 0) > 0) return "responses";
+  return "responses";
+}
+
+function notificationRoute(notification) {
+  if (notification.type === "announcement" && notification.taskId) {
+    return { name: "manage", taskId: notification.taskId, taskPanel: "discussion" };
+  }
+  if (notification.type === "message" && notification.data?.conversationId && notification.circleId) {
+    return { name: "circleChat", circleId: notification.circleId, conversationId: notification.data.conversationId };
+  }
+  if (notification.taskId) {
+    return { name: "manage", taskId: notification.taskId, taskPanel: "responses" };
+  }
+  if (notification.data?.conversationId && notification.circleId) {
+    return { name: "circleChat", circleId: notification.circleId, conversationId: notification.data.conversationId };
+  }
+  if (notification.circleId) return { name: "circleChat", circleId: notification.circleId };
+  return { name: "notifications" };
 }
 
 function auditEventTitle(event) {
@@ -3066,19 +3085,9 @@ function NotificationCenter({
         setToast("這則入圈邀請可以在通知中心上方回覆");
         return;
       }
-      if (notification.data?.conversationId && notification.circleId) {
-        go("circleChat", { circleId: notification.circleId, conversationId: notification.data.conversationId });
-        return;
-      }
-      if (notification.taskId) {
-        go("manage", { taskId: notification.taskId });
-        return;
-      }
-      if (notification.circleId) {
-        go("circleChat", { circleId: notification.circleId });
-        return;
-      }
-      setToast("通知已讀");
+      const route = notificationRoute(notification);
+      go(route.name, route);
+      return;
     } catch (error) {
       setToast(error.message);
     }
@@ -4161,7 +4170,7 @@ function TemplatePicker({ circles, tasks = [], session, go, refresh, setToast, u
                   <small>先複製連結，再開啟手機分享面板</small>
                 </span>
               </button>
-              <button className="success-action-card" type="button" onClick={() => go("manage", { taskId: createdTask.id })}>
+              <button className="success-action-card" type="button" onClick={() => go("manage", { taskId: createdTask.id, taskPanel: "responses" })}>
                 <ReceiptText size={20} />
                 <span>
                   <strong>查看統計與名單</strong>
@@ -4298,7 +4307,7 @@ function TemplatePicker({ circles, tasks = [], session, go, refresh, setToast, u
           {similarOpenTasks.length > 0 ? (
             <SimilarTaskWarning
               tasks={similarOpenTasks}
-              onOpen={(task) => go("manage", { taskId: task.id })}
+              onOpen={(task) => go("manage", { taskId: task.id, taskPanel: taskAttentionPanel(task) })}
               onCopy={(task) => createTask({ force: true, sourceTask: task })}
               onCreateAnyway={() => {
                 setSimilarWarningDismissed(true);
@@ -4881,7 +4890,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask, onAuditChange
       updateTask(data.task);
       onAuditChange?.();
       setToast(`已轉成${templateMeta[data.task.template]?.label ?? "新事項"}`);
-      go("manage", { taskId: data.task.id });
+      go("manage", { taskId: data.task.id, taskPanel: "responses" });
     } catch (error) {
       setToast(error.message);
     } finally {
@@ -5740,7 +5749,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
   if (submitted) {
     return (
       <>
-        <Topbar title="已送出" subtitle="成員填單" onBack={() => go("manage", { taskId: task.id })} />
+        <Topbar title="已送出" subtitle="成員填單" onBack={() => go("manage", { taskId: task.id, taskPanel: "responses" })} />
         <section className="join-success">
           <span className="join-success-icon"><Check size={26} /></span>
           <h1>已送出，主揪會看到統計</h1>
@@ -5794,7 +5803,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
                 <small>適合辦公室代填、家人一起填</small>
               </span>
             </button>
-            <button className="success-action-card" type="button" onClick={() => go("manage", { taskId: task.id })}>
+            <button className="success-action-card" type="button" onClick={() => go("manage", { taskId: task.id, taskPanel: "responses" })}>
               <ReceiptText size={20} />
               <span>
                 <strong>查看事項統計</strong>
@@ -5824,7 +5833,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
         </section>
         <div className="sticky-actions two">
           <button className="secondary-button" type="button" onClick={shareCurrentTask}>分享填單</button>
-          <button className="primary-button green" type="button" onClick={() => go("manage", { taskId: task.id })}>
+          <button className="primary-button green" type="button" onClick={() => go("manage", { taskId: task.id, taskPanel: "responses" })}>
             查看事項
           </button>
         </div>
@@ -5834,7 +5843,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
 
   return (
     <>
-      <Topbar title="成員填單" subtitle="不用安裝 App" onBack={() => go("manage", { taskId: task.id })} />
+      <Topbar title="成員填單" subtitle="不用安裝 App" onBack={() => go("manage", { taskId: task.id, taskPanel: "responses" })} />
       <section className="join-hero">
         <span className="status open">進行中</span>
         <h1>{task.title}</h1>
