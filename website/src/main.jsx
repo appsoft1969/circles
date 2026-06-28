@@ -265,6 +265,44 @@ function App() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [state.loading, state.tasks, state.circles]);
 
+  useEffect(() => {
+    if (!state.session?.authenticated) return undefined;
+
+    let cancelled = false;
+    let inFlight = false;
+    async function syncNotifications() {
+      if (cancelled || inFlight || document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const notificationData = await api("/api/notifications");
+        if (!cancelled) {
+          setState((current) => ({
+            ...current,
+            notifications: notificationData.notifications ?? [],
+          }));
+        }
+      } catch {
+        // Notification polling is opportunistic; the next full refresh still handles errors.
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const intervalId = window.setInterval(syncNotifications, 30000);
+    function syncWhenVisible() {
+      if (document.visibilityState === "visible") syncNotifications();
+    }
+
+    document.addEventListener("visibilitychange", syncWhenVisible);
+    window.addEventListener("focus", syncNotifications);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", syncWhenVisible);
+      window.removeEventListener("focus", syncNotifications);
+    };
+  }, [state.session?.authenticated, state.session?.profile?.id]);
+
   const selectedTask = useMemo(() => {
     if (route.taskId) return state.tasks.find((task) => task.id === route.taskId);
     return state.tasks[0];

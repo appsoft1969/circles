@@ -116,7 +116,7 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
-Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. Real push delivery, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
+Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges fresh with lightweight foreground polling. Real push delivery, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
 
 ### Attachments And Audit
 

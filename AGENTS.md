@@ -330,6 +330,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
 - Current session APIs support cookie sessions. Temporary `x-incircle-profile-id` / `x-incircle-profile-email` headers remain only as a development scaffold. Do not treat these headers as a production login mechanism.
 - Do not enable `AUTH_DEV_LOGIN_ENABLED=1` in production launchd.
 - Task announcements, task comments, and Postgres conversations are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.
+- The web client currently uses lightweight foreground notification polling. Do not describe this as production push or true realtime; APNs/FCM and Supabase Realtime are still future work.
 - Do not enforce auth on public share-link response submission yet; the participant no-install `/join/:token` flow is still a core MVP constraint.
 - Do not remove or overwrite user-created work.
 - Commit rule: when a coherent, verified unit of work is complete and committing would reduce risk or preserve a stable checkpoint, Codex may proactively stage and commit that unit without waiting for another explicit user prompt.
