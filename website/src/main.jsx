@@ -1053,9 +1053,9 @@ function Dashboard({ circles, tasks, notifications, session, authProviders, go, 
       <HomeTopbar session={session} circleCount={circleSummaries.length} unreadCount={unreadCount} go={go} />
       <section className="home-intro">
         <span>我的圈子</span>
-        <h1>先看熟人圈裡正在辦的事</h1>
-        <p>聊天裡喊 +1 的事，圈內會順手整理成名單與統計。</p>
-        <small>訂飲料、揪吃飯、團購、票券或活動，都先放進對的圈子裡。</small>
+        <h1>先看你的圈子正在辦什麼</h1>
+        <p>聊天裡喊 +1 的事，圈內會幫你整理成名單與統計。</p>
+        <small>訂飲料、揪吃飯、團購、票券或活動，先放進對的圈子裡就好。</small>
       </section>
 
       {!session?.authenticated ? (
