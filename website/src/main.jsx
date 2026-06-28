@@ -1312,7 +1312,7 @@ function ProfileHub({ session, authProviders, go, refresh, setToast }) {
         <section className="section profile-shortcuts">
           <SectionTitle title="常用設定" />
           <div className="profile-shortcut-list">
-            <button className="selected-summary" type="button" onClick={() => go("notifications")}>
+            <button className="selected-summary" type="button" onClick={() => go("notificationSettings")}>
               <Bell size={20} />
               <span>
                 <strong>提醒設定</strong>
