@@ -326,7 +326,8 @@ docker compose --profile postgres --profile tools --profile storage up -d
 - Do not enforce auth on public share-link response submission yet; the participant no-install `/join/:token` flow is still a core MVP constraint.
 - Do not remove or overwrite user-created work.
 - Commit rule: when a coherent, verified unit of work is complete and committing would reduce risk or preserve a stable checkpoint, Codex may proactively stage and commit that unit without waiting for another explicit user prompt.
-- Push rule: never push without asking the user for confirmation first, even when the local commit is ready.
+- Push rule: never push without asking the user for confirmation first.
+- Push prompt rule: do not ask for push confirmation after every commit. Only remind the user to confirm a push when Codex judges the local commits are verified, coherent, and worth syncing to the remote repository now.
 - Do not create PRs unless explicitly requested.
 - When the user has already asked to continue autonomously, keep moving to the next concrete artifact instead of repeatedly asking for confirmation.
 
