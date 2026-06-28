@@ -1643,8 +1643,8 @@ function CircleCreator({ session, providers, go, refresh, setToast }) {
         }),
       });
       await refresh();
-      setToast(`已建立「${data.circle.name}」`);
-      go("members", { circleId: data.circle.id });
+      setToast(`已建立「${data.circle.name}」，可以邀請熟人加入`);
+      go("memberInvite", { circleId: data.circle.id });
     } catch (error) {
       setToast(error.message);
     } finally {
