@@ -1198,6 +1198,8 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
   const meta = template ? templateMeta[template] : null;
   const selectedCircle = manageableCircles.find((circle) => circle.id === circleId) ?? null;
   const activeStepIndex = Math.max(0, createTaskSteps.findIndex((item) => item.id === step));
+  const templateIsSelected = Boolean(meta) && step !== "template";
+  const circleIsSelected = Boolean(selectedCircle) && step === "confirm";
 
   function chooseTemplate(nextTemplate) {
     const nextDefaultCircle = getDefaultCircleForTemplate(manageableCircles, nextTemplate);
@@ -1236,7 +1238,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
     <>
       <Topbar title="建立事項" subtitle={step === "template" ? "先選要處理的事" : meta?.label} onBack={() => go("dashboard")} />
       <section className="section wizard-overview">
-        <p>一步一步建立，不用一次填完所有欄位。先決定情境，圈內會放入基本內容，細節之後再補。</p>
+        <p>一步一步來，不用一次填完。先選情境，圈內先幫你放入基本內容，細節之後再補。</p>
         <ol className="wizard-progress" aria-label="建立事項進度">
           {createTaskSteps.map((item, index) => (
             <li className={index < activeStepIndex ? "done" : index === activeStepIndex ? "active" : ""} key={item.id}>
@@ -1250,8 +1252,8 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
         <div className="wizard-step-head">
           <span className="step-pill">1/3</span>
           <div>
-            <h2>你想處理什麼事？</h2>
-            <p>先選一種最接近的生活情境，細節可以建立後再補。</p>
+            <h2>{templateIsSelected ? `你已選好：${meta.label}` : "你想處理什麼事？"}</h2>
+            <p>{templateIsSelected ? "想換的話，點下方卡片就能重選。" : "先選最接近的情境就好，細節之後再補。"}</p>
           </div>
         </div>
         {step === "template" ? (
@@ -1277,7 +1279,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
             {meta ? <meta.icon size={20} /> : null}
             <span>
               <strong>{meta?.label}</strong>
-              <small>點一下可重新選擇事項類型</small>
+              <small>想換其他類型，點這裡重選</small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -1289,8 +1291,8 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
           <div className="wizard-step-head">
             <span className="step-pill">2/3</span>
             <div>
-              <h2>放在哪個圈子？</h2>
-              <p>只會顯示你可以管理的圈子。</p>
+              <h2>{circleIsSelected ? `你已選好圈子：${selectedCircle.name}` : "放在哪個圈子？"}</h2>
+              <p>{circleIsSelected ? "想換圈子的話，點下方卡片就能重選。" : "選一個要放進去的圈子。這裡只會列出你能管理的圈子。"}</p>
             </div>
           </div>
           {step === "confirm" && selectedCircle ? (
@@ -1298,7 +1300,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
               <Users size={20} />
               <span>
                 <strong>{selectedCircle.name}</strong>
-                <small>點一下可重新選擇圈子</small>
+                <small>想換其他圈子，點這裡重選</small>
               </span>
               <ChevronRight size={18} />
             </button>
