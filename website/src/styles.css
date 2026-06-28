@@ -114,6 +114,11 @@ a {
   cursor: pointer;
 }
 
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .auth-status {
   width: 42px;
   height: 42px;
@@ -1280,6 +1285,23 @@ a {
   font-size: 14px;
 }
 
+.member-action-feedback {
+  margin: 0 20px 14px;
+  border: 1px solid #b8dabe;
+  border-radius: 8px;
+  background: #eef9f2;
+  color: #0f7d4c;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
 .invite-manager,
 .member-list-section,
 .audit-section {
@@ -1319,6 +1341,36 @@ a {
 .audit-list {
   display: grid;
   gap: 10px;
+}
+
+.member-empty-state {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 132px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
+  color: #55575d;
+}
+
+.member-empty-state svg {
+  color: #2e62d4;
+}
+
+.member-empty-state strong {
+  color: #2b2c31;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.member-empty-state small {
+  color: #6f7178;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .audit-filter-bar {
@@ -1583,6 +1635,18 @@ a {
 
 .member-manage-panel .member-row-actions {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.member-inline-status {
+  grid-column: 1 / -1;
+  min-height: 28px;
+  color: #62646b;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 850;
 }
 
 .member-remove-confirm {

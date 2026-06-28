@@ -1274,7 +1274,10 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [circleDescriptionDraft, setCircleDescriptionDraft] = useState(circle?.description ?? "");
   const [savingCircle, setSavingCircle] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [revokingInviteId, setRevokingInviteId] = useState("");
+  const [memberBusyId, setMemberBusyId] = useState("");
+  const [actionNotice, setActionNotice] = useState("");
   const [error, setError] = useState("");
   const circleName = circle?.name ?? currentMembership?.circleName ?? "圈子成員";
   const circleDescription = circle?.description ?? "";
@@ -1347,7 +1350,9 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       await refresh();
       await loadAuditEvents();
       setEditingCircle(false);
-      setToast(`已更新「${data.circle.name}」`);
+      const message = `已更新「${data.circle.name}」`;
+      setActionNotice(message);
+      setToast(message);
     } catch (saveError) {
       setToast(saveError.message);
     } finally {
@@ -1356,8 +1361,8 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   }
 
   async function createInvite() {
-    if (busy) return;
-    setBusy(true);
+    if (inviteBusy) return;
+    setInviteBusy(true);
     try {
       const expiresAt = new Date(Date.now() + Math.max(1, Number(expireDays || 30)) * 24 * 60 * 60 * 1000).toISOString();
       const data = await api(`/api/circles/${circleId}/invites`, {
@@ -1371,10 +1376,11 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       setInvites((current) => [data.invite, ...current]);
       await loadAuditEvents();
       await shareCircleInvite(data.invite, setToast);
+      setActionNotice("邀請已建立，連結也準備好可以分享了");
     } catch (createError) {
       setToast(createError.message);
     } finally {
-      setBusy(false);
+      setInviteBusy(false);
     }
   }
 
@@ -1383,6 +1389,8 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   }
 
   async function revokeInvite(invite) {
+    if (revokingInviteId) return;
+    setRevokingInviteId(invite.id);
     try {
       const data = await api(`/api/circles/${circleId}/invites/${invite.id}`, {
         method: "PATCH",
@@ -1390,13 +1398,20 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       });
       setInvites((current) => current.filter((item) => item.id !== data.invite.id));
       await loadAuditEvents();
-      setToast("邀請連結已停用");
+      const message = "邀請連結已停用，這組連結不能再加入";
+      setActionNotice(message);
+      setToast(message);
     } catch (revokeError) {
       setToast(revokeError.message);
+    } finally {
+      setRevokingInviteId("");
     }
   }
 
   async function updateMember(member, patch) {
+    if (memberBusyId) return false;
+    const busyKey = patch.status === "removed" ? `${member.id}:remove` : patch.role ? `${member.id}:role` : `${member.id}:profile`;
+    setMemberBusyId(busyKey);
     try {
       const data = await api(`/api/circles/${circleId}/members/${member.id}`, {
         method: "PATCH",
@@ -1411,9 +1426,19 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       }
       await refresh();
       await loadAuditEvents();
-      setToast("成員設定已更新");
+      const message = patch.status === "removed"
+        ? `已把 ${member.displayName} 移出圈子`
+        : patch.role
+          ? `已把 ${member.displayName} 設為「${membershipRoleLabels[patch.role] ?? patch.role}」`
+          : `已更新 ${patch.displayName || member.displayName} 的資料`;
+      setActionNotice(message);
+      setToast(message);
+      return true;
     } catch (updateError) {
       setToast(updateError.message);
+      return false;
+    } finally {
+      setMemberBusyId("");
     }
   }
 
@@ -1430,12 +1455,14 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       setToast("先填這位成員要顯示的名字");
       return;
     }
-    await updateMember(member, {
+    const saved = await updateMember(member, {
       displayName: memberNameDraft.trim(),
       contactHint: memberContactDraft.trim(),
     });
-    setEditingMemberId("");
-    setManagingMemberId("");
+    if (saved) {
+      setEditingMemberId("");
+      setManagingMemberId("");
+    }
   }
 
   function canEdit(member) {
@@ -1461,6 +1488,12 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
           </p>
         </div>
       </section>
+      {actionNotice ? (
+        <section className="member-action-feedback" role="status">
+          <Check size={17} />
+          <span>{actionNotice}</span>
+        </section>
+      ) : null}
 
       {loading ? (
         <section className="section"><p className="empty-note">讀取成員資料...</p></section>
@@ -1531,9 +1564,9 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                     </p>
                   </div>
                 </div>
-                <button className="primary-button" type="button" onClick={createInvite} disabled={busy}>
-                  {busy ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
-                  建立並分享邀請
+                <button className="primary-button" type="button" onClick={createInvite} disabled={inviteBusy}>
+                  {inviteBusy ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
+                  {inviteBusy ? "建立中" : "建立並分享邀請"}
                 </button>
                 <button className="editor-panel-toggle" type="button" onClick={() => setShowInviteSettings((current) => !current)}>
                   <span>
@@ -1563,7 +1596,13 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                 ) : null}
               </div>
               <div className="invite-list">
-                {invites.length === 0 ? <p className="empty-note">還沒有邀請連結。要加人時，按上方按鈕就能建立並分享。</p> : null}
+                {invites.length === 0 ? (
+                  <div className="member-empty-state">
+                    <UserPlus size={22} />
+                    <strong>還沒有邀請連結</strong>
+                    <small>要加人時，按上方按鈕就能建立並分享；建立後會先複製連結，再開啟手機分享面板。</small>
+                  </div>
+                ) : null}
                 {invites.map((invite) => (
                   <article className="invite-row" key={invite.id}>
                     <div>
@@ -1572,11 +1611,12 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                         {invite.usedCount}/{invite.maxUses ?? "不限"} 次 · 到期 {invite.expiresAt ? formatDateTime(invite.expiresAt) : "未設定"}
                       </small>
                     </div>
-                    <button className="icon-button" type="button" aria-label="分享邀請連結" onClick={() => shareInvite(invite)}>
+                    <button className="icon-button" type="button" aria-label="分享邀請連結" onClick={() => shareInvite(invite)} disabled={revokingInviteId === invite.id}>
                       <Share2 size={18} />
                     </button>
-                    <button className="secondary-button compact" type="button" onClick={() => revokeInvite(invite)}>
-                      停用
+                    <button className="secondary-button compact" type="button" onClick={() => revokeInvite(invite)} disabled={Boolean(revokingInviteId)}>
+                      {revokingInviteId === invite.id ? <Loader2 className="spin" size={15} /> : null}
+                      {revokingInviteId === invite.id ? "停用中" : "停用"}
                     </button>
                   </article>
                 ))}
@@ -1587,10 +1627,20 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
           <section className="section member-list-section">
             <SectionTitle title={`成員名單 (${members.length})`} />
             <div className="member-list">
+              {members.length === 0 ? (
+                <div className="member-empty-state">
+                  <Users size={22} />
+                  <strong>目前還沒有成員資料</strong>
+                  <small>如果你剛加入或剛建立圈子，稍後重新整理就會看到名單。</small>
+                </div>
+              ) : null}
               {members.map((member) => {
                 const editable = canEdit(member);
                 const editingThisMember = editingMemberId === member.id;
                 const managingThisMember = managingMemberId === member.id;
+                const savingMember = memberBusyId === `${member.id}:profile`;
+                const changingRole = memberBusyId === `${member.id}:role`;
+                const removingMember = memberBusyId === `${member.id}:remove`;
                 return (
                   <article className="member-row" key={member.id}>
                     <span className="member-avatar"><UserCircle size={22} /></span>
@@ -1621,26 +1671,29 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                             />
                           </label>
                           <div className="member-edit-actions">
-                            <button className="secondary-button compact" type="button" onClick={() => setEditingMemberId("")}>
+                            <button className="secondary-button compact" type="button" onClick={() => setEditingMemberId("")} disabled={Boolean(memberBusyId)}>
                               取消
                             </button>
-                            <button className="primary-button green compact" type="button" onClick={() => saveMemberInfo(member)} disabled={!memberNameDraft.trim()}>
-                              好了，儲存
+                            <button className="primary-button green compact" type="button" onClick={() => saveMemberInfo(member)} disabled={!memberNameDraft.trim() || Boolean(memberBusyId)}>
+                              {savingMember ? <Loader2 className="spin" size={15} /> : null}
+                              {savingMember ? "儲存中" : "好了，儲存"}
                             </button>
                           </div>
                         </div>
                       ) : confirmRemoveId === member.id ? (
                         <div className="member-remove-confirm">
                           <span>確定要把 {member.displayName} 移出圈子嗎？</span>
-                          <button className="secondary-button compact" type="button" onClick={() => setConfirmRemoveId("")}>
+                          <button className="secondary-button compact" type="button" onClick={() => setConfirmRemoveId("")} disabled={Boolean(memberBusyId)}>
                             先不要
                           </button>
                           <button
                             className="secondary-button compact danger"
                             type="button"
+                            disabled={Boolean(memberBusyId)}
                             onClick={() => updateMember(member, { status: "removed" })}
                           >
-                            確定移除
+                            {removingMember ? <Loader2 className="spin" size={15} /> : null}
+                            {removingMember ? "移除中" : "確定移除"}
                           </button>
                         </div>
                       ) : managingThisMember ? (
@@ -1650,6 +1703,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                             <select
                               value={member.role}
                               aria-label={`${member.displayName} 角色`}
+                              disabled={Boolean(memberBusyId)}
                               onChange={(event) => updateMember(member, { role: event.target.value })}
                             >
                               {currentMembership?.role === "owner" ? <option value="admin">管理</option> : null}
@@ -1658,15 +1712,22 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                             </select>
                           </label>
                           <div className="member-row-actions">
-                            <button className="secondary-button compact" type="button" onClick={() => setManagingMemberId("")}>
+                            {changingRole ? (
+                              <span className="member-inline-status">
+                                <Loader2 className="spin" size={14} />
+                                更新角色中
+                              </span>
+                            ) : null}
+                            <button className="secondary-button compact" type="button" onClick={() => setManagingMemberId("")} disabled={Boolean(memberBusyId)}>
                               完成
                             </button>
-                            <button className="secondary-button compact" type="button" onClick={() => startEditingMember(member)}>
+                            <button className="secondary-button compact" type="button" onClick={() => startEditingMember(member)} disabled={Boolean(memberBusyId)}>
                               編輯資料
                             </button>
                             <button
                               className="secondary-button compact danger"
                               type="button"
+                              disabled={Boolean(memberBusyId)}
                               onClick={() => setConfirmRemoveId(member.id)}
                             >
                               移除
@@ -1678,6 +1739,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                           <button
                             className="secondary-button compact"
                             type="button"
+                            disabled={Boolean(memberBusyId)}
                             onClick={() => {
                               setEditingMemberId("");
                               setConfirmRemoveId("");
