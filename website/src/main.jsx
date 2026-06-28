@@ -596,10 +596,12 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [inviteRole, setInviteRole] = useState("member");
   const [maxUses, setMaxUses] = useState(30);
   const [expireDays, setExpireDays] = useState(30);
+  const [showInviteSettings, setShowInviteSettings] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const circleName = circle?.name ?? currentMembership?.circleName ?? "圈子成員";
+  const inviteSettingsSummary = `${membershipRoleLabels[inviteRole] ?? inviteRole} · ${Math.max(1, Number(maxUses || 30))} 次 · ${Math.max(1, Number(expireDays || 30))} 天`;
 
   async function loadMembers() {
     if (!circleId) return;
@@ -696,7 +698,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         <span className="member-hero-icon"><Users size={22} /></span>
         <div>
           <h1>{circleName}</h1>
-          <p>{canManage ? "建立邀請連結、確認誰在圈內，必要時調整成員角色。" : "你可以查看目前圈內成員，邀請與角色調整由圈主管理。"}</p>
+          <p>{canManage ? "要加人時，先建立邀請連結再分享出去；角色或期限有需要再調整。" : "這裡看得到圈內有哪些人，邀請與角色調整由圈主管理。"}</p>
         </div>
       </section>
 
@@ -709,29 +711,47 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
           {canManage ? (
             <section className="section invite-manager">
               <SectionTitle title="邀請新成員" />
-              <div className="invite-form">
-                <label>
-                  加入後角色
-                  <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
-                    <option value="member">成員</option>
-                    <option value="guest">訪客</option>
-                  </select>
-                </label>
-                <label>
-                  可使用次數
-                  <input type="number" min="1" max="500" value={maxUses} onChange={(event) => setMaxUses(event.target.value)} />
-                </label>
-                <label>
-                  有效天數
-                  <input type="number" min="1" max="365" value={expireDays} onChange={(event) => setExpireDays(event.target.value)} />
-                </label>
+              <div className="invite-guide">
+                <div className="wizard-step-head">
+                  <span className="step-pill">邀請</span>
+                  <div>
+                    <h2>要加人進來嗎？</h2>
+                    <p>先用目前設定建立邀請。建立後會直接打開分享面板，方便貼到你常用的群組。</p>
+                  </div>
+                </div>
                 <button className="primary-button" type="button" onClick={createInvite} disabled={busy}>
                   {busy ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
                   建立並分享邀請
                 </button>
+                <button className="editor-panel-toggle" type="button" onClick={() => setShowInviteSettings((current) => !current)}>
+                  <span>
+                    <strong>{showInviteSettings ? "收起邀請設定" : "調整邀請設定"}</strong>
+                    <small>目前：{inviteSettingsSummary}</small>
+                  </span>
+                  <ChevronRight className={showInviteSettings ? "open" : ""} size={18} />
+                </button>
+                {showInviteSettings ? (
+                  <div className="editor-panel-content invite-form">
+                    <label>
+                      加入後角色
+                      <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+                        <option value="member">成員</option>
+                        <option value="guest">訪客</option>
+                      </select>
+                    </label>
+                    <label>
+                      可使用次數
+                      <input type="number" min="1" max="500" value={maxUses} onChange={(event) => setMaxUses(event.target.value)} />
+                    </label>
+                    <label>
+                      有效天數
+                      <input type="number" min="1" max="365" value={expireDays} onChange={(event) => setExpireDays(event.target.value)} />
+                    </label>
+                  </div>
+                ) : null}
               </div>
               <div className="invite-list">
-                {invites.length === 0 ? <p className="empty-note">目前沒有可用的邀請連結。</p> : null}
+                {invites.length === 0 ? <p className="empty-note">還沒有邀請連結。要加人時，按上方按鈕就能建立並分享。</p> : null}
                 {invites.map((invite) => (
                   <article className="invite-row" key={invite.id}>
                     <div>
@@ -854,7 +874,7 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
           <section className="join-hero invite-join-hero">
             <span className="status open">邀請中</span>
             <h1>{invite.circleName}</h1>
-            <p>{invite.circleDescription || "這是一個熟人圈的生活辦事空間，加入後可以一起看事項、統計、公告與討論。"}</p>
+            <p>{invite.circleDescription || "有人邀請你加入這個熟人圈。加入後，圈內的事項、統計、公告與討論都會放在這裡。"}</p>
           </section>
           <section className="section invite-summary">
             <div>
@@ -875,8 +895,8 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
               <div className="auth-heading">
                 <Smartphone size={22} />
                 <span>
-                  <strong>先登入，再加入圈子</strong>
-                  <small>用手機常用帳號登入後，就能把你加入這個圈子。</small>
+                  <strong>先確認你是誰，再加入圈子</strong>
+                  <small>用手機常用帳號登入後，就能把你加進這個圈子。</small>
                 </span>
               </div>
               <div className="provider-list">
@@ -899,7 +919,7 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
             <div className="sticky-actions">
               <button className="primary-button green" type="button" onClick={joinCircle} disabled={joining || alreadyMember}>
                 {joining ? <Loader2 className="spin" size={18} /> : <UserPlus size={18} />}
-                {alreadyMember ? "已在圈內" : "加入這個圈子"}
+                {alreadyMember ? "你已經在這個圈子裡" : "好，加入這個圈子"}
               </button>
             </div>
           )}

@@ -519,6 +519,15 @@ a {
   gap: 14px;
 }
 
+.invite-guide {
+  display: grid;
+  gap: 12px;
+}
+
+.invite-guide > .primary-button {
+  width: 100%;
+}
+
 .invite-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
