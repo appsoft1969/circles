@@ -1186,6 +1186,22 @@ a {
   color: #62646b;
 }
 
+.chat-action-feedback {
+  border: 1px solid #b8dabe;
+  border-radius: 8px;
+  background: #eef9f2;
+  color: #0f7d4c;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
 .circle-notification-controls {
   display: grid;
   gap: 10px;
@@ -1824,6 +1840,11 @@ a {
   gap: 2px;
   color: #62646b;
   cursor: pointer;
+}
+
+.section-title button:disabled {
+  color: #8d8f96;
+  cursor: not-allowed;
 }
 
 .template-grid {

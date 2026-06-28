@@ -2629,6 +2629,8 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [chatNotice, setChatNotice] = useState("");
   const [circlePreferences, setCirclePreferences] = useState(null);
   const [loadingCirclePreferences, setLoadingCirclePreferences] = useState(false);
   const [savingCirclePreferences, setSavingCirclePreferences] = useState(false);
@@ -2729,6 +2731,8 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
   }, [selectedConversationId, session?.profile?.id]);
 
   async function createConversation() {
+    if (creatingConversation) return;
+    setCreatingConversation(true);
     try {
       const data = await api(`/api/circles/${circleId}/conversations`, {
         method: "POST",
@@ -2739,9 +2743,13 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
       });
       setConversations((current) => [data.conversation, ...current]);
       setSelectedConversationId(data.conversation.id);
-      setToast("已建立圈內討論");
+      const message = "已開一串討論，可以直接留言";
+      setChatNotice(message);
+      setToast(message);
     } catch (createError) {
       setToast(createError.message);
+    } finally {
+      setCreatingConversation(false);
     }
   }
 
@@ -2758,6 +2766,7 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
       setConversations((current) =>
         current.map((conversation) => (conversation.id === data.conversation.id ? data.conversation : conversation)),
       );
+      setChatNotice("訊息已送出");
       await refresh();
     } catch (sendError) {
       setToast(sendError.message);
@@ -2923,7 +2932,13 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
       ) : (
         <>
           <section className="section conversation-section">
-            <SectionTitle title="討論串" action="開一串" onClick={createConversation} />
+            <SectionTitle
+              title="討論串"
+              action={creatingConversation ? "開串中" : "開一串"}
+              onClick={createConversation}
+              disabled={creatingConversation}
+              busy={creatingConversation}
+            />
             {conversations.length === 0 ? (
               <div className="empty-action conversation-empty">
                 <span className="conversation-icon"><MessageCircle size={18} /></span>
@@ -2931,9 +2946,9 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
                   <strong>還沒有圈內討論</strong>
                   <p>臨時要通知大家、約時間、問誰方便，都可以先開一串。</p>
                 </div>
-                <button className="primary-button" type="button" onClick={createConversation}>
-                  <MessageCircle size={18} />
-                  開一串討論
+                <button className="primary-button" type="button" onClick={createConversation} disabled={creatingConversation}>
+                  {creatingConversation ? <Loader2 className="spin" size={18} /> : <MessageCircle size={18} />}
+                  {creatingConversation ? "開串中" : "開一串討論"}
                 </button>
               </div>
             ) : (
@@ -2959,6 +2974,12 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
           {selectedConversation ? (
             <section className="section message-section">
               <SectionTitle title={selectedConversation.title} />
+              {chatNotice ? (
+                <div className="chat-action-feedback" role="status">
+                  <Check size={17} />
+                  <span>{chatNotice}</span>
+                </div>
+              ) : null}
               {messagesLoading ? <p className="empty-note">我正在讀這串訊息...</p> : null}
               {!messagesLoading && messages.length === 0 ? (
                 <div className="message-empty">
@@ -2986,7 +3007,7 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
                 />
                 <button className="primary-button" type="button" onClick={sendMessage} disabled={sending || !messageBody.trim()}>
                   {sending ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-                  送出訊息
+                  {sending ? "送出中" : "送出訊息"}
                 </button>
               </div>
             </section>
@@ -3006,11 +3027,17 @@ function Metric({ value, label, alert }) {
   );
 }
 
-function SectionTitle({ title, action, onClick }) {
+function SectionTitle({ title, action, onClick, disabled = false, busy = false }) {
   return (
     <div className="section-title">
       <h2>{title}</h2>
-      {action ? <button type="button" onClick={onClick}>{action}<ChevronRight size={16} /></button> : null}
+      {action ? (
+        <button type="button" onClick={onClick} disabled={disabled}>
+          {busy ? <Loader2 className="spin" size={15} /> : null}
+          {action}
+          {!busy ? <ChevronRight size={16} /> : null}
+        </button>
+      ) : null}
     </div>
   );
 }
