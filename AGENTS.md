@@ -111,19 +111,19 @@ Every template should share the same core flow:
 - MVP should not clone chat apps.
 - Preferred phased direction:
   - Phase 1: circle announcements and task-level comments.
-  - Phase 2: real-time notifications, read/confirmation state, and push notifications.
-  - Phase 3: lightweight circle chat where it supports task coordination.
+  - Phase 2: in-app notifications, read/confirmation state, and browser Web Push delivery where configured.
+  - Phase 3: lightweight circle chat and real-time updates where they support task coordination.
 - Chat features must remain tied to circle/task operations. Avoid a standalone social chat product.
 - Important notifications should not require members to leave InCircle for an external chat app.
 - Notification preferences should affect future reminder creation, not delete or hide historical notification records retroactively.
 - Profile-level notification preferences control the user's overall reminder defaults. Circle-level notification preferences control only that user's reminders for one circle and must not change membership status or permissions.
-- Current web notification preferences cover in-app notification rows. Quiet hours are recorded now so later APNs/FCM push delivery can respect them; do not claim current web quiet hours silence OS-level push because real push delivery is not implemented yet.
+- Current web notification preferences cover in-app notification rows and browser Web Push delivery when Web Push keys and a registered browser subscription exist. Quiet hours are recorded for scheduled Web Push delivery and future APNs/FCM delivery; do not describe this as native app push until APNs/FCM is implemented.
 
 ## Mobile And App Direction
 
 - Primary usage is mobile-first: iPhone, Android, and iPad.
-- Current web MVP has a basic installable-app foundation through `website/public/manifest.json`, generated PNG icons under `website/public/icons/`, and mobile meta tags in `website/index.html`.
-- The current web MVP does not use a service worker yet. Do not add offline caching casually; stale task/notification data would be more harmful than helpful during early validation.
+- Current web MVP has a basic installable-app foundation through `website/public/manifest.json`, generated PNG icons under `website/public/icons/`, mobile meta tags in `website/index.html`, and a conservative service worker in `website/public/sw.js` for app-shell caching plus Web Push click handling.
+- Do not add aggressive offline caching casually; stale task, member, payment, or notification data would be more harmful than helpful during early validation.
 - The production app should be designed so it can eventually ship through Apple App Store and Google Play.
 - Recommended production direction:
   - Expo / React Native.
@@ -336,11 +336,11 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Technical architecture docs if the data model changes.
 - If the production data model changes, update `supabase/migrations/` and `docs/postgres-schema.md`.
 - Do not add database calls directly inside route handlers. Keep runtime database differences behind the store/data-access layer.
-- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share responses, organizer response/status updates, task announcements, announcement confirmation receipts, comments, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, circle invite/member-management APIs, direct in-app circle member invitations for exact existing accounts, membership/permission APIs, and Postgres-backed conversation/message/device/notification scaffolding with per-notification and bulk read state. Organizer task operations must require the task creator or active circle `owner` / `admin`. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real provider credentials, RLS/access policy, automated backups, monitoring, push delivery, and operational verification are implemented.
+- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share responses, organizer response/status updates, task announcements, announcement confirmation receipts, comments, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, circle invite/member-management APIs, direct in-app circle member invitations for exact existing accounts, membership/permission APIs, Postgres-backed conversations/messages/message reads, notification preferences, device registration, Web Push subscription storage, notification deliveries, and per-notification/bulk read state. Organizer task operations must require the task creator or active circle `owner` / `admin`. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real provider credentials, RLS/access policy, monitoring, native APNs/FCM push, realtime subscriptions, and operational verification are implemented.
 - Current session APIs support cookie sessions. Temporary `x-incircle-profile-id` / `x-incircle-profile-email` headers remain only as a development scaffold. Do not treat these headers as a production login mechanism.
 - Do not enable `AUTH_DEV_LOGIN_ENABLED=1` in production launchd.
 - Task announcements, task comments, and Postgres conversations are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.
-- The web client currently uses lightweight foreground notification polling. Do not describe this as production push or true realtime; APNs/FCM and Supabase Realtime are still future work.
+- The web client currently uses lightweight foreground notification polling for in-app freshness. Browser Web Push is a separate optional delivery channel after Web Push keys are configured and the user registers a supported browser. Do not describe either as native app push or true realtime; APNs/FCM and Supabase Realtime are still future work.
 - Do not enforce auth on public share-link response submission yet; the participant no-install `/join/:token` flow is still a core MVP constraint.
 - Do not remove or overwrite user-created work.
 - Commit rule: when a coherent, verified unit of work is complete and committing would reduce risk or preserve a stable checkpoint, Codex may proactively stage and commit that unit without waiting for another explicit user prompt.
