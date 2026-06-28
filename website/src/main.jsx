@@ -111,6 +111,19 @@ function nextMorningIso() {
   return next.toISOString();
 }
 
+function circleNotificationStatus(preference) {
+  if (!preference) return null;
+  if (isFutureTime(preference.mutedUntil)) {
+    return { label: `靜音到 ${formatDateTime(preference.mutedUntil)}`, tone: "muted" };
+  }
+  if (!preference.inAppEnabled) return { label: "這個圈子不提醒", tone: "muted" };
+  if (preference.importantOnly) return { label: "只收重要提醒", tone: "important" };
+  if (!preference.announcementEnabled && !preference.messageEnabled) return { label: "這個圈子不提醒", tone: "muted" };
+  if (!preference.messageEnabled) return { label: "只收公告提醒", tone: "quiet" };
+  if (!preference.announcementEnabled) return { label: "只收討論提醒", tone: "quiet" };
+  return null;
+}
+
 async function api(path, options) {
   const response = await fetch(path, {
     ...options,
@@ -866,19 +879,31 @@ function CommunicationPanel({ notifications = [], session, go }) {
           {featuredNotification?.createdAt ? <em>{formatDateTime(featuredNotification.createdAt)}</em> : null}
         </button>
         {visibleMemberships.map((membership) => (
-          <button
-            className="communication-card"
-            type="button"
-            key={membership.id}
-            onClick={() => go("circleChat", { circleId: membership.circleId })}
-          >
-            <span className="communication-icon"><MessageCircle size={20} /></span>
-            <strong>{membership.circleName}</strong>
-            <small>{membershipRoleLabels[membership.role] ?? membership.role} · 點一下進去討論</small>
-          </button>
+          <CircleCommunicationCard key={membership.id} membership={membership} go={go} />
         ))}
       </div>
     </section>
+  );
+}
+
+function CircleCommunicationCard({ membership, go }) {
+  const notificationStatus = circleNotificationStatus(membership.notificationPreference);
+  return (
+    <button
+      className={`communication-card ${notificationStatus ? "has-status" : ""}`}
+      type="button"
+      onClick={() => go("circleChat", { circleId: membership.circleId })}
+    >
+      <span className="communication-icon"><MessageCircle size={20} /></span>
+      <strong>{membership.circleName}</strong>
+      <small>{membershipRoleLabels[membership.role] ?? membership.role} · 點一下進去討論</small>
+      {notificationStatus ? (
+        <span className={`circle-status-badge ${notificationStatus.tone}`}>
+          <Bell size={13} />
+          {notificationStatus.label}
+        </span>
+      ) : null}
+    </button>
   );
 }
 

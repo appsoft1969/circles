@@ -196,6 +196,15 @@ function membershipFromRow(row) {
     role: row.role,
     status: row.status,
     joinedAt: toIso(row.joined_at),
+    notificationPreference: row.notification_in_app_enabled === undefined
+      ? null
+      : {
+          inAppEnabled: Boolean(row.notification_in_app_enabled),
+          importantOnly: Boolean(row.notification_important_only),
+          announcementEnabled: Boolean(row.notification_announcement_enabled),
+          messageEnabled: Boolean(row.notification_message_enabled),
+          mutedUntil: toIso(row.notification_muted_until),
+        },
   };
 }
 
@@ -1236,6 +1245,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       };
     }
 
+    await ensureCircleNotificationPreferenceSchema();
     const membershipsResult = await pool.query(
       `
         SELECT
@@ -1247,9 +1257,17 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           cm.contact_hint,
           cm.role::text,
           cm.status::text,
-          cm.joined_at
+          cm.joined_at,
+          COALESCE(cnp.in_app_enabled, true) AS notification_in_app_enabled,
+          COALESCE(cnp.important_only, false) AS notification_important_only,
+          COALESCE(cnp.announcement_enabled, true) AS notification_announcement_enabled,
+          COALESCE(cnp.message_enabled, true) AS notification_message_enabled,
+          cnp.muted_until AS notification_muted_until
         FROM circle_memberships cm
         JOIN circles c ON c.id = cm.circle_id
+        LEFT JOIN circle_notification_preferences cnp
+          ON cnp.profile_id = cm.profile_id
+         AND cnp.circle_id = cm.circle_id
         WHERE cm.profile_id::text = $1
           AND cm.status = 'active'
           AND c.archived_at IS NULL

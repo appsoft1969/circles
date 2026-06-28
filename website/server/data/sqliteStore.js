@@ -1049,6 +1049,13 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
       role: "owner",
       status: "active",
       joinedAt: circle.created_at,
+      notificationPreference: {
+        inAppEnabled: true,
+        importantOnly: false,
+        announcementEnabled: true,
+        messageEnabled: true,
+        mutedUntil: null,
+      },
     };
   }
 

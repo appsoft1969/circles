@@ -140,6 +140,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(session.body.authenticated, true);
     assert.equal(session.body.profile.email, "kevin@example.com");
     assert.ok(session.body.memberships.length >= 1, `${label}: expected profile memberships`);
+    if (label === "postgres") {
+      assert.equal(typeof session.body.memberships[0].notificationPreference?.inAppEnabled, "boolean");
+      assert.equal(typeof session.body.memberships[0].notificationPreference?.importantOnly, "boolean");
+    }
 
     const memberCircleIds = new Set(session.body.memberships.map((membership) => membership.circleId));
     const officeCircle =
