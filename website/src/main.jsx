@@ -406,6 +406,7 @@ const taskPanelFromRouteSegment = {
 
 function resolveAppRoute(pathname, data = {}) {
   if (pathname === "/notifications") return { name: "notifications" };
+  if (pathname === "/notifications/settings") return { name: "notificationSettings" };
   if (pathname === "/todos") return { name: "todos" };
   if (pathname === "/me") return { name: "profile" };
   if (pathname === "/ops/push") return { name: "pushOps" };
@@ -457,6 +458,7 @@ function resolveAppRoute(pathname, data = {}) {
 function pathForRoute(name, extra = {}, state = {}) {
   if (name === "dashboard") return "/";
   if (name === "notifications") return "/notifications";
+  if (name === "notificationSettings") return "/notifications/settings";
   if (name === "todos") return "/todos";
   if (name === "profile") return "/me";
   if (name === "pushOps") return "/ops/push";
@@ -763,6 +765,14 @@ function App() {
         setToast={setToast}
         respondMemberInvitation={respondMemberInvitation}
         memberInvitationBusyId={memberInvitationBusyId}
+      />
+    ),
+    notificationSettings: (
+      <NotificationSettings
+        session={state.session}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
       />
     ),
     profile: (
@@ -1507,7 +1517,7 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
           <EmptyState
             icon={UserPlus}
             title="你還沒有加入圈子"
-            body="收到圈主分享的邀請連結後，打開連結就能加入。還沒有連結的話，請圈主在成員頁建立邀請給你。"
+            body="收到熟人的站內入圈邀請可以直接回覆；收到邀請連結也能打開加入。也可以先開一個自己的圈子。"
             className="membership-empty-card"
             action={(
               <button className="secondary-button compact" type="button" onClick={() => go("createCircle")}>
@@ -2951,74 +2961,20 @@ function WebPushStatus({ session, go }) {
   );
 }
 
-function NotificationCenter({
-  notifications = [],
-  memberInvitations = [],
-  circles = [],
-  session,
-  go,
-  refresh,
-  setToast,
-  respondMemberInvitation,
-  memberInvitationBusyId = "",
-}) {
-  const circleNames = new Map(circles.map((circle) => [circle.id, circle.name]));
-  const [markingAll, setMarkingAll] = useState(false);
+function NotificationSettings({ session, go, refresh, setToast }) {
   const [preferences, setPreferences] = useState(null);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
-  const [notificationFilter, setNotificationFilter] = useState("unread");
   const [pushConfig, setPushConfig] = useState(null);
   const [pushStatus, setPushStatus] = useState("checking");
   const [enablingPush, setEnablingPush] = useState(false);
   const [sendingTestPush, setSendingTestPush] = useState(false);
   const [revokingPush, setRevokingPush] = useState(false);
   const [notificationNotice, setNotificationNotice] = useState("");
-  const pendingInvitations = memberInvitations.filter((invitation) => invitation.status === "pending");
-  const pendingInvitationIds = new Set(pendingInvitations.map((invitation) => invitation.id));
-  const displayNotifications = notifications.filter(
-    (notification) => !(notification.type === "circle_member_invite" && pendingInvitationIds.has(notification.data?.memberInvitationId)),
-  );
-  const unreadNotifications = displayNotifications.filter((notification) => !notification.readAt);
-  const unreadCount = unreadNotifications.length;
-  const priorityNotifications = displayNotifications.filter((notification) => notificationPriority(notification));
-  const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
-  const hasNotifications = displayNotifications.length > 0;
-  const filteredNotifications = notificationFilter === "important"
-    ? priorityNotifications
-    : notificationFilter === "all"
-      ? displayNotifications
-      : unreadNotifications;
-  const filteredEmptyText = notificationFilter === "important"
-    ? "目前沒有重要提醒"
-    : notificationFilter === "all"
-      ? "目前沒有通知"
-      : "現在沒有還沒看的提醒";
-  const filterOptions = [
-    { id: "unread", label: "未讀", count: unreadCount },
-    { id: "important", label: "重要", count: priorityNotifications.length },
-    { id: "all", label: "全部", count: displayNotifications.length },
-  ];
   const quietCircleStates = uniqueCircleMemberships(session?.memberships ?? [])
     .map((membership) => ({ membership, status: circleNotificationStatus(membership.notificationPreference) }))
     .filter((item) => item.status);
-  const visibleQuietCircleStates = quietCircleStates.slice(0, 3);
-  const summaryTitle = pendingInvitations.length > 0
-    ? `${pendingInvitations.length} 則入圈邀請等你回覆`
-    : !hasNotifications
-      ? "這裡會放圈內提醒"
-      : unreadCount > 0
-        ? `還有 ${unreadCount} 則沒看`
-        : "目前都看過了";
-  const summaryBody = pendingInvitations.length > 0
-    ? "先看是不是你認識的圈子，再決定加入或婉拒。"
-    : !hasNotifications
-      ? "有新的公告、討論或重要提醒時，會出現在這裡。"
-      : priorityUnreadCount > 0
-        ? `其中 ${priorityUnreadCount} 則比較重要，先處理那幾則就好。`
-        : unreadCount > 0
-          ? "點開一則通知，就會帶你回到相關事項或討論串。"
-          : "之後有新消息，這裡會自動更新，不用一直重新整理。";
+  const visibleQuietCircleStates = quietCircleStates.slice(0, 4);
 
   useEffect(() => {
     if (!session?.authenticated) return undefined;
@@ -3074,40 +3030,6 @@ function NotificationCenter({
       cancelled = true;
     };
   }, [session?.authenticated, session?.profile?.id]);
-
-  async function openNotification(notification) {
-    try {
-      if (!notification.readAt) {
-        await api(`/api/notifications/${notification.id}/read`, { method: "PATCH" });
-        await refresh();
-      }
-      if (notification.type === "circle_member_invite") {
-        setToast("這則入圈邀請可以在通知中心上方回覆");
-        return;
-      }
-      const route = notificationRoute(notification);
-      go(route.name, route);
-      return;
-    } catch (error) {
-      setToast(error.message);
-    }
-  }
-
-  async function markAllRead() {
-    if (unreadCount === 0 || markingAll) return;
-    setMarkingAll(true);
-    try {
-      const data = await api("/api/notifications/read-all", { method: "PATCH" });
-      await refresh();
-      const message = data.count > 0 ? "這些通知都先標成已讀了" : "目前沒有未讀通知";
-      setNotificationNotice(message);
-      setToast(message);
-    } catch (error) {
-      setToast(error.message);
-    } finally {
-      setMarkingAll(false);
-    }
-  }
 
   function preferenceNoticeFor(patch, nextPreferences) {
     if (Object.prototype.hasOwnProperty.call(patch, "inAppEnabled")) {
@@ -3219,9 +3141,8 @@ function NotificationCenter({
         method: "POST",
         body: JSON.stringify({}),
       });
-      setNotificationFilter("unread");
       await refresh();
-      const message = "已放一則測試提醒，已登記的裝置稍後也會收到推播";
+      const message = "已放一則測試提醒，回通知中心就會看得到";
       setNotificationNotice(message);
       setToast(message);
     } catch (error) {
@@ -3281,74 +3202,71 @@ function NotificationCenter({
 
   return (
     <>
-      <Topbar title="通知中心" subtitle="圈內訊息與提醒" onBack={() => go("dashboard")} />
-      <section className="section notification-list-section">
-        <div className="notification-summary">
-          <div>
-            <strong>{summaryTitle}</strong>
-            <p>{summaryBody}</p>
+      <Topbar title="通知設定" subtitle="提醒與手機推播" onBack={() => go("notifications")} />
+      {!session?.authenticated ? (
+        <section className="section">
+          <EmptyState
+            icon={Bell}
+            title="先登入，再調整通知"
+            body="登入後就能設定通知中心、安靜時段與這台裝置的手機提醒。"
+            centered
+            className="notification-empty"
+            action={(
+              <button className="secondary-button compact" type="button" onClick={() => go("profile")}>
+                去登入
+              </button>
+            )}
+          />
+        </section>
+      ) : (
+        <section className="section notification-list-section">
+          <div className="notification-summary">
+            <div>
+              <strong>要怎麼提醒你？</strong>
+              <p>這裡只調整提醒規則。真正要處理的通知，回通知中心看就好。</p>
+            </div>
           </div>
-          {unreadCount > 0 ? (
-            <button className="secondary-button compact" type="button" onClick={markAllRead} disabled={markingAll}>
-              {markingAll ? <Loader2 className="spin" size={16} /> : <Check size={16} />}
-              先都標成已讀
-            </button>
-          ) : null}
-        </div>
-        <ActionFeedback message={notificationNotice} />
-        {pendingInvitations.length > 0 ? (
-          <div className="member-invitation-list">
-            {pendingInvitations.map((invitation) => (
-              <MemberInvitationCard
-                key={invitation.id}
-                invitation={invitation}
-                onRespond={respondMemberInvitation}
-                busyId={memberInvitationBusyId}
-              />
-            ))}
-          </div>
-        ) : null}
-        {quietCircleStates.length > 0 ? (
-          <div className="notification-circle-status">
-            <div className="notification-preference-head">
-              <span className="notification-icon"><Bell size={18} /></span>
-              <div>
-                <strong>{quietCircleStates.length} 個圈子現在比較安靜</strong>
-                <small>你有設定靜音或只收部分提醒，普通討論可能不會出現在這裡。</small>
+          <ActionFeedback message={notificationNotice} />
+          {quietCircleStates.length > 0 ? (
+            <div className="notification-circle-status">
+              <div className="notification-preference-head">
+                <span className="notification-icon"><Bell size={18} /></span>
+                <div>
+                  <strong>{quietCircleStates.length} 個圈子現在比較安靜</strong>
+                  <small>你有設定靜音或只收部分提醒，普通討論可能不會出現在通知中心。</small>
+                </div>
               </div>
+              <div className="circle-status-list">
+                {visibleQuietCircleStates.map(({ membership, status }) => (
+                  <button
+                    className="circle-status-row"
+                    type="button"
+                    key={membership.id}
+                    onClick={() => go("circleChat", { circleId: membership.circleId })}
+                  >
+                    <span>
+                      <strong>{membership.circleName}</strong>
+                      <small>{membershipRoleLabels[membership.role] ?? membership.role} · 點一下去調整</small>
+                    </span>
+                    <span className={`circle-status-badge ${status.tone}`}>
+                      <Bell size={13} />
+                      {status.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {quietCircleStates.length > visibleQuietCircleStates.length ? (
+                <small className="circle-status-more">
+                  還有 {quietCircleStates.length - visibleQuietCircleStates.length} 個圈子也有提醒設定
+                </small>
+              ) : null}
             </div>
-            <div className="circle-status-list">
-              {visibleQuietCircleStates.map(({ membership, status }) => (
-                <button
-                  className="circle-status-row"
-                  type="button"
-                  key={membership.id}
-                  onClick={() => go("circleChat", { circleId: membership.circleId })}
-                >
-                  <span>
-                    <strong>{membership.circleName}</strong>
-                    <small>{membershipRoleLabels[membership.role] ?? membership.role} · 點一下去調整</small>
-                  </span>
-                  <span className={`circle-status-badge ${status.tone}`}>
-                    <Bell size={13} />
-                    {status.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-            {quietCircleStates.length > visibleQuietCircleStates.length ? (
-              <small className="circle-status-more">
-                還有 {quietCircleStates.length - visibleQuietCircleStates.length} 個圈子也有提醒設定
-              </small>
-            ) : null}
-          </div>
-        ) : null}
-        {session?.authenticated ? (
+          ) : null}
           <div className="notification-preferences">
             <div className="notification-preference-head">
               <span className="notification-icon"><Bell size={18} /></span>
               <div>
-                <strong>你想怎麼收圈內提醒？</strong>
+                <strong>通知中心要收哪些提醒？</strong>
                 <small>先設定通知中心的提醒規則，之後接手機推播時也會沿用這裡。</small>
               </div>
             </div>
@@ -3448,8 +3366,6 @@ function NotificationCenter({
               </div>
             ) : null}
           </div>
-        ) : null}
-        {session?.authenticated ? (
           <div className="notification-preferences">
             <div className="notification-preference-head">
               <span className="notification-icon"><Smartphone size={18} /></span>
@@ -3498,6 +3414,140 @@ function NotificationCenter({
                 <small className="device-push-note">你目前關掉通知中心提醒，先打開後再測試手機提醒。</small>
               ) : null}
             </div>
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
+function NotificationCenter({
+  notifications = [],
+  memberInvitations = [],
+  circles = [],
+  session,
+  go,
+  refresh,
+  setToast,
+  respondMemberInvitation,
+  memberInvitationBusyId = "",
+}) {
+  const circleNames = new Map(circles.map((circle) => [circle.id, circle.name]));
+  const [markingAll, setMarkingAll] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState("unread");
+  const [notificationNotice, setNotificationNotice] = useState("");
+  const pendingInvitations = memberInvitations.filter((invitation) => invitation.status === "pending");
+  const pendingInvitationIds = new Set(pendingInvitations.map((invitation) => invitation.id));
+  const displayNotifications = notifications.filter(
+    (notification) => !(notification.type === "circle_member_invite" && pendingInvitationIds.has(notification.data?.memberInvitationId)),
+  );
+  const unreadNotifications = displayNotifications.filter((notification) => !notification.readAt);
+  const unreadCount = unreadNotifications.length;
+  const priorityNotifications = displayNotifications.filter((notification) => notificationPriority(notification));
+  const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
+  const hasNotifications = displayNotifications.length > 0;
+  const filteredNotifications = notificationFilter === "important"
+    ? priorityNotifications
+    : notificationFilter === "all"
+      ? displayNotifications
+      : unreadNotifications;
+  const filteredEmptyText = notificationFilter === "important"
+    ? "目前沒有重要提醒"
+    : notificationFilter === "all"
+      ? "目前沒有通知"
+      : "現在沒有還沒看的提醒";
+  const filterOptions = [
+    { id: "unread", label: "未讀", count: unreadCount },
+    { id: "important", label: "重要", count: priorityNotifications.length },
+    { id: "all", label: "全部", count: displayNotifications.length },
+  ];
+  const summaryTitle = pendingInvitations.length > 0
+    ? `${pendingInvitations.length} 則入圈邀請等你回覆`
+    : !hasNotifications
+      ? "這裡會放圈內提醒"
+      : unreadCount > 0
+        ? `還有 ${unreadCount} 則沒看`
+        : "目前都看過了";
+  const summaryBody = pendingInvitations.length > 0
+    ? "先看是不是你認識的圈子，再決定加入或婉拒。"
+    : !hasNotifications
+      ? "有新的公告、討論或重要提醒時，會出現在這裡。"
+      : priorityUnreadCount > 0
+        ? `其中 ${priorityUnreadCount} 則比較重要，先處理那幾則就好。`
+        : unreadCount > 0
+          ? "點開一則通知，就會帶你回到相關事項或討論串。"
+          : "之後有新消息，這裡會自動更新，不用一直重新整理。";
+
+  async function openNotification(notification) {
+    try {
+      if (!notification.readAt) {
+        await api(`/api/notifications/${notification.id}/read`, { method: "PATCH" });
+        await refresh();
+      }
+      if (notification.type === "circle_member_invite") {
+        setToast("這則入圈邀請可以在通知中心上方回覆");
+        return;
+      }
+      const route = notificationRoute(notification);
+      go(route.name, route);
+      return;
+    } catch (error) {
+      setToast(error.message);
+    }
+  }
+
+  async function markAllRead() {
+    if (unreadCount === 0 || markingAll) return;
+    setMarkingAll(true);
+    try {
+      const data = await api("/api/notifications/read-all", { method: "PATCH" });
+      await refresh();
+      const message = data.count > 0 ? "這些通知都先標成已讀了" : "目前沒有未讀通知";
+      setNotificationNotice(message);
+      setToast(message);
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setMarkingAll(false);
+    }
+  }
+
+  return (
+    <>
+      <Topbar
+        title="通知中心"
+        subtitle="圈內訊息與提醒"
+        onBack={() => go("dashboard")}
+        action={session?.authenticated ? (
+          <button className="icon-button" type="button" aria-label="通知設定" onClick={() => go("notificationSettings")}>
+            <Settings size={21} />
+          </button>
+        ) : null}
+      />
+      <section className="section notification-list-section">
+        <div className="notification-summary">
+          <div>
+            <strong>{summaryTitle}</strong>
+            <p>{summaryBody}</p>
+          </div>
+          {unreadCount > 0 ? (
+            <button className="secondary-button compact" type="button" onClick={markAllRead} disabled={markingAll}>
+              {markingAll ? <Loader2 className="spin" size={16} /> : <Check size={16} />}
+              先都標成已讀
+            </button>
+          ) : null}
+        </div>
+        <ActionFeedback message={notificationNotice} />
+        {pendingInvitations.length > 0 ? (
+          <div className="member-invitation-list">
+            {pendingInvitations.map((invitation) => (
+              <MemberInvitationCard
+                key={invitation.id}
+                invitation={invitation}
+                onRespond={respondMemberInvitation}
+                busyId={memberInvitationBusyId}
+              />
+            ))}
           </div>
         ) : null}
         {hasNotifications ? (
