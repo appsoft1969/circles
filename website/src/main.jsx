@@ -1678,27 +1678,44 @@ function TaskEditPanel({ task, setToast, updateTask }) {
     <section className="section task-edit-section">
       <SectionTitle title="事項設定" action={editing ? "取消" : "編輯"} onClick={editing ? cancel : startEditing} />
       {!editing ? (
-        <div className="task-setting-summary">
-          <span><strong>{task.options.length}</strong> 個選項</span>
-          <span><strong>{task.deadlineAt ? formatDateTime(task.deadlineAt) : "未設定"}</strong> 截止</span>
+        <div className="task-setting-guide">
+          <p>目前設定可以先這樣用。想改標題、截止時間、說明或選項時，再點右上角「編輯」。</p>
+          <div className="task-setting-summary">
+            <span>
+              <small>目前選項</small>
+              <strong>{task.options.length}</strong>
+              個
+            </span>
+            <span>
+              <small>截止時間</small>
+              <strong>{task.deadlineAt ? formatDateTime(task.deadlineAt) : "還沒設定"}</strong>
+            </span>
+          </div>
         </div>
       ) : (
         <div className="guided-editor">
+          <div className="wizard-step-head editor-intro">
+            <span className="step-pill">先看</span>
+            <div>
+              <h2>先確認這件事怎麼顯示</h2>
+              <p>通常只要看標題和截止時間就好；其他細節需要時再打開。</p>
+            </div>
+          </div>
           <div className="editor-basic-grid">
             <label>
-              事項標題
+              這件事叫什麼？
               <input value={draft.title} onChange={(event) => updateDraft("title", event.target.value)} />
             </label>
             <label>
-              截止時間
+              什麼時候截止？
               <input type="datetime-local" value={draft.deadlineAt} onChange={(event) => updateDraft("deadlineAt", event.target.value)} />
             </label>
           </div>
 
           <button className="editor-panel-toggle" type="button" onClick={() => setShowDetails((current) => !current)}>
             <span>
-              <strong>說明、付款與領取</strong>
-              <small>{draft.description || draft.paymentInstructions || draft.pickupInstructions ? "已保留原本說明，可需要時調整" : "可先略過，之後再補"}</small>
+              <strong>還要補充說明嗎？</strong>
+              <small>{draft.description || draft.paymentInstructions || draft.pickupInstructions ? "原本的說明都還在，想改再打開。" : "沒有要補付款或領取方式，也可以先略過。"}</small>
             </span>
             <ChevronRight className={showDetails ? "open" : ""} size={18} />
           </button>
@@ -1721,8 +1738,8 @@ function TaskEditPanel({ task, setToast, updateTask }) {
 
           <button className="editor-panel-toggle" type="button" onClick={() => setShowOptions((current) => !current)}>
             <span>
-              <strong>選項與金額</strong>
-              <small>{draft.options.length} 個選項，建立後通常只在需要調整品項或價格時打開</small>
+              <strong>要調整選項或金額嗎？</strong>
+              <small>目前有 {draft.options.length} 個選項；品項或價格要改時再打開。</small>
             </span>
             <ChevronRight className={showOptions ? "open" : ""} size={18} />
           </button>
@@ -1762,7 +1779,7 @@ function TaskEditPanel({ task, setToast, updateTask }) {
 
           <button className="primary-button" type="button" onClick={save} disabled={saving}>
             {saving ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
-            儲存設定
+            好了，儲存設定
           </button>
         </div>
       )}

@@ -1247,6 +1247,18 @@ a {
   gap: 12px;
 }
 
+.task-setting-guide {
+  display: grid;
+  gap: 12px;
+}
+
+.task-setting-guide p {
+  margin: 0;
+  color: #55575d;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
 .task-setting-summary {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1263,7 +1275,13 @@ a {
   gap: 3px;
   padding: 10px;
   color: #62646b;
+  font-size: 14px;
+}
+
+.task-setting-summary small {
+  color: #74767c;
   font-size: 13px;
+  line-height: 1.3;
 }
 
 .task-setting-summary strong {
@@ -1342,6 +1360,10 @@ a {
 .guided-editor {
   display: grid;
   gap: 12px;
+}
+
+.editor-intro {
+  margin-bottom: 2px;
 }
 
 .editor-basic-grid {
