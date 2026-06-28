@@ -542,6 +542,19 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(patchedPreferences.body.preferences.quietHoursStart, "21:30");
       assert.equal(patchedPreferences.body.preferences.quietHoursEnd, "07:15");
 
+      const circlePreferences = await request(baseUrl, `/api/circles/${officeCircle.id}/notification-preferences`, {
+        headers: sessionHeaders,
+      });
+      assert.equal(circlePreferences.body.preferences.circleId, officeCircle.id);
+      assert.equal(typeof circlePreferences.body.preferences.inAppEnabled, "boolean");
+
+      const patchedCirclePreferences = await request(baseUrl, `/api/circles/${officeCircle.id}/notification-preferences`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({ importantOnly: true }),
+      });
+      assert.equal(patchedCirclePreferences.body.preferences.importantOnly, true);
+
       const message = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...sessionHeaders },
@@ -588,6 +601,33 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         assert.ok(
           !quietNotifications.body.notifications.some((notification) => notification.messageId === quietMessage.body.message.id),
           `${label}: expected important-only member to skip normal message notification`,
+        );
+
+        await request(baseUrl, "/api/notifications/preferences", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+          body: JSON.stringify({ importantOnly: false, messageEnabled: true }),
+        });
+        const mutedUntil = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        const mutedCirclePreferences = await request(baseUrl, `/api/circles/${officeCircle.id}/notification-preferences`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+          body: JSON.stringify({ importantOnly: false, mutedUntil }),
+        });
+        assert.ok(mutedCirclePreferences.body.preferences.mutedUntil, `${label}: expected circle muted timestamp`);
+
+        const mutedMessage = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...sessionHeaders },
+          body: JSON.stringify({
+            body: `${label} 測試訊息：這則不應通知暫時靜音此圈的成員。`,
+            metadata: { smoke: true, circlePreferenceCheck: true },
+          }),
+        });
+        const mutedNotifications = await request(baseUrl, "/api/notifications", { headers: invitedMemberHeaders });
+        assert.ok(
+          !mutedNotifications.body.notifications.some((notification) => notification.messageId === mutedMessage.body.message.id),
+          `${label}: expected muted circle to skip normal message notification`,
         );
       }
 
@@ -636,6 +676,17 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
           quietHoursEnabled: originalPreferences.quietHoursEnabled,
           quietHoursStart: originalPreferences.quietHoursStart,
           quietHoursEnd: originalPreferences.quietHoursEnd,
+        }),
+      });
+      await request(baseUrl, `/api/circles/${officeCircle.id}/notification-preferences`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({
+          inAppEnabled: circlePreferences.body.preferences.inAppEnabled,
+          importantOnly: circlePreferences.body.preferences.importantOnly,
+          announcementEnabled: circlePreferences.body.preferences.announcementEnabled,
+          messageEnabled: circlePreferences.body.preferences.messageEnabled,
+          mutedUntil: circlePreferences.body.preferences.mutedUntil,
         }),
       });
     }

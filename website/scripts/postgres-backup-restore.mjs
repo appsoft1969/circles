@@ -28,6 +28,7 @@ const tablesToVerify = [
   "notification_preferences",
   "circles",
   "circle_memberships",
+  "circle_notification_preferences",
   "task_templates",
   "tasks",
   "task_options",

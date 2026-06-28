@@ -98,6 +98,19 @@ function shortText(value, maxLength = 32) {
   return `${text.slice(0, maxLength)}...`;
 }
 
+function isFutureTime(value) {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time > Date.now();
+}
+
+function nextMorningIso() {
+  const next = new Date();
+  next.setDate(next.getDate() + 1);
+  next.setHours(8, 0, 0, 0);
+  return next.toISOString();
+}
+
 async function api(path, options) {
   const response = await fetch(path, {
     ...options,
@@ -1666,9 +1679,13 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
   const [loading, setLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [circlePreferences, setCirclePreferences] = useState(null);
+  const [loadingCirclePreferences, setLoadingCirclePreferences] = useState(false);
+  const [savingCirclePreferences, setSavingCirclePreferences] = useState(false);
   const [error, setError] = useState("");
 
   const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
+  const circleMuted = isFutureTime(circlePreferences?.mutedUntil);
 
   async function loadConversations(preferredConversationId = initialConversationId) {
     if (!circleId) return;
@@ -1715,9 +1732,26 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
     }
   }
 
+  async function loadCirclePreferences() {
+    if (!circleId || !session?.authenticated) return;
+    setLoadingCirclePreferences(true);
+    try {
+      const data = await api(`/api/circles/${circleId}/notification-preferences`);
+      setCirclePreferences(data.preferences);
+    } catch {
+      setCirclePreferences(null);
+    } finally {
+      setLoadingCirclePreferences(false);
+    }
+  }
+
   useEffect(() => {
     loadConversations(initialConversationId);
   }, [circleId, initialConversationId]);
+
+  useEffect(() => {
+    loadCirclePreferences();
+  }, [circleId, session?.profile?.id]);
 
   useEffect(() => {
     loadMessages(selectedConversationId);
@@ -1761,9 +1795,122 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
     }
   }
 
+  async function updateCirclePreferences(patch) {
+    if (!circlePreferences || savingCirclePreferences) return;
+    const previous = circlePreferences;
+    setCirclePreferences({ ...circlePreferences, ...patch });
+    setSavingCirclePreferences(true);
+    try {
+      const data = await api(`/api/circles/${circleId}/notification-preferences`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      setCirclePreferences(data.preferences);
+      setToast("這個圈子的提醒已更新");
+    } catch (saveError) {
+      setCirclePreferences(previous);
+      setToast(saveError.message);
+    } finally {
+      setSavingCirclePreferences(false);
+    }
+  }
+
+  function muteCircleForHours(hours) {
+    updateCirclePreferences({ mutedUntil: new Date(Date.now() + hours * 60 * 60 * 1000).toISOString() });
+  }
+
   return (
     <>
       <Topbar title="圈內討論" subtitle={circleName} onBack={() => go("dashboard")} />
+      {session?.authenticated ? (
+        <section className="section circle-notification-section">
+          <div className="circle-notification-head">
+            <span className="notification-icon"><Bell size={18} /></span>
+            <div>
+              <strong>{circleMuted ? "這個圈子先安靜一下" : "這個圈子要怎麼提醒你？"}</strong>
+              <small>
+                {circleMuted
+                  ? `已暫時靜音到 ${formatDateTime(circlePreferences.mutedUntil)}`
+                  : "可以只調整這個圈子，不影響其他圈子的提醒。"}
+              </small>
+            </div>
+          </div>
+          {loadingCirclePreferences ? <p className="empty-note">我正在讀這個圈子的提醒設定...</p> : null}
+          {circlePreferences ? (
+            <div className="circle-notification-controls">
+              <label className="preference-toggle">
+                <input
+                  type="checkbox"
+                  checked={circlePreferences.inAppEnabled}
+                  disabled={savingCirclePreferences}
+                  onChange={(event) => updateCirclePreferences({ inAppEnabled: event.target.checked })}
+                />
+                <span>
+                  <strong>這個圈子要提醒我</strong>
+                  <small>關掉後，這個圈子之後的新提醒就先不進通知中心。</small>
+                </span>
+              </label>
+              {circlePreferences.inAppEnabled ? (
+                <>
+                  <label className="preference-toggle">
+                    <input
+                      type="checkbox"
+                      checked={circlePreferences.importantOnly}
+                      disabled={savingCirclePreferences}
+                      onChange={(event) => updateCirclePreferences({ importantOnly: event.target.checked })}
+                    />
+                    <span>
+                      <strong>這個圈子只收重要提醒</strong>
+                      <small>一般討論先放過，重要或緊急公告仍會提醒。</small>
+                    </span>
+                  </label>
+                  {!circlePreferences.importantOnly ? (
+                    <>
+                      <label className="preference-toggle">
+                        <input
+                          type="checkbox"
+                          checked={circlePreferences.announcementEnabled}
+                          disabled={savingCirclePreferences}
+                          onChange={(event) => updateCirclePreferences({ announcementEnabled: event.target.checked })}
+                        />
+                        <span>
+                          <strong>公告要提醒我</strong>
+                          <small>主揪發布集合、取餐、付款或異動通知時提醒。</small>
+                        </span>
+                      </label>
+                      <label className="preference-toggle">
+                        <input
+                          type="checkbox"
+                          checked={circlePreferences.messageEnabled}
+                          disabled={savingCirclePreferences}
+                          onChange={(event) => updateCirclePreferences({ messageEnabled: event.target.checked })}
+                        />
+                        <span>
+                          <strong>討論也提醒我</strong>
+                          <small>圈內有人回覆討論串時提醒。</small>
+                        </span>
+                      </label>
+                    </>
+                  ) : null}
+                  <div className="circle-mute-actions">
+                    <button className="secondary-button compact" type="button" onClick={() => muteCircleForHours(2)} disabled={savingCirclePreferences}>
+                      暫停 2 小時
+                    </button>
+                    <button className="secondary-button compact" type="button" onClick={() => updateCirclePreferences({ mutedUntil: nextMorningIso() })} disabled={savingCirclePreferences}>
+                      到明早 8 點
+                    </button>
+                    {circleMuted ? (
+                      <button className="secondary-button compact" type="button" onClick={() => updateCirclePreferences({ mutedUntil: null })} disabled={savingCirclePreferences}>
+                        解除靜音
+                      </button>
+                    ) : null}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
       {loading ? (
         <section className="section"><p className="empty-note">我正在幫你讀取討論...</p></section>
       ) : error ? (

@@ -219,6 +219,19 @@ app.get("/api/circles/:circleId/members", route(async (req, res) => {
   res.json({ members });
 }));
 
+app.get("/api/circles/:circleId/notification-preferences", route(async (req, res) => {
+  const preferences = await store.getCircleNotificationPreferences(req.params.circleId, actorFromRequest(req));
+  res.json({ preferences });
+}));
+
+app.patch("/api/circles/:circleId/notification-preferences", route(async (req, res) => {
+  const preferences = await store.updateCircleNotificationPreferences(req.params.circleId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json({ preferences });
+}));
+
 app.patch("/api/circles/:circleId/members/:membershipId", route(async (req, res) => {
   const member = await store.updateCircleMember(req.params.circleId, req.params.membershipId, {
     ...(req.body ?? {}),

@@ -97,6 +97,7 @@ async function main() {
         attachments,
         circle_invites,
         circle_memberships,
+        circle_notification_preferences,
         notification_preferences,
         devices,
         circles,

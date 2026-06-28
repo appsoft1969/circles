@@ -303,6 +303,19 @@ function notificationPreferenceFromRow(row) {
   };
 }
 
+function circleNotificationPreferenceFromRow(row) {
+  return {
+    profileId: row.profile_id,
+    circleId: row.circle_id,
+    inAppEnabled: Boolean(row.in_app_enabled),
+    importantOnly: Boolean(row.important_only),
+    announcementEnabled: Boolean(row.announcement_enabled),
+    messageEnabled: Boolean(row.message_enabled),
+    mutedUntil: toIso(row.muted_until),
+    updatedAt: toIso(row.updated_at),
+  };
+}
+
 function sessionFromRow(row) {
   return {
     id: row.id,
@@ -387,9 +400,20 @@ function boolOrCurrent(value, current) {
   return typeof value === "boolean" ? value : current;
 }
 
+function normalizeNullableDateTime(value, fallback = null) {
+  if (value === undefined) return fallback;
+  if (value === null || value === "") return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new StoreError(400, `Invalid date time value: ${value}`);
+  }
+  return date.toISOString();
+}
+
 export function createPostgresStore({ connectionString = defaultConnectionString } = {}) {
   const pool = new Pool({ connectionString });
   let notificationPreferenceSchemaReady = null;
+  let circleNotificationPreferenceSchemaReady = null;
 
   const taskSelect = `
     SELECT
@@ -493,6 +517,65 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       [profileId],
     );
     return notificationPreferenceFromRow(result.rows[0]);
+  }
+
+  async function ensureCircleNotificationPreferenceSchema() {
+    if (!circleNotificationPreferenceSchemaReady) {
+      circleNotificationPreferenceSchemaReady = pool.query(`
+        CREATE TABLE IF NOT EXISTS circle_notification_preferences (
+          profile_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+          circle_id uuid NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+          in_app_enabled boolean NOT NULL DEFAULT true,
+          important_only boolean NOT NULL DEFAULT false,
+          announcement_enabled boolean NOT NULL DEFAULT true,
+          message_enabled boolean NOT NULL DEFAULT true,
+          muted_until timestamptz,
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          PRIMARY KEY (profile_id, circle_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_circle_notification_preferences_circle_id
+          ON circle_notification_preferences (circle_id);
+
+        DROP TRIGGER IF EXISTS trg_circle_notification_preferences_updated_at ON circle_notification_preferences;
+        CREATE TRIGGER trg_circle_notification_preferences_updated_at
+        BEFORE UPDATE ON circle_notification_preferences
+        FOR EACH ROW
+        EXECUTE FUNCTION set_updated_at();
+      `);
+    }
+    await circleNotificationPreferenceSchemaReady;
+  }
+
+  async function getCircleNotificationPreferencesForProfile(profileId, circleId, client = pool) {
+    await ensureCircleNotificationPreferenceSchema();
+    await client.query(
+      `
+        INSERT INTO circle_notification_preferences (profile_id, circle_id)
+        VALUES ($1::uuid, $2::uuid)
+        ON CONFLICT (profile_id, circle_id) DO NOTHING
+      `,
+      [profileId, circleId],
+    );
+    const result = await client.query(
+      `
+        SELECT
+          profile_id::text,
+          circle_id::text,
+          in_app_enabled,
+          important_only,
+          announcement_enabled,
+          message_enabled,
+          muted_until,
+          updated_at
+        FROM circle_notification_preferences
+        WHERE profile_id::text = $1
+          AND circle_id::text = $2
+        LIMIT 1
+      `,
+      [profileId, circleId],
+    );
+    return circleNotificationPreferenceFromRow(result.rows[0]);
   }
 
   async function profileBySessionToken(token, client = pool) {
@@ -2350,6 +2433,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     if (!announcementPriorities.has(priority)) throw new StoreError(400, `Invalid announcement priority: ${priority}`);
     if (!body.body) throw new StoreError(400, "Announcement body is required");
     await ensureNotificationPreferenceSchema();
+    await ensureCircleNotificationPreferenceSchema();
 
     const updatedTaskId = await withTransaction(async (client) => {
       const { profile, task: managedTask } = await requireTaskManager(taskId, body.actor, client);
@@ -2493,14 +2577,27 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           FROM circle_memberships cm
           LEFT JOIN notification_preferences np
             ON np.profile_id = cm.profile_id
+          LEFT JOIN circle_notification_preferences cnp
+            ON cnp.profile_id = cm.profile_id
+           AND cnp.circle_id = cm.circle_id
           WHERE cm.circle_id = $2::uuid
             AND cm.status = 'active'
             AND cm.profile_id IS NOT NULL
             AND cm.profile_id <> $1::uuid
             AND COALESCE(np.in_app_enabled, true)
             AND COALESCE(np.announcement_enabled, true)
+            AND COALESCE(cnp.in_app_enabled, true)
+            AND COALESCE(cnp.announcement_enabled, true)
+            AND (
+              cnp.muted_until IS NULL
+              OR cnp.muted_until <= now()
+            )
             AND (
               NOT COALESCE(np.important_only, false)
+              OR $8 IN ('important', 'urgent')
+            )
+            AND (
+              NOT COALESCE(cnp.important_only, false)
               OR $8 IN ('important', 'urgent')
             )
         `,
@@ -2791,6 +2888,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   async function createConversationMessage(conversationId, body = {}) {
     if (!body.body) throw new StoreError(400, "Message body is required");
     await ensureNotificationPreferenceSchema();
+    await ensureCircleNotificationPreferenceSchema();
 
     return withTransaction(async (client) => {
       const { conversation, profile } = await conversationAccess(conversationId, body.actor, client);
@@ -2845,6 +2943,9 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           FROM circle_memberships cm
           LEFT JOIN notification_preferences np
             ON np.profile_id = cm.profile_id
+          LEFT JOIN circle_notification_preferences cnp
+            ON cnp.profile_id = cm.profile_id
+           AND cnp.circle_id = cm.circle_id
           WHERE cm.circle_id = $2::uuid
             AND cm.status = 'active'
             AND cm.profile_id IS NOT NULL
@@ -2852,6 +2953,13 @@ export function createPostgresStore({ connectionString = defaultConnectionString
             AND COALESCE(np.in_app_enabled, true)
             AND COALESCE(np.message_enabled, true)
             AND NOT COALESCE(np.important_only, false)
+            AND COALESCE(cnp.in_app_enabled, true)
+            AND COALESCE(cnp.message_enabled, true)
+            AND NOT COALESCE(cnp.important_only, false)
+            AND (
+              cnp.muted_until IS NULL
+              OR cnp.muted_until <= now()
+            )
         `,
         [
           profile.id,
@@ -2960,6 +3068,57 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     );
 
     return notificationPreferenceFromRow(result.rows[0]);
+  }
+
+  async function getCircleNotificationPreferences(circleId, actor = {}) {
+    const { profile } = await requireCircleMember(circleId, actor);
+    return getCircleNotificationPreferencesForProfile(profile.id, circleId);
+  }
+
+  async function updateCircleNotificationPreferences(circleId, body = {}) {
+    const { profile } = await requireCircleMember(circleId, body.actor);
+    const current = await getCircleNotificationPreferencesForProfile(profile.id, circleId);
+    const next = {
+      inAppEnabled: boolOrCurrent(body.inAppEnabled, current.inAppEnabled),
+      importantOnly: boolOrCurrent(body.importantOnly, current.importantOnly),
+      announcementEnabled: boolOrCurrent(body.announcementEnabled, current.announcementEnabled),
+      messageEnabled: boolOrCurrent(body.messageEnabled, current.messageEnabled),
+      mutedUntil: normalizeNullableDateTime(body.mutedUntil, current.mutedUntil),
+    };
+
+    const result = await pool.query(
+      `
+        UPDATE circle_notification_preferences
+        SET
+          in_app_enabled = $3,
+          important_only = $4,
+          announcement_enabled = $5,
+          message_enabled = $6,
+          muted_until = $7::timestamptz
+        WHERE profile_id::text = $1
+          AND circle_id::text = $2
+        RETURNING
+          profile_id::text,
+          circle_id::text,
+          in_app_enabled,
+          important_only,
+          announcement_enabled,
+          message_enabled,
+          muted_until,
+          updated_at
+      `,
+      [
+        profile.id,
+        circleId,
+        next.inAppEnabled,
+        next.importantOnly,
+        next.announcementEnabled,
+        next.messageEnabled,
+        next.mutedUntil,
+      ],
+    );
+
+    return circleNotificationPreferenceFromRow(result.rows[0]);
   }
 
   async function registerDevice(body = {}) {
@@ -3187,6 +3346,8 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     markMessageRead,
     getNotificationPreferences,
     updateNotificationPreferences,
+    getCircleNotificationPreferences,
+    updateCircleNotificationPreferences,
     registerDevice,
     listNotifications,
     markNotificationRead,

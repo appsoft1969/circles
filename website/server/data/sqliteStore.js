@@ -1236,6 +1236,8 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     markMessageRead: postgresOnlyRealtime,
     getNotificationPreferences: postgresOnlyRealtime,
     updateNotificationPreferences: postgresOnlyRealtime,
+    getCircleNotificationPreferences: postgresOnlyRealtime,
+    updateCircleNotificationPreferences: postgresOnlyRealtime,
     registerDevice: postgresOnlyRealtime,
     listNotifications: postgresOnlyRealtime,
     markNotificationRead: postgresOnlyRealtime,

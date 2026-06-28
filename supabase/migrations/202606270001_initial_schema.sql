@@ -223,6 +223,27 @@ BEFORE UPDATE ON circle_memberships
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
+CREATE TABLE IF NOT EXISTS circle_notification_preferences (
+  profile_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  circle_id uuid NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+  in_app_enabled boolean NOT NULL DEFAULT true,
+  important_only boolean NOT NULL DEFAULT false,
+  announcement_enabled boolean NOT NULL DEFAULT true,
+  message_enabled boolean NOT NULL DEFAULT true,
+  muted_until timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (profile_id, circle_id)
+);
+
+CREATE INDEX IF NOT EXISTS ix_circle_notification_preferences_circle_id
+  ON circle_notification_preferences (circle_id);
+
+DROP TRIGGER IF EXISTS trg_circle_notification_preferences_updated_at ON circle_notification_preferences;
+CREATE TRIGGER trg_circle_notification_preferences_updated_at
+BEFORE UPDATE ON circle_notification_preferences
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
 CREATE TABLE IF NOT EXISTS circle_invites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   circle_id uuid NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
