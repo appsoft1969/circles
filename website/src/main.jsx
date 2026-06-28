@@ -407,6 +407,11 @@ function resolveAppRoute(pathname, data = {}) {
     return { name: "circleChat", circleId: circleChatMatch[1] };
   }
 
+  const circleMemberInviteMatch = pathname.match(/^\/circles\/([^/]+)\/members\/invite$/);
+  if (circleMemberInviteMatch && data.circles?.some((circle) => circle.id === circleMemberInviteMatch[1])) {
+    return { name: "memberInvite", circleId: circleMemberInviteMatch[1] };
+  }
+
   const circleMembersMatch = pathname.match(/^\/circles\/([^/]+)\/members/);
   if (circleMembersMatch && data.circles?.some((circle) => circle.id === circleMembersMatch[1])) {
     return { name: "members", circleId: circleMembersMatch[1] };
@@ -431,6 +436,7 @@ function pathForRoute(name, extra = {}, state = {}) {
   if (name === "circleHome" && extra.circleId) return `/circles/${extra.circleId}`;
   if (name === "manage" && extra.taskId) return `/tasks/${extra.taskId}`;
   if (name === "circleChat" && extra.circleId) return `/circles/${extra.circleId}/chat`;
+  if (name === "memberInvite" && extra.circleId) return `/circles/${extra.circleId}/members/invite`;
   if (name === "members" && extra.circleId) return `/circles/${extra.circleId}/members`;
   if (name === "join" && extra.taskId) {
     const task = state.tasks?.find((item) => item.id === extra.taskId);
@@ -771,6 +777,17 @@ function App() {
         setToast={setToast}
       />
     ),
+    memberInvite: (
+      <CircleMembers
+        circle={state.circles.find((circle) => circle.id === route.circleId)}
+        circleId={route.circleId}
+        session={state.session}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+        mode="invite"
+      />
+    ),
     circleInvite: (
       <CircleInviteJoin
         code={route.inviteCode}
@@ -837,6 +854,7 @@ function BottomNav({ routeName, unreadCount = 0, onNavigate }) {
     circleHome: "dashboard",
     circleChat: "dashboard",
     members: "dashboard",
+    memberInvite: "dashboard",
     manage: "todos",
     join: "todos",
     createCircle: "profile",
@@ -1847,10 +1865,11 @@ function AuditEventList({ events = [] }) {
   );
 }
 
-function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
+function CircleMembers({ circle, circleId, session, go, refresh, setToast, mode = "members" }) {
   const currentMembership = session?.memberships?.find((membership) => membership.circleId === circleId);
   const canManage = ["owner", "admin"].includes(currentMembership?.role);
   const canEditCircle = currentMembership?.role === "owner";
+  const isInviteMode = mode === "invite";
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [memberInvitations, setMemberInvitations] = useState([]);
@@ -2131,17 +2150,28 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
 
   return (
     <>
-      <Topbar title="圈子成員" subtitle={circleName} onBack={() => go("dashboard")} />
+      <Topbar
+        title={isInviteMode ? "邀請新成員" : "圈子成員"}
+        subtitle={circleName}
+        onBack={() => (isInviteMode ? go("members", { circleId }) : go("dashboard"))}
+        action={!isInviteMode && canManage ? (
+          <button className="icon-button" type="button" aria-label="邀請新成員" onClick={() => go("memberInvite", { circleId })}>
+            <UserPlus size={22} />
+          </button>
+        ) : null}
+      />
       <section className="member-hero">
-        <span className="member-hero-icon"><Users size={22} /></span>
+        <span className="member-hero-icon">{isInviteMode ? <UserPlus size={22} /> : <Users size={22} />}</span>
         <div>
           <h1>{circleName}</h1>
           <p>
-            {canManage
-              ? onlyOwnerSoFar
-                ? "圈子已建立。接下來先邀請熟人進來，之後就能在這裡一起建立事項與統計。"
-                : "要加人時，先建立邀請連結再分享出去；角色或期限有需要再調整。"
-              : "這裡看得到圈內有哪些人，邀請與角色調整由圈主管理。"}
+            {isInviteMode
+              ? canManage
+                ? "要加人進來時，可以分享邀請連結，也可以直接送一則站內入圈邀請。"
+                : "邀請新成員需要圈主或管理者權限。"
+              : canManage
+                ? "這裡先看圈內有哪些人。要邀請新成員時，點右上角的加人圖示。"
+                : "這裡看得到圈內有哪些人，邀請與角色調整由圈主管理。"}
           </p>
         </div>
       </section>
@@ -2153,55 +2183,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         <section className="section"><p className="empty-note">無法讀取成員：{error}</p></section>
       ) : (
         <>
-          {canEditCircle ? (
-            <section className="section wizard-section form-section">
-              <SectionTitle title="圈子設定" action={editingCircle ? "取消" : "編輯"} onClick={() => setEditingCircle((current) => !current)} />
-              {editingCircle ? (
-                <>
-                  <div className="wizard-step-head">
-                    <span className="step-pill">設定</span>
-                    <div>
-                      <h2>圈子名稱要怎麼顯示？</h2>
-                      <p>名稱讓大家一眼看懂，說明只要補一句這個圈子平常做什麼就好。</p>
-                    </div>
-                  </div>
-                  <label>
-                    圈子名稱
-                    <input
-                      value={circleNameDraft}
-                      onChange={(event) => setCircleNameDraft(event.target.value)}
-                      maxLength={40}
-                      placeholder="例如：辦公室午餐圈"
-                    />
-                  </label>
-                  <label>
-                    簡單說明
-                    <textarea
-                      value={circleDescriptionDraft}
-                      onChange={(event) => setCircleDescriptionDraft(event.target.value)}
-                      maxLength={160}
-                      placeholder="例如：公司中午訂餐、飲料、下午茶"
-                    />
-                  </label>
-                  <button className="primary-button green" type="button" onClick={saveCircleSettings} disabled={savingCircle || !circleNameDraft.trim()}>
-                    {savingCircle ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
-                    好了，儲存設定
-                  </button>
-                </>
-              ) : (
-                <button className="selected-summary" type="button" onClick={() => setEditingCircle(true)}>
-                  <Users size={20} />
-                  <span>
-                    <strong>{circleName}</strong>
-                    <small>{circleDescription || "還沒有說明，點這裡補一句讓成員更清楚。"}</small>
-                  </span>
-                  <ChevronRight size={18} />
-                </button>
-              )}
-            </section>
-          ) : null}
-
-          {canManage ? (
+          {isInviteMode && canManage ? (
             <section className="section invite-manager">
               <SectionTitle title="邀請新成員" />
               <div className="invite-guide">
@@ -2373,6 +2355,19 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
             </section>
           ) : null}
 
+          {isInviteMode && !canManage ? (
+            <section className="section">
+              <EmptyState
+                icon={ShieldCheck}
+                title="這裡由圈主或管理者邀請"
+                body="你可以先回成員名單看目前圈內有哪些人。要加人時，請圈主或管理者建立邀請。"
+                centered
+                className="member-empty-state"
+              />
+            </section>
+          ) : null}
+
+          {!isInviteMode ? (
           <section className="section member-list-section">
             <SectionTitle title={`成員名單 (${members.length})`} />
             <div className="member-list">
@@ -2507,8 +2502,57 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
               })}
             </div>
           </section>
+          ) : null}
 
-          {canManage ? (
+          {!isInviteMode && canEditCircle ? (
+            <section className="section wizard-section form-section">
+              <SectionTitle title="圈子設定" action={editingCircle ? "取消" : "編輯"} onClick={() => setEditingCircle((current) => !current)} />
+              {editingCircle ? (
+                <>
+                  <div className="wizard-step-head">
+                    <span className="step-pill">設定</span>
+                    <div>
+                      <h2>圈子名稱要怎麼顯示？</h2>
+                      <p>名稱讓大家一眼看懂，說明只要補一句這個圈子平常做什麼就好。</p>
+                    </div>
+                  </div>
+                  <label>
+                    圈子名稱
+                    <input
+                      value={circleNameDraft}
+                      onChange={(event) => setCircleNameDraft(event.target.value)}
+                      maxLength={40}
+                      placeholder="例如：辦公室午餐圈"
+                    />
+                  </label>
+                  <label>
+                    簡單說明
+                    <textarea
+                      value={circleDescriptionDraft}
+                      onChange={(event) => setCircleDescriptionDraft(event.target.value)}
+                      maxLength={160}
+                      placeholder="例如：公司中午訂餐、飲料、下午茶"
+                    />
+                  </label>
+                  <button className="primary-button green" type="button" onClick={saveCircleSettings} disabled={savingCircle || !circleNameDraft.trim()}>
+                    {savingCircle ? <Loader2 className="spin" size={18} /> : <Check size={18} />}
+                    好了，儲存設定
+                  </button>
+                </>
+              ) : (
+                <button className="selected-summary" type="button" onClick={() => setEditingCircle(true)}>
+                  <Users size={20} />
+                  <span>
+                    <strong>{circleName}</strong>
+                    <small>{circleDescription || "還沒有說明，點這裡補一句讓成員更清楚。"}</small>
+                  </span>
+                  <ChevronRight size={18} />
+                </button>
+              )}
+            </section>
+          ) : null}
+
+          {!isInviteMode && canManage ? (
             <section className="section audit-section">
               <SectionTitle title="最近管理紀錄" />
               <AuditEventList events={auditEvents} />

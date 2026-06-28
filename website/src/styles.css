@@ -94,6 +94,11 @@ a {
   margin-top: 2px;
 }
 
+.topbar > div:last-child {
+  display: grid;
+  place-items: center;
+}
+
 .brand-dot {
   width: 12px;
   height: 12px;
