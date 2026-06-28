@@ -4323,6 +4323,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
   const [showComment, setShowComment] = useState(false);
   const [submitted, setSubmitted] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [commentSending, setCommentSending] = useState(false);
   const [quantities, setQuantities] = useState(() => defaultJoinQuantities());
   const selectedItems = task.options
     .map((option) => ({ ...option, quantity: Number(quantities[option.id] || 0) }))
@@ -4407,18 +4408,29 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
   }
 
   async function sendComment() {
-    if (!commentBody.trim()) return;
-    const data = await api(`/api/tasks/${task.id}/comments`, {
-      method: "POST",
-      body: JSON.stringify({
-        participantName: name || "成員",
-        body: commentBody.trim(),
-      }),
-    });
-    updateTask(data.task);
-    setCommentBody("");
-    setShowComment(false);
-    setToast("已留言，主揪會在事項中看到");
+    if (!commentBody.trim()) {
+      setToast("先打留言內容，再幫你送出");
+      return;
+    }
+    if (commentSending) return;
+    setCommentSending(true);
+    try {
+      const data = await api(`/api/tasks/${task.id}/comments`, {
+        method: "POST",
+        body: JSON.stringify({
+          participantName: name || "成員",
+          body: commentBody.trim(),
+        }),
+      });
+      updateTask(data.task);
+      setCommentBody("");
+      setShowComment(false);
+      setToast("已留言，主揪會在事項中看到");
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setCommentSending(false);
+    }
   }
 
   async function shareCurrentTask() {
@@ -4519,9 +4531,9 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
                 補充留言
                 <textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="例如：我會晚點到，麻煩先幫我保留。" />
               </label>
-              <button className="secondary-button" type="button" onClick={sendComment} disabled={!commentBody.trim()}>
-                <MessageSquare size={18} />
-                送出留言
+              <button className="secondary-button" type="button" onClick={sendComment} disabled={!commentBody.trim() || commentSending}>
+                {commentSending ? <Loader2 className="spin" size={18} /> : <MessageSquare size={18} />}
+                {commentSending ? "送出中" : "送出留言"}
               </button>
             </div>
           ) : null}
@@ -4587,9 +4599,9 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
               留言
               <textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="例如：我會晚點到、可否幫我先留一份？" />
             </label>
-            <button className="secondary-button" type="button" onClick={sendComment}>
-              <MessageSquare size={18} />
-              送出留言
+            <button className="secondary-button" type="button" onClick={sendComment} disabled={!commentBody.trim() || commentSending}>
+              {commentSending ? <Loader2 className="spin" size={18} /> : <MessageSquare size={18} />}
+              {commentSending ? "送出中" : "送出留言"}
             </button>
           </div>
         ) : null}
