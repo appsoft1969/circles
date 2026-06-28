@@ -294,6 +294,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
 - Prefer guided input over dense all-at-once forms. Reduce perceived complexity by asking for the next practical decision instead of showing every possible field, status, and option on one screen.
 - Do not crowd mobile screens with fields just because the backend supports them. If a value is not needed to understand or complete the current step, defer it.
 - Field hints, helper copy, and placeholders should be visually subordinate to real user input. Placeholder text must be smaller than entered text and use a lighter gray so users can clearly distinguish hints from filled values.
+- Keep mobile typography friendly to older users without making the UI feel heavy. Primary actions and entered form values should stay clearly readable, normal body copy should generally avoid tiny sizes, and secondary helper text should remain legible while visually lighter than the main content.
 - Avoid social-app patterns:
   - Infinite feed.
   - Public profile browsing.

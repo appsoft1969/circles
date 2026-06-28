@@ -55,6 +55,12 @@ const interestConversionTargets = [
   { id: "claim", label: "領取登記", description: "票券、名額、好康分配" },
 ];
 
+const createTaskSteps = [
+  { id: "template", label: "選類型" },
+  { id: "circle", label: "選圈子" },
+  { id: "confirm", label: "確認" },
+];
+
 const paymentLabels = {
   unpaid: "未付款",
   review: "待確認",
@@ -1191,6 +1197,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
   const [step, setStep] = useState(selectedTemplate ? "circle" : "template");
   const meta = template ? templateMeta[template] : null;
   const selectedCircle = manageableCircles.find((circle) => circle.id === circleId) ?? null;
+  const activeStepIndex = Math.max(0, createTaskSteps.findIndex((item) => item.id === step));
 
   function chooseTemplate(nextTemplate) {
     const nextDefaultCircle = getDefaultCircleForTemplate(manageableCircles, nextTemplate);
@@ -1228,6 +1235,17 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
   return (
     <>
       <Topbar title="建立事項" subtitle={step === "template" ? "先選要處理的事" : meta?.label} onBack={() => go("dashboard")} />
+      <section className="section wizard-overview">
+        <p>一步一步建立，不用一次填完所有欄位。先決定情境，圈內會放入基本內容，細節之後再補。</p>
+        <ol className="wizard-progress" aria-label="建立事項進度">
+          {createTaskSteps.map((item, index) => (
+            <li className={index < activeStepIndex ? "done" : index === activeStepIndex ? "active" : ""} key={item.id}>
+              <span>{index + 1}</span>
+              <strong>{item.label}</strong>
+            </li>
+          ))}
+        </ol>
+      </section>
       <section className="section wizard-section">
         <div className="wizard-step-head">
           <span className="step-pill">1/3</span>

@@ -776,6 +776,81 @@ a {
   gap: 9px;
 }
 
+.wizard-overview {
+  display: grid;
+  gap: 14px;
+  background: #fff;
+}
+
+.wizard-overview p {
+  margin: 0;
+  color: #4f5157;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.wizard-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.wizard-progress li {
+  min-height: 56px;
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fbfbfa;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 7px;
+  align-items: center;
+  padding: 8px 9px;
+  color: #62646b;
+}
+
+.wizard-progress li span {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #ececea;
+  color: #62646b;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.wizard-progress li strong {
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+}
+
+.wizard-progress li.active {
+  border-color: #b9c9f6;
+  background: #f6f9ff;
+  color: #244fba;
+}
+
+.wizard-progress li.active span {
+  background: #2e62d4;
+  color: #fff;
+}
+
+.wizard-progress li.done {
+  border-color: #c7e4d1;
+  background: #f1faf4;
+  color: #217047;
+}
+
+.wizard-progress li.done span {
+  background: #11965a;
+  color: #fff;
+}
+
 .wizard-section {
   display: grid;
   gap: 14px;
@@ -790,13 +865,15 @@ a {
 
 .wizard-step-head h2 {
   margin: 0;
+  font-size: 20px;
+  line-height: 1.25;
 }
 
 .wizard-step-head p {
-  margin: 4px 0 0;
+  margin: 5px 0 0;
   color: #666870;
-  font-size: 13px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .step-pill {
@@ -807,7 +884,7 @@ a {
   place-items: center;
   background: #edf2ff;
   color: #2e62d4;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 900;
 }
 
@@ -816,7 +893,17 @@ a {
   grid-template-columns: auto 1fr auto;
   gap: 12px;
   align-items: center;
-  padding: 14px;
+  min-height: 76px;
+  padding: 15px;
+}
+
+.template-choice strong {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.template-choice small {
+  font-size: 14px;
 }
 
 .template-choice.active {
@@ -828,7 +915,7 @@ a {
   border: 1px solid #d6d6d1;
   border-radius: 8px;
   background: #fff;
-  min-height: 62px;
+  min-height: 68px;
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 12px;
@@ -841,13 +928,16 @@ a {
 .selected-summary strong {
   display: block;
   font-weight: 900;
+  font-size: 16px;
+  line-height: 1.25;
 }
 
 .selected-summary small {
   display: block;
   margin-top: 3px;
   color: #74767c;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 1.35;
 }
 
 .create-summary {
@@ -869,7 +959,7 @@ a {
 
 .create-summary small {
   color: #74767c;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .create-summary strong {
@@ -891,18 +981,32 @@ a {
 .radio-row {
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 10px;
+  gap: 12px;
   align-items: start;
-  padding: 13px;
+  padding: 15px;
   border: 1px solid #d6d6d1;
   border-radius: 8px;
   background: #fff;
 }
 
+.radio-row input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  margin: 1px 0 0;
+}
+
+.radio-row strong {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
 .radio-row small {
   display: block;
   color: #666870;
-  margin-top: 3px;
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .task-list {
