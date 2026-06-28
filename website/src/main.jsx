@@ -2346,6 +2346,9 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
   const selectedQuantity = selectedItems.reduce((sum, option) => sum + option.quantity, 0);
   const total = task.options.reduce((sum, option) => sum + Number(quantities[option.id] || 0) * option.unitPrice, 0);
   const redirectAfter = encodeURIComponent(`/join/${task.shareToken}`);
+  const selectedItemSummary = selectedItems.map((item) => `${item.title} x ${item.quantity}`).join("、");
+  const participantDisplayName = name.trim() || "未填姓名";
+  const noteSummary = note.trim() || "沒有備註，想補也可以點這裡";
 
   useEffect(() => {
     setStep("items");
@@ -2453,8 +2456,8 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
         <Topbar title="已送出" subtitle="成員填單" onBack={() => go("manage", { taskId: task.id })} />
         <section className="join-success">
           <span className="join-success-icon"><Check size={26} /></span>
-          <h1>你的填單已送出</h1>
-          <p>主揪會在圈內看到你的名單與統計。若內容需要更改，請直接留言或聯絡主揪。</p>
+          <h1>已送出，主揪會看到統計</h1>
+          <p>想補充或改內容，可以留言給主揪，或直接請主揪幫你調整。</p>
         </section>
         <section className="section wizard-section">
           <div className="wizard-step-head">
@@ -2554,8 +2557,8 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
         <div className="wizard-step-head">
           <span className="step-pill">1/3</span>
           <div>
-            <h2>選擇項目</h2>
-            <p>先選你要的項目與數量，下一步再填姓名與備註。</p>
+            <h2>{step === "items" ? "先選你要哪幾份" : `你已選好：${selectedQuantity} 份 / ${money(total)}`}</h2>
+            <p>{step === "items" ? "選好品項和數量，下一步再填姓名。" : "想改品項或數量，點下方卡片就能重選。"}</p>
           </div>
         </div>
         {step === "items" ? (
@@ -2580,7 +2583,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
             <ReceiptText size={20} />
             <span>
               <strong>{selectedQuantity} 份 / {money(total)}</strong>
-              <small>{selectedItems.map((item) => `${item.title} x ${item.quantity}`).join("、") || "尚未選擇項目"}</small>
+              <small>{selectedItemSummary ? `${selectedItemSummary}。想改就點這裡` : "想改品項或數量，點這裡重選"}</small>
             </span>
             <ChevronRight size={18} />
           </button>
@@ -2592,8 +2595,12 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
           <div className="wizard-step-head">
             <span className="step-pill">2/3</span>
             <div>
-              <h2>填寫資料</h2>
-              <p>{suggestedParticipantName ? "已用會員名稱帶入；若幫別人填，也可以直接改名。" : "只需要主揪辨識得出你是誰；備註有需要再填。"}</p>
+              <h2>{step === "details" ? "要怎麼稱呼你？" : `你已填好：${participantDisplayName}`}</h2>
+              <p>
+                {step === "details"
+                  ? (suggestedParticipantName ? "已先帶入你的會員名稱，幫別人填也可以直接改。" : "讓主揪知道這份是誰填的就好，備註有需要再寫。")
+                  : "想改姓名或備註，點下方卡片就能重填。"}
+              </p>
             </div>
           </div>
           {step === "details" ? (
@@ -2605,8 +2612,8 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
             <button className="selected-summary" type="button" onClick={() => setStep("details")}>
               <UserCircle size={20} />
               <span>
-                <strong>{name || "未填姓名"}</strong>
-                <small>{note || "沒有備註"}</small>
+                <strong>{participantDisplayName}</strong>
+                <small>{noteSummary}</small>
               </span>
               <ChevronRight size={18} />
             </button>
@@ -2619,8 +2626,8 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
           <div className="wizard-step-head">
             <span className="step-pill">3/3</span>
             <div>
-              <h2>確認送出</h2>
-              <p>送出後主揪會在圈內看到統計與名單。</p>
+              <h2>最後看一下，就可以送出</h2>
+              <p>送出後，主揪會看到你的名單與統計。</p>
             </div>
           </div>
           <div className="join-summary-list">
@@ -2646,19 +2653,19 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
         {step === "items" ? (
           <button className="primary-button green" type="button" onClick={continueToDetails} disabled={selectedItems.length === 0}>
             <ChevronRight size={18} />
-            下一步
+            下一步，填姓名
           </button>
         ) : null}
         {step === "details" ? (
           <button className="primary-button green" type="button" onClick={continueToConfirm}>
             <ChevronRight size={18} />
-            查看確認
+            看一下再送出
           </button>
         ) : null}
         {step === "confirm" ? (
           <button className="primary-button green" type="button" onClick={submit} disabled={submitting}>
             {submitting ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
-            送出
+            好了，送出
           </button>
         ) : null}
       </div>
