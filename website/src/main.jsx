@@ -608,7 +608,6 @@ function App() {
         session={state.session}
         authProviders={state.authProviders}
         go={go}
-        shareTask={shareTask}
         refresh={refresh}
         setToast={setToast}
       />
@@ -920,10 +919,9 @@ function HomeTopbar({ session, circleCount, unreadCount, go }) {
   );
 }
 
-function Dashboard({ circles, tasks, notifications, session, authProviders, go, shareTask, refresh, setToast }) {
+function Dashboard({ circles, tasks, notifications, session, authProviders, go, refresh, setToast }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
-  const attentionItems = buildAttentionItems(tasks, notifications);
   const circleSummaries = buildCircleSummaries({ circles, tasks, notifications, session });
 
   return (
@@ -959,24 +957,6 @@ function Dashboard({ circles, tasks, notifications, session, authProviders, go, 
           <strong>{unreadCount}</strong>
           未讀
         </span>
-      </section>
-
-      <section className="section home-attention-section">
-        <SectionTitle title="需要你看一下" action={attentionItems.length > 0 ? "全部" : ""} onClick={() => go("todos")} />
-        {attentionItems.length > 0 ? (
-          <div className="attention-list">
-            {attentionItems.slice(0, 3).map((item) => (
-              <AttentionCard key={item.id} item={item} go={go} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon={Check}
-            title="目前沒有急著處理的事"
-            body="之後有未讀公告、待付款或待確認事項，會先放在這裡。"
-            className="home-empty-state"
-          />
-        )}
       </section>
 
       <section className="section circle-overview-section">
@@ -1113,8 +1093,8 @@ function ProfileHub({ session, authProviders, go, refresh, setToast }) {
             <button className="selected-summary" type="button" onClick={() => go("notifications")}>
               <Bell size={20} />
               <span>
-                <strong>通知與手機提醒</strong>
-                <small>調整通知中心、重要提醒與推播裝置</small>
+                <strong>提醒設定</strong>
+                <small>調整重要提醒、安靜時段與推播裝置</small>
               </span>
               <ChevronRight size={18} />
             </button>
