@@ -1783,6 +1783,7 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   const [query, setQuery] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
   const [announcementPriority, setAnnouncementPriority] = useState("normal");
+  const [conversationBusy, setConversationBusy] = useState(false);
   const [permissions, setPermissions] = useState(null);
   const [permissionError, setPermissionError] = useState("");
 
@@ -1860,6 +1861,31 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
     setToast("公告已發布");
   }
 
+  async function openTaskConversation() {
+    if (!task.circleId || conversationBusy) return;
+    setConversationBusy(true);
+    try {
+      const existing = await api(`/api/circles/${task.circleId}/conversations?taskId=${task.id}`);
+      let conversation = existing.conversations?.[0] ?? null;
+      if (!conversation) {
+        const created = await api(`/api/circles/${task.circleId}/conversations`, {
+          method: "POST",
+          body: JSON.stringify({
+            type: "task",
+            taskId: task.id,
+            title: `${task.title} 討論`,
+          }),
+        });
+        conversation = created.conversation;
+      }
+      go("circleChat", { circleId: task.circleId, conversationId: conversation.id });
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setConversationBusy(false);
+    }
+  }
+
   const meta = templateMeta[task.template] ?? templateMeta.group_buy;
   const permissionReady = Boolean(permissions) || Boolean(permissionError);
   const canManage = Boolean(permissions?.canManage);
@@ -1906,6 +1932,13 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
       ) : null}
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
+        <div className="discussion-toolbar">
+          <button className="secondary-button compact" type="button" onClick={openTaskConversation} disabled={!permissionReady || conversationBusy}>
+            {conversationBusy ? <Loader2 className="spin" size={16} /> : <MessageCircle size={16} />}
+            事項討論串
+          </button>
+          <small>公告會通知圈內成員，細節可在討論串延續。</small>
+        </div>
         {canAnnounce ? (
           <div className="publish-box">
             <textarea

@@ -347,6 +347,33 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(announced.status, 201);
     assert.equal(announced.body.task.announcements.length, 1);
     assert.equal(announced.body.task.announcements[0].priority, "important");
+    if (label === "postgres" && invitedMemberHeaders) {
+      const memberNotifications = await request(baseUrl, "/api/notifications", { headers: invitedMemberHeaders });
+      const announcementNotification = memberNotifications.body.notifications.find(
+        (notification) => notification.announcementId === announced.body.task.announcements[0].id,
+      );
+      assert.ok(announcementNotification, `${label}: expected invited member notification for announcement`);
+      assert.equal(announcementNotification.taskId, createdTaskId);
+      assert.ok(announcementNotification.data.conversationId, `${label}: expected announcement notification conversationId`);
+      assert.equal(announcementNotification.readAt, null);
+
+      const announcementConversations = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations?taskId=${createdTaskId}`, {
+        headers: sessionHeaders,
+      });
+      assert.ok(
+        announcementConversations.body.conversations.some((item) => item.id === announcementNotification.data.conversationId),
+        `${label}: expected announcement task conversation`,
+      );
+      const announcementMessages = await request(baseUrl, `/api/conversations/${announcementNotification.data.conversationId}/messages`, {
+        headers: sessionHeaders,
+      });
+      assert.ok(
+        announcementMessages.body.messages.some(
+          (item) => item.metadata?.source === "announcement" && item.metadata?.announcementId === announced.body.task.announcements[0].id,
+        ),
+        `${label}: expected announcement mirrored into task conversation`,
+      );
+    }
 
     const submitted = await request(baseUrl, `/api/share/${created.body.task.shareToken}/responses`, {
       method: "POST",

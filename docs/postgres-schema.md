@@ -200,7 +200,7 @@ The initial migration has been verified locally with:
 - Postgres API interest-check conversion through `POST /api/tasks/:taskId/convert`, requiring the task creator or active circle `owner` / `admin`.
 - Postgres API share responses through `POST /api/share/:token/responses`.
 - Postgres API status updates through `PATCH /api/responses/:responseId` and `PATCH /api/tasks/:taskId/status`, requiring task-manager authorization.
-- Postgres API task announcements through `POST /api/tasks/:taskId/announcements`, requiring task-manager authorization.
+- Postgres API task announcements through `POST /api/tasks/:taskId/announcements`, requiring task-manager authorization and writing announcement receipts, in-app notifications, and a mirrored task-conversation message.
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
 - Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
 - Postgres API push scaffolding through device registration, notification listing, and notification read state.

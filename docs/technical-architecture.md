@@ -303,7 +303,7 @@ Opens or closes a task.
 
 ### `POST /api/tasks/:taskId/announcements`
 
-Publishes a task-level announcement for organizer notices.
+Publishes a task-level announcement for organizer notices. In Postgres, this also creates announcement receipts, queues in-app notifications for other active circle members, and mirrors the announcement into the task conversation so follow-up discussion has a clear context.
 
 ### `POST /api/tasks/:taskId/comments`
 

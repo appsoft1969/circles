@@ -2075,7 +2075,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       const { profile, task: managedTask } = await requireTaskManager(taskId, body.actor, client);
       const taskResult = await client.query(
         `
-          SELECT id::text, circle_id::text, created_by_profile_id::text
+          SELECT id::text, circle_id::text, created_by_profile_id::text, title
           FROM tasks
           WHERE id::text = $1
             AND archived_at IS NULL
@@ -2087,7 +2087,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       if (!task) return null;
       const authorProfileId = profile.id;
 
-      await client.query(
+      const announcementResult = await client.query(
         `
           INSERT INTO announcements (
             circle_id,
@@ -2101,6 +2101,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
             published_at
           )
           VALUES ($1, $2, $3, $4, $5, $6::announcement_priority, $7, $8, now())
+          RETURNING id::text
         `,
         [
           task.circle_id,
@@ -2111,6 +2112,118 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           priority,
           Boolean(body.requiresConfirmation),
           body.pinnedAt || null,
+        ],
+      );
+      const announcementId = announcementResult.rows[0].id;
+      const conversationResult = await client.query(
+        `
+          SELECT
+            id::text,
+            circle_id::text,
+            task_id::text,
+            type::text,
+            title,
+            metadata,
+            created_at,
+            updated_at
+          FROM conversations
+          WHERE circle_id::text = $1
+            AND task_id::text = $2
+            AND type = 'task'
+            AND archived_at IS NULL
+          ORDER BY created_at ASC
+          LIMIT 1
+        `,
+        [task.circle_id, managedTask.id],
+      );
+      let conversationId = conversationResult.rows[0]?.id;
+      if (!conversationId) {
+        const createdConversation = await client.query(
+          `
+            INSERT INTO conversations (
+              circle_id,
+              task_id,
+              type,
+              title,
+              metadata
+            )
+            VALUES ($1, $2, 'task', $3, $4::jsonb)
+            RETURNING id::text
+          `,
+          [task.circle_id, managedTask.id, `${task.title} 討論`, json({ source: "task_announcement" })],
+        );
+        conversationId = createdConversation.rows[0].id;
+      }
+
+      await client.query(
+        `
+          INSERT INTO messages (
+            conversation_id,
+            author_profile_id,
+            body,
+            metadata
+          )
+          VALUES ($1, $2, $3, $4::jsonb)
+        `,
+        [
+          conversationId,
+          authorProfileId,
+          `${body.title || "事項公告"}：${body.body}`,
+          json({ source: "announcement", announcementId }),
+        ],
+      );
+      await client.query("UPDATE conversations SET updated_at = now() WHERE id::text = $1", [conversationId]);
+
+      await client.query(
+        `
+          INSERT INTO announcement_receipts (announcement_id, profile_id)
+          SELECT $1::uuid, cm.profile_id
+          FROM circle_memberships cm
+          WHERE cm.circle_id = $2::uuid
+            AND cm.status = 'active'
+            AND cm.profile_id IS NOT NULL
+          ON CONFLICT (announcement_id, profile_id) DO NOTHING
+        `,
+        [announcementId, task.circle_id],
+      );
+
+      await client.query(
+        `
+          INSERT INTO notifications (
+            recipient_profile_id,
+            actor_profile_id,
+            circle_id,
+            task_id,
+            announcement_id,
+            type,
+            title,
+            body,
+            data
+          )
+          SELECT
+            cm.profile_id,
+            $1::uuid,
+            $2::uuid,
+            $3::uuid,
+            $4::uuid,
+            'announcement',
+            $5,
+            $6,
+            $7::jsonb
+          FROM circle_memberships cm
+          WHERE cm.circle_id = $2::uuid
+            AND cm.status = 'active'
+            AND cm.profile_id IS NOT NULL
+            AND cm.profile_id <> $1::uuid
+        `,
+        [
+          authorProfileId,
+          task.circle_id,
+          managedTask.id,
+          announcementId,
+          body.title || "事項公告",
+          body.body.slice(0, 160),
+          json({ taskId: managedTask.id, conversationId }),
         ],
       );
 
@@ -2241,6 +2354,31 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         [body.taskId, circleId],
       );
       if (!taskResult.rows[0]) throw new StoreError(400, "Task does not belong to circle");
+
+      if (type === "task") {
+        const existingResult = await pool.query(
+          `
+            SELECT
+              id::text,
+              circle_id::text,
+              task_id::text,
+              type::text,
+              title,
+              metadata,
+              created_at,
+              updated_at
+            FROM conversations
+            WHERE circle_id::text = $1
+              AND task_id::text = $2
+              AND type = 'task'
+              AND archived_at IS NULL
+            ORDER BY created_at ASC
+            LIMIT 1
+          `,
+          [circleId, body.taskId],
+        );
+        if (existingResult.rows[0]) return conversationFromRow(existingResult.rows[0]);
+      }
     }
 
     const result = await pool.query(
