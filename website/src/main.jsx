@@ -3986,9 +3986,27 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   const canAnnounce = Boolean(permissions?.canAnnounce);
   const canExport = Boolean(permissions?.canExport);
   const modeLabel = !permissionReady ? "確認權限" : canManage ? "管理模式" : "成員查看";
+  const hasResponseFilter = filter !== "all" || Boolean(query.trim());
+  const emptyResponseTitle = task.responses.length === 0 ? "還沒有人填寫" : "這裡目前沒有符合的名單";
+  const emptyResponseText = task.responses.length === 0
+    ? "可以先分享填單連結，等圈內成員填完後，名單與統計會整理在這裡。"
+    : query.trim()
+      ? "換個姓名、品項或備註再找一次，或先清除搜尋條件。"
+      : filter === "unpaid"
+        ? "目前沒有待付款或待確認的人。"
+        : filter === "paid"
+          ? "目前還沒有人被標成已付款。"
+          : filter === "pending"
+            ? "目前沒有待處理的名單。"
+            : "目前沒有符合條件的名單。";
 
   function refreshTaskAudit() {
     setAuditRefreshKey((current) => current + 1);
+  }
+
+  function clearResponseFilter() {
+    setFilter("all");
+    setQuery("");
   }
 
   useEffect(() => {
@@ -4116,7 +4134,22 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
         <Filter size={18} />
       </section>
       <section className="response-list">
-        {visibleResponses.map((response) => {
+        {visibleResponses.length === 0 ? (
+          <div className="response-empty-state">
+            <ReceiptText size={22} />
+            <strong>{emptyResponseTitle}</strong>
+            <small>{emptyResponseText}</small>
+            {hasResponseFilter ? (
+              <button className="secondary-button compact" type="button" onClick={clearResponseFilter}>
+                清除篩選
+              </button>
+            ) : canManage ? (
+              <button className="secondary-button compact" type="button" onClick={() => shareTask(task)}>
+                分享填單連結
+              </button>
+            ) : null}
+          </div>
+        ) : visibleResponses.map((response) => {
           const paymentBusy = responseBusyId === `${response.id}:payment`;
           const fulfillmentBusy = responseBusyId === `${response.id}:fulfillment`;
           return (

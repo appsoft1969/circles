@@ -2222,6 +2222,41 @@ a {
   border-top: 1px solid #dededb;
 }
 
+.response-empty-state {
+  margin: 16px 20px 20px;
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  min-height: 150px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  padding: 20px;
+  text-align: center;
+  color: #55575d;
+}
+
+.response-empty-state svg {
+  color: #2e62d4;
+}
+
+.response-empty-state strong {
+  color: #2b2c31;
+  font-size: 17px;
+  font-weight: 900;
+}
+
+.response-empty-state small {
+  color: #6f7178;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.response-empty-state .secondary-button {
+  margin-top: 4px;
+}
+
 .response-row {
   display: grid;
   grid-template-columns: 1fr auto;
