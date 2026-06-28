@@ -84,6 +84,7 @@ The delivery script:
 
 - Reads queued unread `notifications`.
 - Fans out to active `devices` with `push_subscription`.
+- Re-checks current profile/circle notification preferences, muted circles, important-only settings, and quiet hours before creating Web Push deliveries.
 - Inserts one `notification_deliveries` row per notification/device/channel.
 - Marks deliveries `sent` or `failed`.
 - Retries failed deliveries up to `PUSH_MAX_ATTEMPTS` times, waiting `PUSH_RETRY_AFTER_MINUTES` between attempts.

@@ -375,7 +375,7 @@ The Postgres store now supports:
 - `PATCH /api/notifications/read-all`
 - `PATCH /api/notifications/:notificationId/read`
 
-These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, device-level Web Push subscription registration, an admin-only `/ops/push` delivery report, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows; quiet hours are recorded for later push delivery and do not currently silence OS-level notifications. SQLite returns `501` for these realtime/push routes.
+These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, device-level Web Push subscription registration, an admin-only `/ops/push` delivery report, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows, and Web Push delivery also re-checks current profile/circle preferences plus quiet hours before creating a browser push delivery. SQLite returns `501` for these realtime/push routes.
 
 ## Local Commands
 
@@ -424,7 +424,7 @@ Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailabl
 
 `npm run push:vapid` generates a Web Push VAPID key pair for the private local production env. Do not commit the generated private key.
 
-`npm run push:send` sends queued unread notification rows to registered Web Push browser subscriptions and records delivery status in `notification_deliveries`. Use `npm run push:send -- --dry-run` before scheduling or manual delivery checks.
+`npm run push:send` sends queued unread notification rows to registered Web Push browser subscriptions and records delivery status in `notification_deliveries`. The send step re-checks current profile/circle notification preferences, muted circles, important-only filters, and quiet hours before creating Web Push deliveries. Use `npm run push:send -- --dry-run` before scheduling or manual delivery checks.
 
 `npm run push:status` writes `website/artifacts/web-push-status.json` with Web Push device counts, delivery counts, and recent failure details.
 

@@ -78,10 +78,8 @@ async function ensureDeliverySchema(pool) {
 async function pendingDeliveries(pool) {
   const result = await pool.query(
     `
-      WITH new_deliveries AS (
+      WITH eligible_push_targets AS (
         SELECT
-          NULL::text AS delivery_id,
-          false AS retry,
           n.id::text AS notification_id,
           n.circle_id::text,
           n.task_id::text,
@@ -96,13 +94,79 @@ async function pendingDeliveries(pool) {
           ON d.profile_id = n.recipient_profile_id
          AND d.revoked_at IS NULL
          AND d.push_subscription IS NOT NULL
+        JOIN profiles p
+          ON p.id = n.recipient_profile_id
+        LEFT JOIN notification_preferences np
+          ON np.profile_id = n.recipient_profile_id
+        LEFT JOIN circle_notification_preferences cnp
+          ON cnp.profile_id = n.recipient_profile_id
+         AND cnp.circle_id = n.circle_id
+        CROSS JOIN LATERAL (
+          SELECT (now() AT TIME ZONE COALESCE(NULLIF(p.timezone, ''), 'Asia/Taipei'))::time AS local_time
+        ) recipient_time
         WHERE n.cancelled_at IS NULL
           AND n.read_at IS NULL
-          AND NOT EXISTS (
+          AND COALESCE(np.in_app_enabled, true)
+          AND COALESCE(cnp.in_app_enabled, true)
+          AND (
+            n.type <> 'announcement'
+            OR (
+              COALESCE(np.announcement_enabled, true)
+              AND COALESCE(cnp.announcement_enabled, true)
+            )
+          )
+          AND (
+            n.type <> 'message'
+            OR (
+              COALESCE(np.message_enabled, true)
+              AND COALESCE(cnp.message_enabled, true)
+            )
+          )
+          AND (
+            NOT COALESCE(np.important_only, false)
+            OR COALESCE(n.data->>'priority', 'normal') IN ('important', 'urgent')
+          )
+          AND (
+            NOT COALESCE(cnp.important_only, false)
+            OR COALESCE(n.data->>'priority', 'normal') IN ('important', 'urgent')
+          )
+          AND (
+            cnp.muted_until IS NULL
+            OR cnp.muted_until <= now()
+          )
+          AND NOT (
+            COALESCE(np.quiet_hours_enabled, false)
+            AND (
+              CASE
+                WHEN np.quiet_hours_start <= np.quiet_hours_end THEN
+                  recipient_time.local_time >= np.quiet_hours_start
+                  AND recipient_time.local_time < np.quiet_hours_end
+                ELSE
+                  recipient_time.local_time >= np.quiet_hours_start
+                  OR recipient_time.local_time < np.quiet_hours_end
+              END
+            )
+          )
+      ),
+      new_deliveries AS (
+        SELECT
+          NULL::text AS delivery_id,
+          false AS retry,
+          e.notification_id,
+          e.circle_id,
+          e.task_id,
+          e.type,
+          e.title,
+          e.body,
+          e.data,
+          e.device_id,
+          e.push_subscription
+        FROM eligible_push_targets e
+        WHERE NOT EXISTS (
             SELECT 1
             FROM notification_deliveries nd
-            WHERE nd.notification_id = n.id
-              AND nd.device_id = d.id
+            WHERE nd.notification_id::text = e.notification_id
+              AND nd.device_id::text = e.device_id
               AND nd.channel = 'push'
           )
       ),
@@ -110,18 +174,19 @@ async function pendingDeliveries(pool) {
         SELECT
           nd.id::text AS delivery_id,
           true AS retry,
-          n.id::text AS notification_id,
-          n.circle_id::text,
-          n.task_id::text,
-          n.type,
-          n.title,
-          n.body,
-          n.data,
-          d.id::text AS device_id,
-          d.push_subscription
+          e.notification_id,
+          e.circle_id,
+          e.task_id,
+          e.type,
+          e.title,
+          e.body,
+          e.data,
+          e.device_id,
+          e.push_subscription
         FROM notification_deliveries nd
-        JOIN notifications n ON n.id = nd.notification_id
-        JOIN devices d ON d.id = nd.device_id
+        JOIN eligible_push_targets e
+          ON e.notification_id = nd.notification_id::text
+         AND e.device_id = nd.device_id::text
         WHERE nd.channel = 'push'
           AND nd.status = 'failed'
           AND nd.attempt_count < $2
@@ -129,10 +194,6 @@ async function pendingDeliveries(pool) {
             nd.last_attempt_at IS NULL
             OR nd.last_attempt_at <= now() - ($3::int * interval '1 minute')
           )
-          AND n.cancelled_at IS NULL
-          AND n.read_at IS NULL
-          AND d.revoked_at IS NULL
-          AND d.push_subscription IS NOT NULL
       )
       SELECT *
       FROM (
