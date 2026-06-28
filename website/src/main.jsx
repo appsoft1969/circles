@@ -1443,10 +1443,27 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const [preferences, setPreferences] = useState(null);
   const [loadingPreferences, setLoadingPreferences] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const [notificationFilter, setNotificationFilter] = useState("unread");
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
+  const priorityNotifications = notifications.filter((notification) => notificationPriority(notification));
   const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
   const hasNotifications = notifications.length > 0;
+  const filteredNotifications = notificationFilter === "important"
+    ? priorityNotifications
+    : notificationFilter === "all"
+      ? notifications
+      : unreadNotifications;
+  const filteredEmptyText = notificationFilter === "important"
+    ? "目前沒有重要提醒"
+    : notificationFilter === "all"
+      ? "目前沒有通知"
+      : "現在沒有還沒看的提醒";
+  const filterOptions = [
+    { id: "unread", label: "未讀", count: unreadCount },
+    { id: "important", label: "重要", count: priorityNotifications.length },
+    { id: "all", label: "全部", count: notifications.length },
+  ];
   const quietCircleStates = uniqueCircleMemberships(session?.memberships ?? [])
     .map((membership) => ({ membership, status: circleNotificationStatus(membership.notificationPreference) }))
     .filter((item) => item.status);
@@ -1698,6 +1715,22 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
             ) : null}
           </div>
         ) : null}
+        {hasNotifications ? (
+          <div className="notification-filter" aria-label="通知篩選">
+            {filterOptions.map((option) => (
+              <button
+                className={`filter-pill ${notificationFilter === option.id ? "active" : ""}`}
+                type="button"
+                key={option.id}
+                onClick={() => setNotificationFilter(option.id)}
+                aria-pressed={notificationFilter === option.id}
+              >
+                <span>{option.label}</span>
+                <b>{option.count}</b>
+              </button>
+            ))}
+          </div>
+        ) : null}
         {!hasNotifications ? (
           <div className="notification-empty">
             <span className="notification-icon"><Bell size={18} /></span>
@@ -1708,7 +1741,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
           </div>
         ) : null}
         <div className="notification-list">
-          {notifications.map((notification) => {
+          {filteredNotifications.map((notification) => {
             const priority = notificationPriority(notification);
             const badgeLabel = notificationBadgeLabel(notification);
             return (
@@ -1732,6 +1765,15 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
             );
           })}
         </div>
+        {hasNotifications && filteredNotifications.length === 0 ? (
+          <div className="notification-empty compact-empty">
+            <span className="notification-icon"><Bell size={18} /></span>
+            <div>
+              <strong>{filteredEmptyText}</strong>
+              <small>可以切到「全部」看看以前的提醒。</small>
+            </div>
+          </div>
+        ) : null}
       </section>
     </>
   );
