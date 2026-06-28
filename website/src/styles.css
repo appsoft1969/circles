@@ -598,6 +598,48 @@ a {
   line-height: 1.4;
 }
 
+.device-push-guide {
+  border: 1px solid #d8d8d3;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.device-push-guide.ok {
+  border-color: #b9dfca;
+  background: #f4fbf6;
+}
+
+.device-push-guide.attention {
+  border-color: #f0c58c;
+  background: #fff8ee;
+}
+
+.device-push-guide.muted {
+  border-color: #dde1e7;
+  background: #f7f8fa;
+}
+
+.device-push-guide strong,
+.device-push-guide small {
+  display: block;
+}
+
+.device-push-guide strong {
+  color: #25262b;
+  font-size: 15px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+
+.device-push-guide small {
+  color: #62646b;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .device-push-panel .secondary-button {
   width: 100%;
 }

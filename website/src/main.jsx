@@ -169,6 +169,85 @@ function browserPushSupported() {
   return "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+function standaloneDisplayMode() {
+  return window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator?.standalone === true;
+}
+
+function pushDeviceEnvironment() {
+  const userAgent = navigator.userAgent || "";
+  const platform = navigator.platform || "";
+  const isiPadOS = platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  const isIos = /iPad|iPhone|iPod/.test(userAgent) || isiPadOS;
+  const isAndroid = /Android/.test(userAgent);
+  const supported = browserPushSupported();
+  const permission = "Notification" in window ? Notification.permission : "unsupported";
+  return {
+    isIos,
+    isAndroid,
+    isStandalone: standaloneDisplayMode(),
+    supported,
+    permission,
+  };
+}
+
+function pushDeviceGuide(pushConfig, pushStatus) {
+  const environment = pushDeviceEnvironment();
+  if (pushStatus === "checking") {
+    return {
+      tone: "neutral",
+      title: "正在確認這台裝置",
+      steps: ["我先看這個瀏覽器能不能收手機提醒，確認好就會顯示下一步。"],
+    };
+  }
+  if (pushStatus === "unavailable") {
+    return {
+      tone: "attention",
+      title: "暫時讀不到推播設定",
+      steps: ["先保留通知中心提醒，等網路或站務設定恢復後再登記。"],
+    };
+  }
+  if (!pushConfig?.configured) {
+    return {
+      tone: "attention",
+      title: "手機提醒還沒開好",
+      steps: ["站務端推播金鑰還沒設定，現在先用通知中心提醒。"],
+    };
+  }
+  if (environment.permission === "denied") {
+    return {
+      tone: "attention",
+      title: "這台裝置拒絕通知",
+      steps: ["到瀏覽器或系統通知設定裡，把圈內的通知打開後再回來。"],
+    };
+  }
+  if (environment.isIos && !environment.isStandalone) {
+    return {
+      tone: "attention",
+      title: "iPhone 先加到主畫面",
+      steps: ["用 Safari 打開圈內，按分享，再選「加入主畫面」。", "從主畫面的圈內圖示打開後，再回來登記手機提醒。"],
+    };
+  }
+  if (!environment.supported) {
+    return {
+      tone: "muted",
+      title: "這個瀏覽器暫時不能登記",
+      steps: [environment.isAndroid ? "請改用 Chrome 或系統瀏覽器打開圈內。" : "可以先使用通知中心，或換支援推播的瀏覽器。"],
+    };
+  }
+  if (pushStatus === "registered") {
+    return {
+      tone: "ok",
+      title: "這台裝置已經準備好",
+      steps: ["可以傳一則測試提醒，確認手機真的收得到。", "不想收時，也可以在這裡停止這台裝置提醒。"],
+    };
+  }
+  return {
+    tone: "neutral",
+    title: environment.isAndroid ? "Android 可以直接登記" : "可以登記這台裝置",
+    steps: ["按下登記後，瀏覽器會跳出通知權限，請你自己確認是否允許。"],
+  };
+}
+
 function urlBase64ToUint8Array(value) {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
@@ -1920,6 +1999,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
     pushStatus === "unsupported" ||
     !pushConfig?.configured;
   const pushActionLabel = pushStatus === "registered" ? "這台裝置已登記" : "登記這台裝置";
+  const pushGuide = session?.authenticated ? pushDeviceGuide(pushConfig, pushStatus) : null;
 
   return (
     <>
@@ -2089,6 +2169,14 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
             </div>
             <div className="device-push-panel">
               <p>{pushStatusText}</p>
+              {pushGuide ? (
+                <div className={`device-push-guide ${pushGuide.tone}`}>
+                  <strong>{pushGuide.title}</strong>
+                  {pushGuide.steps.map((step) => (
+                    <small key={step}>{step}</small>
+                  ))}
+                </div>
+              ) : null}
               <button className="secondary-button compact" type="button" onClick={enableWebPush} disabled={pushActionDisabled}>
                 {enablingPush ? <Loader2 className="spin" size={16} /> : <BellDot size={16} />}
                 {pushActionLabel}

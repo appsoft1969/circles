@@ -64,7 +64,7 @@ cd website
 npm run icons:pwa
 ```
 
-The service worker is intentionally conservative. Task counts, payment status, chat messages, and notifications still come from the network so the app does not show stale operational data as if it were current. The service worker also contains the browser-side `push` and `notificationclick` handlers for future Web Push delivery, but APNS/FCM/Web Push provider delivery is not wired yet.
+The service worker is intentionally conservative. Task counts, payment status, chat messages, and notifications still come from the network so the app does not show stale operational data as if it were current. The service worker also contains the browser-side `push` and `notificationclick` handlers for Web Push delivery. Native APNS/FCM app push remains future work.
 
 ## Database Tables
 

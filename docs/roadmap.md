@@ -135,9 +135,9 @@ Improve retention and organizer management once the workflow is proven.
 
 Options:
 
-- Installable PWA. Manifest/icons are in place, and the first service worker only caches the app shell while keeping API data network-first. Full offline behavior and push delivery are still future work.
+- Installable PWA. Manifest/icons, conservative app-shell service worker, Web Push delivery, device registration/revocation, and notification-center guidance are in place. Full offline behavior is still future work.
 - Native iOS app for organizers.
-- Push notifications.
+- Native app push notifications.
 - Home-screen organizer dashboard.
 
 Decision rule:

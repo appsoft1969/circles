@@ -12,7 +12,14 @@ Current status:
 - `GET /api/push/status` and `/ops/push` expose a station-admin delivery report for device counts, delivery counts, and recent failures.
 - `POST /api/push/test` creates a user-triggered self test notification; the notification center shows a test button after the browser subscription is registered.
 - `DELETE /api/devices` revokes the current user's browser subscription; the notification center shows a stop button after registration.
+- The notification center shows a device-specific setup hint, including the iPhone home-screen step when the page is not running as an installed web app.
 - In-app rows and foreground polling remain the primary MVP behavior; Web Push is an additional delivery channel after a user registers a supported browser.
+
+## Mobile Setup Notes
+
+- iPhone users should open `useincircle.app` in Safari, add it to the home screen, then open 圈內 from the home-screen icon before registering push notifications.
+- Android users can usually register from Chrome or the system browser when notifications are allowed.
+- The app does not request notification permission automatically; the user must press the device registration button.
 
 ## Generate VAPID Keys
 
