@@ -201,7 +201,7 @@ Current Postgres store status:
 - `POST /api/circles`: implemented for authenticated circle creation and automatic owner membership.
 - `PATCH /api/circles/:circleId`: implemented for owner-only circle name/description settings.
 - `GET /api/circles/:circleId/members`: implemented with active membership requirement.
-- `PATCH /api/circles/:circleId/members/:membershipId`: implemented for owner/admin role and status changes.
+- `PATCH /api/circles/:circleId/members/:membershipId`: implemented for owner/admin member display name, contact hint, role, and status changes.
 - `GET /api/circles/:circleId/invites`: implemented for owner/admin invite management.
 - `POST /api/circles/:circleId/invites`: implemented for owner/admin invite creation.
 - `PATCH /api/circles/:circleId/invites/:inviteId`: implemented for owner/admin invite revocation.
@@ -265,7 +265,7 @@ Circle invite links are separate from task share links. `/invite/:code` is for j
 - `GET /api/circles/:circleId/invites`: requires owner/admin membership and returns active invite links.
 - `POST /api/circles/:circleId/invites`: requires owner/admin membership and creates a member/guest invite.
 - `PATCH /api/circles/:circleId/invites/:inviteId`: requires owner/admin membership and revokes an invite with `{ "revoked": true }`.
-- `PATCH /api/circles/:circleId/members/:membershipId`: requires owner/admin membership and updates non-owner member role/status.
+- `PATCH /api/circles/:circleId/members/:membershipId`: requires owner/admin membership and updates non-owner member display name, contact hint, role, or status.
 
 ### `GET /api/health`
 

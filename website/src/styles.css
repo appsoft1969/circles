@@ -641,6 +641,42 @@ a {
   min-height: 36px;
 }
 
+.member-row-actions,
+.member-edit-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.member-row-actions .secondary-button,
+.member-edit-actions .secondary-button,
+.member-edit-actions .primary-button {
+  grid-column: auto;
+  width: 100%;
+}
+
+.primary-button.compact {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.member-edit-panel {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #ececea;
+  padding-top: 10px;
+}
+
+.member-edit-panel label {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
 .member-remove-confirm {
   grid-column: 1 / -1;
   display: grid;

@@ -297,9 +297,15 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       const updatedMember = await request(baseUrl, `/api/circles/${officeCircle.id}/members/${joinedMember.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...sessionHeaders },
-        body: JSON.stringify({ role: "guest" }),
+        body: JSON.stringify({
+          role: "guest",
+          displayName: "邀請測試成員已整理",
+          contactHint: "由 smoke 測試更新",
+        }),
       });
       assert.equal(updatedMember.body.member.role, "guest");
+      assert.equal(updatedMember.body.member.displayName, "邀請測試成員已整理");
+      assert.equal(updatedMember.body.member.contactHint, "由 smoke 測試更新");
     }
 
     const created = await request(baseUrl, "/api/tasks", {

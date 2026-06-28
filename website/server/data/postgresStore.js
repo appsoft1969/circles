@@ -860,6 +860,21 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return value;
   }
 
+  function normalizeMemberDisplayName(value, fallback) {
+    if (value == null) return fallback;
+    const clean = String(value || "").trim();
+    if (!clean) throw new StoreError(400, "Member display name is required");
+    if (clean.length > 40) throw new StoreError(400, "Member display name must be 40 characters or less");
+    return clean;
+  }
+
+  function normalizeMemberContactHint(value, fallback) {
+    if (value == null) return fallback;
+    const clean = String(value || "").trim();
+    if (clean.length > 80) throw new StoreError(400, "Member contact hint must be 80 characters or less");
+    return clean;
+  }
+
   function normalizeMembershipStatus(status) {
     const value = String(status || "").trim();
     if (!membershipStatuses.has(value)) {
@@ -1316,6 +1331,8 @@ export function createPostgresStore({ connectionString = defaultConnectionString
 
       const nextRole = body.role == null ? target.role : normalizeMemberRole(body.role);
       const nextStatus = body.status == null ? target.status : normalizeMembershipStatus(body.status);
+      const nextDisplayName = normalizeMemberDisplayName(body.displayName, target.displayName);
+      const nextContactHint = normalizeMemberContactHint(body.contactHint, target.contactHint);
 
       if (target.profileId === profile.id && ["left", "removed"].includes(nextStatus)) {
         throw new StoreError(400, "You cannot remove your own active membership");
@@ -1329,6 +1346,8 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           UPDATE circle_memberships
           SET role = $3::circle_role,
               status = $4::membership_status,
+              display_name = $5,
+              contact_hint = $6,
               joined_at = CASE
                 WHEN $4::membership_status = 'active' THEN COALESCE(joined_at, now())
                 ELSE joined_at
@@ -1343,7 +1362,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           RETURNING
             id::text,
             circle_id::text,
-            $5::text AS circle_name,
+            $7::text AS circle_name,
             profile_id::text,
             display_name,
             contact_hint,
@@ -1351,7 +1370,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
             status::text,
             joined_at
         `,
-        [circleId, membershipId, nextRole, nextStatus, target.circleName],
+        [circleId, membershipId, nextRole, nextStatus, nextDisplayName, nextContactHint, target.circleName],
       );
       return membershipFromRow(result.rows[0]);
     });

@@ -710,6 +710,9 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [expireDays, setExpireDays] = useState(30);
   const [showInviteSettings, setShowInviteSettings] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState("");
+  const [editingMemberId, setEditingMemberId] = useState("");
+  const [memberNameDraft, setMemberNameDraft] = useState("");
+  const [memberContactDraft, setMemberContactDraft] = useState("");
   const [editingCircle, setEditingCircle] = useState(false);
   const [circleNameDraft, setCircleNameDraft] = useState(circle?.name ?? currentMembership?.circleName ?? "");
   const [circleDescriptionDraft, setCircleDescriptionDraft] = useState(circle?.description ?? "");
@@ -833,6 +836,25 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
     } catch (updateError) {
       setToast(updateError.message);
     }
+  }
+
+  function startEditingMember(member) {
+    setConfirmRemoveId("");
+    setEditingMemberId(member.id);
+    setMemberNameDraft(member.displayName || "");
+    setMemberContactDraft(member.contactHint || "");
+  }
+
+  async function saveMemberInfo(member) {
+    if (!memberNameDraft.trim()) {
+      setToast("先填這位成員要顯示的名字");
+      return;
+    }
+    await updateMember(member, {
+      displayName: memberNameDraft.trim(),
+      contactHint: memberContactDraft.trim(),
+    });
+    setEditingMemberId("");
   }
 
   function canEdit(member) {
@@ -986,6 +1008,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
             <div className="member-list">
               {members.map((member) => {
                 const editable = canEdit(member);
+                const editingThisMember = editingMemberId === member.id;
                 return (
                   <article className="member-row" key={member.id}>
                     <span className="member-avatar"><UserCircle size={22} /></span>
@@ -1007,7 +1030,36 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                       <span className="role-badge">{membershipRoleLabels[member.role] ?? member.role}</span>
                     )}
                     {editable ? (
-                      confirmRemoveId === member.id ? (
+                      editingThisMember ? (
+                        <div className="member-edit-panel">
+                          <label>
+                            顯示名稱
+                            <input
+                              value={memberNameDraft}
+                              onChange={(event) => setMemberNameDraft(event.target.value)}
+                              maxLength={40}
+                              placeholder="例如：小美"
+                            />
+                          </label>
+                          <label>
+                            聯絡備註
+                            <input
+                              value={memberContactDraft}
+                              onChange={(event) => setMemberContactDraft(event.target.value)}
+                              maxLength={80}
+                              placeholder="例如：訂餐窗口、同事、隔壁部門"
+                            />
+                          </label>
+                          <div className="member-edit-actions">
+                            <button className="secondary-button compact" type="button" onClick={() => setEditingMemberId("")}>
+                              取消
+                            </button>
+                            <button className="primary-button green compact" type="button" onClick={() => saveMemberInfo(member)} disabled={!memberNameDraft.trim()}>
+                              好了，儲存
+                            </button>
+                          </div>
+                        </div>
+                      ) : confirmRemoveId === member.id ? (
                         <div className="member-remove-confirm">
                           <span>確定要把 {member.displayName} 移出圈子嗎？</span>
                           <button className="secondary-button compact" type="button" onClick={() => setConfirmRemoveId("")}>
@@ -1022,13 +1074,18 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          className="secondary-button compact danger"
-                          type="button"
-                          onClick={() => setConfirmRemoveId(member.id)}
-                        >
-                          移除
-                        </button>
+                        <div className="member-row-actions">
+                          <button className="secondary-button compact" type="button" onClick={() => startEditingMember(member)}>
+                            編輯資料
+                          </button>
+                          <button
+                            className="secondary-button compact danger"
+                            type="button"
+                            onClick={() => setConfirmRemoveId(member.id)}
+                          >
+                            移除
+                          </button>
+                        </div>
                       )
                     ) : null}
                   </article>
