@@ -175,7 +175,7 @@ The API uses `website/server/data/storeFactory.js`.
 Supported `DATA_STORE` values:
 
 - `sqlite`: default working MVP runtime.
-- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, circle creation, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, CSV export, membership/permission APIs, and Postgres-backed conversation/message/push-device scaffolding. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
+- `postgres`: current public Mac runtime and local parity runtime for validating Postgres connectivity, migrated public data, seeded demo data, circle creation/settings, core task workflows, task edits, interest-check conversion, share-link submissions, status updates, announcements, comments, CSV export, membership/permission APIs, and Postgres-backed conversation/message/push-device scaffolding. The current Mac default is Homebrew PostgreSQL on `127.0.0.1:5434`.
 - Task announcements and task comments are part of the core task object in both stores. Postgres also exposes the first conversation/message/read/notification/device APIs, still tied to circles and tasks.
 
 SQLite environment variables:
@@ -199,6 +199,7 @@ Current Postgres store status:
 - `GET /api/circle-invites/:code`: implemented for public circle-invite preview.
 - `POST /api/circle-invites/:code/join`: implemented for authenticated invite acceptance.
 - `POST /api/circles`: implemented for authenticated circle creation and automatic owner membership.
+- `PATCH /api/circles/:circleId`: implemented for owner-only circle name/description settings.
 - `GET /api/circles/:circleId/members`: implemented with active membership requirement.
 - `PATCH /api/circles/:circleId/members/:membershipId`: implemented for owner/admin role and status changes.
 - `GET /api/circles/:circleId/invites`: implemented for owner/admin invite management.
@@ -250,6 +251,10 @@ Returns active members for a circle. Requires the temporary profile header to re
 ### `POST /api/circles`
 
 Creates a private circle for the authenticated profile and immediately creates an active `owner` membership for that profile. The MVP accepts a required `name` and optional `description`; inviting additional members remains separate through circle invite links.
+
+### `PATCH /api/circles/:circleId`
+
+Updates circle name and description. Requires the authenticated profile to be an active `owner` member of the circle; `admin` members can manage invites and members but cannot change the circle's identity settings.
 
 ### Circle Invite And Member Management Routes
 

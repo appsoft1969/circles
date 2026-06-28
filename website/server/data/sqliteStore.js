@@ -1084,6 +1084,20 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     return circleFromRow(db.prepare("SELECT * FROM circles WHERE id = ?").get(circleId));
   }
 
+  function updateCircle(circleId, body = {}) {
+    const user = requireUser(body.actor);
+    const circle = db.prepare("SELECT * FROM circles WHERE id = ?").get(circleId);
+    if (!circle) throw new StoreError(404, "Circle not found");
+    if (circle.owner_user_id !== user.id) throw new StoreError(403, "Circle owner role required");
+
+    db.prepare("UPDATE circles SET name = ?, description = ? WHERE id = ?").run(
+      normalizeCircleName(body.name),
+      normalizeCircleDescription(body.description),
+      circleId,
+    );
+    return circleFromRow(db.prepare("SELECT * FROM circles WHERE id = ?").get(circleId));
+  }
+
   function getSessionContext(actor = {}) {
     const user = resolveUser(actor);
     if (!user) {
@@ -1174,6 +1188,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     health: () => ({ ok: true, backend: "sqlite", dbPath }),
     getSessionContext,
     createCircle,
+    updateCircle,
     listCircleMembers,
     getCircleInvite: postgresOnlyCircleInvites,
     listCircleInvites: postgresOnlyCircleInvites,

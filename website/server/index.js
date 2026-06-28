@@ -198,6 +198,14 @@ app.post("/api/circles", route(async (req, res) => {
   res.status(201).json({ circle });
 }));
 
+app.patch("/api/circles/:circleId", route(async (req, res) => {
+  const circle = await store.updateCircle(req.params.circleId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json({ circle });
+}));
+
 app.get("/api/circles/:circleId/members", route(async (req, res) => {
   const members = await store.listCircleMembers(req.params.circleId, actorFromRequest(req));
   res.json({ members });

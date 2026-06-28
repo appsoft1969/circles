@@ -199,18 +199,34 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(createdCircle.status, 201);
     assert.equal(createdCircle.body.circle.memberCount, 1);
 
+    const updatedCircle = await request(baseUrl, `/api/circles/${createdCircle.body.circle.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...sessionHeaders },
+      body: JSON.stringify({
+        name: `${label} API smoke 圈子已更新`,
+        description: "自動測試更新圈子名稱與說明。",
+      }),
+    });
+    assert.equal(updatedCircle.body.circle.name, `${label} API smoke 圈子已更新`);
+    assert.equal(updatedCircle.body.circle.description, "自動測試更新圈子名稱與說明。");
+
     const postCircleSession = await request(baseUrl, "/api/session", { headers: sessionHeaders });
     assert.ok(
       postCircleSession.body.memberships.some(
-        (membership) => membership.circleId === createdCircle.body.circle.id && membership.role === "owner",
+        (membership) =>
+          membership.circleId === createdCircle.body.circle.id &&
+          membership.circleName === updatedCircle.body.circle.name &&
+          membership.role === "owner",
       ),
       `${label}: expected created circle owner membership`,
     );
 
     const postCircleBootstrap = await request(baseUrl, "/api/bootstrap", { headers: sessionHeaders });
     assert.ok(
-      postCircleBootstrap.body.circles.some((circle) => circle.id === createdCircle.body.circle.id),
-      `${label}: expected created circle in bootstrap`,
+      postCircleBootstrap.body.circles.some(
+        (circle) => circle.id === createdCircle.body.circle.id && circle.name === updatedCircle.body.circle.name,
+      ),
+      `${label}: expected updated circle in bootstrap`,
     );
 
     const members = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });

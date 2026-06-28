@@ -986,6 +986,38 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     });
   }
 
+  async function updateCircle(circleId, body = {}) {
+    return withTransaction(async (client) => {
+      await requireCircleMember(circleId, body.actor, { roles: ["owner"], client });
+      const name = normalizeCircleName(body.name);
+      const description = normalizeCircleDescription(body.description);
+
+      const result = await client.query(
+        `
+          UPDATE circles c
+          SET name = $2,
+              description = $3
+          WHERE c.id::text = $1
+            AND c.archived_at IS NULL
+          RETURNING
+            c.id::text,
+            c.name,
+            c.description,
+            c.invite_code,
+            (
+              SELECT COUNT(active_cm.id)::int
+              FROM circle_memberships active_cm
+              WHERE active_cm.circle_id = c.id
+                AND active_cm.status = 'active'
+            ) AS member_count
+        `,
+        [circleId, name, description],
+      );
+      if (!result.rows[0]) throw new StoreError(404, "Circle not found");
+      return circleFromRow(result.rows[0]);
+    });
+  }
+
   async function getSessionContext(actor = {}) {
     const profile = await resolveProfile(actor);
     if (!profile) {
@@ -2757,6 +2789,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     health,
     getSessionContext,
     createCircle,
+    updateCircle,
     listCircleMembers,
     getCircleInvite,
     listCircleInvites,
