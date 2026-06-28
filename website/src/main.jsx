@@ -1851,12 +1851,13 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
     }
   }
 
-  async function loadMessages(conversationId = selectedConversationId) {
+  async function loadMessages(conversationId = selectedConversationId, options = {}) {
+    const silent = Boolean(options.silent);
     if (!conversationId) {
-      setMessages([]);
+      if (!silent) setMessages([]);
       return;
     }
-    setMessagesLoading(true);
+    if (!silent) setMessagesLoading(true);
     try {
       const data = await api(`/api/conversations/${conversationId}/messages`);
       const nextMessages = data.messages ?? [];
@@ -1869,9 +1870,9 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
         }).catch(() => {});
       }
     } catch (loadError) {
-      setToast(loadError.message);
+      if (!silent) setToast(loadError.message);
     } finally {
-      setMessagesLoading(false);
+      if (!silent) setMessagesLoading(false);
     }
   }
 
@@ -1899,6 +1900,24 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
   useEffect(() => {
     loadMessages(selectedConversationId);
   }, [selectedConversationId]);
+
+  useEffect(() => {
+    if (!selectedConversationId) return undefined;
+    let cancelled = false;
+    const syncVisibleMessages = () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      loadMessages(selectedConversationId, { silent: true });
+    };
+    const intervalId = window.setInterval(syncVisibleMessages, 8000);
+    window.addEventListener("focus", syncVisibleMessages);
+    document.addEventListener("visibilitychange", syncVisibleMessages);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", syncVisibleMessages);
+      document.removeEventListener("visibilitychange", syncVisibleMessages);
+    };
+  }, [selectedConversationId, session?.profile?.id]);
 
   async function createConversation() {
     try {

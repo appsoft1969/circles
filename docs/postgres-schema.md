@@ -122,7 +122,7 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
-Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, profile-level and circle-level notification preferences, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges fresh with lightweight foreground polling and has a conservative service worker for app-shell caching plus future push click handling. Preference rules affect future notification rows; they do not delete historical notification records. Real push delivery and Supabase Realtime/mobile subscriptions are still future work.
+Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, profile-level and circle-level notification preferences, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. The web client currently keeps notification badges and open conversation messages fresh with lightweight foreground polling, and has a conservative service worker for app-shell caching plus future push click handling. Preference rules affect future notification rows; they do not delete historical notification records. Real push delivery and Supabase Realtime/mobile subscriptions are still future work.
 
 ### Attachments And Audit
 

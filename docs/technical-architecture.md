@@ -371,7 +371,7 @@ The Postgres store now supports:
 - `PATCH /api/notifications/read-all`
 - `PATCH /api/notifications/:notificationId/read`
 
-These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Notification preferences affect future in-app notification rows; quiet hours are recorded for later push delivery and do not currently silence OS-level notifications. SQLite returns `501` for these realtime/push routes.
+These are foundations for in-app coordination, not a standalone chat product. The current web UI exposes a notification center, unread summary, profile-level notification preferences, circle-level notification preferences, bulk read action, and circle conversation screen on top of these APIs. Logged-in web sessions use lightweight 30-second foreground polling plus a visible/focus refresh so notification badges can update without a full page reload. Open circle conversation screens also refresh messages with conservative foreground polling while the page is visible. Notification preferences affect future in-app notification rows; quiet hours are recorded for later push delivery and do not currently silence OS-level notifications. SQLite returns `501` for these realtime/push routes.
 
 ## Local Commands
 
