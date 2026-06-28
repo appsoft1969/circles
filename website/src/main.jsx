@@ -1358,9 +1358,24 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   const canManage = ["owner", "admin"].includes(membership?.role);
   const canEditCircle = membership?.role === "owner";
+  const circleTopbarAction = (
+    <div className="topbar-action-group" aria-label="圈子入口">
+      <button className="icon-button" type="button" onClick={() => go("circleChat", { circleId: circle.id })} aria-label="圈內討論" title="圈內討論">
+        <MessageCircle size={19} />
+      </button>
+      <button className="icon-button" type="button" onClick={() => go("members", { circleId: circle.id })} aria-label="成員" title="成員">
+        <Users size={19} />
+      </button>
+      {canManage ? (
+        <button className="icon-button" type="button" onClick={() => go("memberInvite", { circleId: circle.id })} aria-label="邀請熟人" title="邀請熟人">
+          <UserPlus size={19} />
+        </button>
+      ) : null}
+    </div>
+  );
   return (
     <>
-      <Topbar title={circle.name} subtitle="圈子首頁" onBack={() => go("dashboard")} />
+      <Topbar title={circle.name} subtitle="圈子首頁" onBack={() => go("dashboard")} action={circleTopbarAction} />
       <section className="circle-home-hero">
         <span className="circle-overview-icon"><Users size={22} /></span>
         <div>
@@ -1373,6 +1388,7 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           </div>
         </div>
       </section>
+      {canManage ? (
       <section className="home-status-strip">
         <span>
           <strong>{activeTasks.length}</strong>
@@ -1387,6 +1403,7 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           未讀
         </span>
       </section>
+      ) : null}
       <section className="section circle-daily-section">
         <SectionTitle title="今天有人在揪嗎？" action={canManage ? "開一件事" : null} onClick={() => go("templates", { selectedCircleId: circle.id })} />
         <p className="circle-daily-copy">
@@ -1418,6 +1435,7 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           />
         )}
       </section>
+      {canManage ? (
       <section className="section">
         <SectionTitle title="需要注意" />
         {attentionItems.length > 0 ? (
@@ -1435,32 +1453,11 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           />
         )}
       </section>
+      ) : null}
+      {canManage ? (
       <section className="section circle-home-actions">
-        <SectionTitle title="其他入口" />
+        <SectionTitle title="圈子管理" />
         <div className="success-action-grid">
-          <button className="success-action-card primary" type="button" onClick={() => go("circleChat", { circleId: circle.id })}>
-            <MessageCircle size={20} />
-            <span>
-              <strong>圈內討論</strong>
-              <small>公告、臨時通知、大家討論</small>
-            </span>
-          </button>
-          <button className="success-action-card" type="button" onClick={() => go("members", { circleId: circle.id })}>
-            <Users size={20} />
-            <span>
-              <strong>成員</strong>
-              <small>看圈內有哪些人</small>
-            </span>
-          </button>
-          {canManage ? (
-            <button className="success-action-card" type="button" onClick={() => go("memberInvite", { circleId: circle.id })}>
-              <UserPlus size={20} />
-              <span>
-                <strong>邀請熟人</strong>
-                <small>分享連結或站內邀請</small>
-              </span>
-            </button>
-          ) : null}
           {canEditCircle ? (
             <button className="success-action-card" type="button" onClick={() => go("circleSettings", { circleId: circle.id })}>
               <Settings size={20} />
@@ -1470,17 +1467,16 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
               </span>
             </button>
           ) : null}
-          {canManage ? (
-            <button className="success-action-card" type="button" onClick={() => go("circleAudit", { circleId: circle.id })}>
-              <ReceiptText size={20} />
-              <span>
-                <strong>管理紀錄</strong>
-                <small>看最近改了什麼</small>
-              </span>
-            </button>
-          ) : null}
+          <button className="success-action-card" type="button" onClick={() => go("circleAudit", { circleId: circle.id })}>
+            <ReceiptText size={20} />
+            <span>
+              <strong>管理紀錄</strong>
+              <small>看最近改了什麼</small>
+            </span>
+          </button>
         </div>
       </section>
+      ) : null}
       <section className="section">
         <SectionTitle title="最近結束" />
         {recentClosedTasks.length > 0 ? (
