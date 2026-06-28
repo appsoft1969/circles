@@ -5428,12 +5428,12 @@ function TaskManage({ task, panel = "responses", session, go, shareTask, setToas
         </section>
       ) : null}
       <ActionFeedback message={actionNotice} className="task-action-feedback" />
-      <section className="section task-panel-section">
+      <section className="section task-panel-section compact">
         <div className="wizard-step-head">
           <span className="step-pill">處理</span>
           <div>
             <h2>{activePanelItem ? `你現在在看：${activePanelItem.label}` : "你現在要處理哪一塊？"}</h2>
-            <p>點一下其他工作區，我會帶你到那一頁，只顯示那邊需要用到的內容。</p>
+            <p>要換工作區，點下面切換；畫面只保留目前這一塊要用到的內容。</p>
           </div>
         </div>
         <div className="task-panel-tabs" role="tablist" aria-label="事項工作區">

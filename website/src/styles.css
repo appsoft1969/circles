@@ -2888,10 +2888,38 @@ a {
   gap: 14px;
 }
 
+.task-panel-section.compact {
+  gap: 10px;
+  padding-top: 16px;
+  padding-bottom: 14px;
+}
+
+.task-panel-section.compact .wizard-step-head h2 {
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.task-panel-section.compact .wizard-step-head p {
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .task-panel-tabs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.task-panel-section.compact .task-panel-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.task-panel-section.compact .task-panel-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .task-panel-tabs button {
@@ -2910,6 +2938,14 @@ a {
   cursor: pointer;
 }
 
+.task-panel-section.compact .task-panel-tabs button {
+  min-width: max-content;
+  min-height: 44px;
+  grid-template-columns: auto auto;
+  padding: 8px 10px;
+  border-radius: 999px;
+}
+
 .task-panel-tabs button span {
   width: 28px;
   height: 28px;
@@ -2920,6 +2956,12 @@ a {
   place-items: center;
   font-size: 13px;
   font-weight: 900;
+}
+
+.task-panel-section.compact .task-panel-tabs button span {
+  width: 24px;
+  height: 24px;
+  font-size: 12px;
 }
 
 .task-panel-tabs button strong,
@@ -2935,11 +2977,20 @@ a {
   font-weight: 900;
 }
 
+.task-panel-section.compact .task-panel-tabs button strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
 .task-panel-tabs button small {
   grid-column: 2;
   color: #74767c;
   font-size: 12px;
   line-height: 1.25;
+}
+
+.task-panel-section.compact .task-panel-tabs button small {
+  display: none;
 }
 
 .task-panel-tabs button.active {
