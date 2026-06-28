@@ -34,6 +34,7 @@ import {
   UserPlus,
   Users,
   Utensils,
+  X,
 } from "lucide-react";
 import "./styles.css";
 
@@ -439,9 +440,18 @@ function pathForRoute(name, extra = {}, state = {}) {
 }
 
 function App() {
-  const [state, setState] = useState({ loading: true, circles: [], tasks: [], notifications: [], session: null, authProviders: [] });
+  const [state, setState] = useState({
+    loading: true,
+    circles: [],
+    tasks: [],
+    notifications: [],
+    memberInvitations: [],
+    session: null,
+    authProviders: [],
+  });
   const [route, setRoute] = useState({ name: "dashboard" });
   const [toast, setToast] = useState("");
+  const [memberInvitationBusyId, setMemberInvitationBusyId] = useState("");
 
   async function loadAppData() {
     const [data, session, auth] = await Promise.all([
@@ -450,17 +460,24 @@ function App() {
       api("/api/auth/providers"),
     ]);
     let notifications = [];
+    let memberInvitations = [];
     if (session.authenticated) {
       try {
-        const notificationData = await api("/api/notifications");
+        const [notificationData, invitationData] = await Promise.all([
+          api("/api/notifications"),
+          api("/api/member-invitations"),
+        ]);
         notifications = notificationData.notifications ?? [];
+        memberInvitations = invitationData.invitations ?? [];
       } catch {
         notifications = [];
+        memberInvitations = [];
       }
     }
     return {
       ...data,
       notifications,
+      memberInvitations,
       session,
       authProviders: auth.providers ?? [],
       loading: false,
@@ -514,11 +531,15 @@ function App() {
       if (cancelled || inFlight || document.visibilityState === "hidden") return;
       inFlight = true;
       try {
-        const notificationData = await api("/api/notifications");
+        const [notificationData, invitationData] = await Promise.all([
+          api("/api/notifications"),
+          api("/api/member-invitations"),
+        ]);
         if (!cancelled) {
           setState((current) => ({
             ...current,
             notifications: notificationData.notifications ?? [],
+            memberInvitations: invitationData.invitations ?? [],
           }));
         }
       } catch {
@@ -578,6 +599,31 @@ function App() {
     await shareTaskLink(task, setToast);
   }
 
+  async function respondMemberInvitation(invitation, response) {
+    const invitationId = invitation?.id;
+    if (!invitationId || memberInvitationBusyId) return;
+    setMemberInvitationBusyId(`${invitationId}:${response}`);
+    try {
+      const result = await api(`/api/member-invitations/${invitationId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ response }),
+      });
+      await refresh();
+      if (response === "accepted") {
+        const circleId = result.membership?.circleId ?? invitation.circleId;
+        setToast(`已加入「${result.membership?.circleName ?? invitation.circleName}」`);
+        if (circleId) go("circleHome", { circleId });
+      } else {
+        setToast(`已婉拒「${invitation.circleName}」的邀請`);
+      }
+    } catch (error) {
+      setToast(error.message);
+      await refresh().catch(() => {});
+    } finally {
+      setMemberInvitationBusyId("");
+    }
+  }
+
   if (state.loading) {
     return (
       <Shell>
@@ -616,8 +662,11 @@ function App() {
       <TodoHub
         tasks={state.tasks}
         notifications={state.notifications}
+        memberInvitations={state.memberInvitations}
         go={go}
         shareTask={shareTask}
+        respondMemberInvitation={respondMemberInvitation}
+        memberInvitationBusyId={memberInvitationBusyId}
       />
     ),
     templates: (
@@ -665,11 +714,14 @@ function App() {
     notifications: (
       <NotificationCenter
         notifications={state.notifications}
+        memberInvitations={state.memberInvitations}
         circles={state.circles}
         session={state.session}
         go={go}
         refresh={refresh}
         setToast={setToast}
+        respondMemberInvitation={respondMemberInvitation}
+        memberInvitationBusyId={memberInvitationBusyId}
       />
     ),
     profile: (
@@ -869,7 +921,7 @@ function buildCircleSummaries({ circles = [], tasks = [], notifications = [], se
 
 function buildAttentionItems(tasks = [], notifications = []) {
   const notificationItems = notifications
-    .filter((notification) => !notification.readAt)
+    .filter((notification) => !notification.readAt && notification.type !== "circle_member_invite")
     .slice(0, 4)
     .map((notification) => ({
       id: `notification:${notification.id}`,
@@ -1001,6 +1053,35 @@ function AttentionCard({ item, go }) {
   );
 }
 
+function MemberInvitationCard({ invitation, onRespond, busyId = "" }) {
+  const accepting = busyId === `${invitation.id}:accepted`;
+  const declining = busyId === `${invitation.id}:declined`;
+  const disabled = Boolean(busyId);
+  return (
+    <article className="member-invitation-card">
+      <span className="member-invitation-icon"><UserPlus size={20} /></span>
+      <div className="member-invitation-main">
+        <strong>{`${invitation.invitedByName || "圈內成員"} 邀請你加入「${invitation.circleName}」`}</strong>
+        <small>
+          {membershipRoleLabels[invitation.role] ?? invitation.role}
+          {invitation.expiresAt ? ` · 到期 ${formatDateTime(invitation.expiresAt)}` : ""}
+        </small>
+        {invitation.message ? <p>{invitation.message}</p> : null}
+      </div>
+      <div className="member-invitation-actions">
+        <button className="primary-button green compact" type="button" onClick={() => onRespond(invitation, "accepted")} disabled={disabled}>
+          {accepting ? <Loader2 className="spin" size={15} /> : <Check size={15} />}
+          {accepting ? "加入中" : "加入"}
+        </button>
+        <button className="secondary-button compact" type="button" onClick={() => onRespond(invitation, "declined")} disabled={disabled}>
+          {declining ? <Loader2 className="spin" size={15} /> : <X size={15} />}
+          {declining ? "處理中" : "婉拒"}
+        </button>
+      </div>
+    </article>
+  );
+}
+
 function CircleOverviewCard({ circle, go }) {
   const hasAttention = circle.unreadCount > 0 || circle.unpaid > 0 || circle.priorityUnreadCount > 0;
   const statusText = circle.priorityUnreadCount > 0
@@ -1031,20 +1112,37 @@ function CircleOverviewCard({ circle, go }) {
   );
 }
 
-function TodoHub({ tasks, notifications, go, shareTask }) {
+function TodoHub({ tasks, notifications, memberInvitations = [], go, shareTask, respondMemberInvitation, memberInvitationBusyId = "" }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
   const attentionItems = buildAttentionItems(tasks, notifications);
+  const pendingInvitations = memberInvitations.filter((invitation) => invitation.status === "pending");
+  const attentionCount = attentionItems.length + pendingInvitations.length;
   return (
     <>
       <Topbar title="待辦" subtitle="需要你看一下的事" onBack={() => go("dashboard")} />
       <section className="section todo-summary-section">
         <div className="notification-summary">
           <div>
-            <strong>{attentionItems.length > 0 ? `${attentionItems.length} 件需要注意` : "目前沒有急件"}</strong>
-            <p>這裡先整理跨圈子的未讀提醒、待付款與待確認事項。</p>
+            <strong>{attentionCount > 0 ? `${attentionCount} 件需要注意` : "目前沒有急件"}</strong>
+            <p>這裡先整理入圈邀請、跨圈子的未讀提醒、待付款與待確認事項。</p>
           </div>
         </div>
       </section>
+      {pendingInvitations.length > 0 ? (
+        <section className="section member-invitation-section">
+          <SectionTitle title="有人邀你入圈" />
+          <div className="member-invitation-list">
+            {pendingInvitations.map((invitation) => (
+              <MemberInvitationCard
+                key={invitation.id}
+                invitation={invitation}
+                onRespond={respondMemberInvitation}
+                busyId={memberInvitationBusyId}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
       <section className="section">
         <SectionTitle title="需要處理" />
         {attentionItems.length > 0 ? (
@@ -1755,11 +1853,16 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const canEditCircle = currentMembership?.role === "owner";
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [memberInvitations, setMemberInvitations] = useState([]);
   const [auditEvents, setAuditEvents] = useState([]);
   const [inviteRole, setInviteRole] = useState("member");
+  const [directInviteRole, setDirectInviteRole] = useState("member");
+  const [directInviteRecipient, setDirectInviteRecipient] = useState("");
+  const [directInviteMessage, setDirectInviteMessage] = useState("");
   const [maxUses, setMaxUses] = useState(30);
   const [expireDays, setExpireDays] = useState(30);
   const [showInviteSettings, setShowInviteSettings] = useState(false);
+  const [showDirectInviteMessage, setShowDirectInviteMessage] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState("");
   const [managingMemberId, setManagingMemberId] = useState("");
   const [editingMemberId, setEditingMemberId] = useState("");
@@ -1771,7 +1874,9 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [savingCircle, setSavingCircle] = useState(false);
   const [loading, setLoading] = useState(true);
   const [inviteBusy, setInviteBusy] = useState(false);
+  const [directInviteBusy, setDirectInviteBusy] = useState(false);
   const [revokingInviteId, setRevokingInviteId] = useState("");
+  const [revokingMemberInvitationId, setRevokingMemberInvitationId] = useState("");
   const [memberBusyId, setMemberBusyId] = useState("");
   const [actionNotice, setActionNotice] = useState("");
   const [error, setError] = useState("");
@@ -1801,14 +1906,17 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       const memberData = await api(`/api/circles/${circleId}/members`);
       setMembers(memberData.members ?? []);
       if (canManage) {
-        const [inviteData, auditData] = await Promise.all([
+        const [inviteData, memberInvitationData, auditData] = await Promise.all([
           api(`/api/circles/${circleId}/invites`),
+          api(`/api/circles/${circleId}/member-invitations`),
           api(`/api/circles/${circleId}/audit-events?limit=20`),
         ]);
         setInvites(inviteData.invites ?? []);
+        setMemberInvitations(memberInvitationData.invitations ?? []);
         setAuditEvents(auditData.events ?? []);
       } else {
         setInvites([]);
+        setMemberInvitations([]);
         setAuditEvents([]);
       }
     } catch (loadError) {
@@ -1901,6 +2009,59 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       setToast(revokeError.message);
     } finally {
       setRevokingInviteId("");
+    }
+  }
+
+  async function createDirectInvite() {
+    if (directInviteBusy) return;
+    if (!directInviteRecipient.trim()) {
+      setToast("先輸入對方的 Email、手機或 InCircle ID");
+      return;
+    }
+    setDirectInviteBusy(true);
+    try {
+      const data = await api(`/api/circles/${circleId}/member-invitations`, {
+        method: "POST",
+        body: JSON.stringify({
+          recipient: directInviteRecipient.trim(),
+          role: directInviteRole,
+          message: directInviteMessage.trim(),
+          expireDays: 14,
+        }),
+      });
+      setMemberInvitations((current) => [data.invitation, ...current.filter((item) => item.id !== data.invitation.id)]);
+      setDirectInviteRecipient("");
+      setDirectInviteMessage("");
+      setShowDirectInviteMessage(false);
+      await refresh();
+      await loadAuditEvents();
+      const message = `已送出入圈邀請給 ${data.invitation.invitedName || "對方"}`;
+      setActionNotice(message);
+      setToast(message);
+    } catch (createError) {
+      setToast(createError.message);
+    } finally {
+      setDirectInviteBusy(false);
+    }
+  }
+
+  async function revokeMemberInvitation(invitation) {
+    if (revokingMemberInvitationId) return;
+    setRevokingMemberInvitationId(invitation.id);
+    try {
+      const data = await api(`/api/circles/${circleId}/member-invitations/${invitation.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ revoked: true }),
+      });
+      setMemberInvitations((current) => current.map((item) => (item.id === data.invitation.id ? data.invitation : item)));
+      await loadAuditEvents();
+      const message = `已撤回給 ${invitation.invitedName || "對方"} 的入圈邀請`;
+      setActionNotice(message);
+      setToast(message);
+    } catch (revokeError) {
+      setToast(revokeError.message);
+    } finally {
+      setRevokingMemberInvitationId("");
     }
   }
 
@@ -2086,6 +2247,101 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                   </div>
                 ) : null}
               </div>
+              <div className="direct-invite-panel">
+                <div className="wizard-step-head">
+                  <span className="step-pill">站內邀請</span>
+                  <div>
+                    <h2>對方已經有圈內帳號嗎？</h2>
+                    <p>輸入精確的 Email、手機或 InCircle ID，我會直接送一則入圈邀請給對方。</p>
+                  </div>
+                </div>
+                <label>
+                  邀請對象
+                  <input
+                    value={directInviteRecipient}
+                    onChange={(event) => setDirectInviteRecipient(event.target.value)}
+                    maxLength={160}
+                    placeholder="例如：name@example.com"
+                    autoComplete="off"
+                  />
+                  <small>只會精確比對既有帳號；找不到時請改用上方邀請連結。</small>
+                </label>
+                <button className="editor-panel-toggle" type="button" onClick={() => setShowDirectInviteMessage((current) => !current)}>
+                  <span>
+                    <strong>{showDirectInviteMessage ? "收起補充設定" : "補一句邀請訊息"}</strong>
+                    <small>目前角色：{membershipRoleLabels[directInviteRole] ?? directInviteRole}</small>
+                  </span>
+                  <ChevronRight className={showDirectInviteMessage ? "open" : ""} size={18} />
+                </button>
+                {showDirectInviteMessage ? (
+                  <div className="editor-panel-content direct-invite-options">
+                    <label>
+                      加入後角色
+                      <select value={directInviteRole} onChange={(event) => setDirectInviteRole(event.target.value)}>
+                        <option value="member">成員</option>
+                        <option value="guest">訪客</option>
+                      </select>
+                    </label>
+                    <label>
+                      邀請訊息
+                      <textarea
+                        value={directInviteMessage}
+                        onChange={(event) => setDirectInviteMessage(event.target.value)}
+                        maxLength={240}
+                        placeholder="例如：這是我們辦公室中午訂餐用的圈子"
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <button
+                  className="primary-button green"
+                  type="button"
+                  onClick={createDirectInvite}
+                  disabled={directInviteBusy || !directInviteRecipient.trim()}
+                >
+                  {directInviteBusy ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
+                  {directInviteBusy ? "送出中" : "直接送出入圈邀請"}
+                </button>
+              </div>
+              {memberInvitations.length > 0 ? (
+                <div className="direct-invite-list">
+                  {memberInvitations.slice(0, 8).map((invitation) => {
+                    const revoking = revokingMemberInvitationId === invitation.id;
+                    const statusLabel = {
+                      pending: "待回覆",
+                      accepted: "已加入",
+                      declined: "已婉拒",
+                      revoked: "已撤回",
+                      expired: "已過期",
+                    }[invitation.status] ?? invitation.status;
+                    return (
+                      <article className={`direct-invite-row ${invitation.status}`} key={invitation.id}>
+                        <span className="member-invitation-icon"><UserPlus size={18} /></span>
+                        <div>
+                          <strong>{invitation.invitedName || invitation.invitedEmail || "受邀成員"}</strong>
+                          <small>
+                            {statusLabel} · {membershipRoleLabels[invitation.role] ?? invitation.role}
+                            {invitation.expiresAt ? ` · 到期 ${formatDateTime(invitation.expiresAt)}` : ""}
+                          </small>
+                        </div>
+                        {invitation.status === "pending" ? (
+                          <button
+                            className="secondary-button compact"
+                            type="button"
+                            onClick={() => revokeMemberInvitation(invitation)}
+                            disabled={Boolean(revokingMemberInvitationId)}
+                          >
+                            {revoking ? <Loader2 className="spin" size={15} /> : null}
+                            {revoking ? "撤回中" : "撤回"}
+                          </button>
+                        ) : (
+                          <span className="direct-invite-status">{statusLabel}</span>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              ) : null}
               <div className="invite-list">
                 {invites.length === 0 ? (
                   <EmptyState
@@ -2521,7 +2777,17 @@ function WebPushStatus({ session, go }) {
   );
 }
 
-function NotificationCenter({ notifications = [], circles = [], session, go, refresh, setToast }) {
+function NotificationCenter({
+  notifications = [],
+  memberInvitations = [],
+  circles = [],
+  session,
+  go,
+  refresh,
+  setToast,
+  respondMemberInvitation,
+  memberInvitationBusyId = "",
+}) {
   const circleNames = new Map(circles.map((circle) => [circle.id, circle.name]));
   const [markingAll, setMarkingAll] = useState(false);
   const [preferences, setPreferences] = useState(null);
@@ -2534,15 +2800,20 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const [sendingTestPush, setSendingTestPush] = useState(false);
   const [revokingPush, setRevokingPush] = useState(false);
   const [notificationNotice, setNotificationNotice] = useState("");
-  const unreadNotifications = notifications.filter((notification) => !notification.readAt);
+  const pendingInvitations = memberInvitations.filter((invitation) => invitation.status === "pending");
+  const pendingInvitationIds = new Set(pendingInvitations.map((invitation) => invitation.id));
+  const displayNotifications = notifications.filter(
+    (notification) => !(notification.type === "circle_member_invite" && pendingInvitationIds.has(notification.data?.memberInvitationId)),
+  );
+  const unreadNotifications = displayNotifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
-  const priorityNotifications = notifications.filter((notification) => notificationPriority(notification));
+  const priorityNotifications = displayNotifications.filter((notification) => notificationPriority(notification));
   const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
-  const hasNotifications = notifications.length > 0;
+  const hasNotifications = displayNotifications.length > 0;
   const filteredNotifications = notificationFilter === "important"
     ? priorityNotifications
     : notificationFilter === "all"
-      ? notifications
+      ? displayNotifications
       : unreadNotifications;
   const filteredEmptyText = notificationFilter === "important"
     ? "目前沒有重要提醒"
@@ -2552,24 +2823,28 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const filterOptions = [
     { id: "unread", label: "未讀", count: unreadCount },
     { id: "important", label: "重要", count: priorityNotifications.length },
-    { id: "all", label: "全部", count: notifications.length },
+    { id: "all", label: "全部", count: displayNotifications.length },
   ];
   const quietCircleStates = uniqueCircleMemberships(session?.memberships ?? [])
     .map((membership) => ({ membership, status: circleNotificationStatus(membership.notificationPreference) }))
     .filter((item) => item.status);
   const visibleQuietCircleStates = quietCircleStates.slice(0, 3);
-  const summaryTitle = !hasNotifications
-    ? "這裡會放圈內提醒"
-    : unreadCount > 0
-      ? `還有 ${unreadCount} 則沒看`
-      : "目前都看過了";
-  const summaryBody = !hasNotifications
-    ? "有新的公告、討論或重要提醒時，會出現在這裡。"
-    : priorityUnreadCount > 0
-      ? `其中 ${priorityUnreadCount} 則比較重要，先處理那幾則就好。`
+  const summaryTitle = pendingInvitations.length > 0
+    ? `${pendingInvitations.length} 則入圈邀請等你回覆`
+    : !hasNotifications
+      ? "這裡會放圈內提醒"
       : unreadCount > 0
-        ? "點開一則通知，就會帶你回到相關事項或討論串。"
-        : "之後有新消息，這裡會自動更新，不用一直重新整理。";
+        ? `還有 ${unreadCount} 則沒看`
+        : "目前都看過了";
+  const summaryBody = pendingInvitations.length > 0
+    ? "先看是不是你認識的圈子，再決定加入或婉拒。"
+    : !hasNotifications
+      ? "有新的公告、討論或重要提醒時，會出現在這裡。"
+      : priorityUnreadCount > 0
+        ? `其中 ${priorityUnreadCount} 則比較重要，先處理那幾則就好。`
+        : unreadCount > 0
+          ? "點開一則通知，就會帶你回到相關事項或討論串。"
+          : "之後有新消息，這裡會自動更新，不用一直重新整理。";
 
   useEffect(() => {
     if (!session?.authenticated) return undefined;
@@ -2631,6 +2906,10 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       if (!notification.readAt) {
         await api(`/api/notifications/${notification.id}/read`, { method: "PATCH" });
         await refresh();
+      }
+      if (notification.type === "circle_member_invite") {
+        setToast("這則入圈邀請可以在通知中心上方回覆");
+        return;
       }
       if (notification.data?.conversationId && notification.circleId) {
         go("circleChat", { circleId: notification.circleId, conversationId: notification.data.conversationId });
@@ -2853,6 +3132,18 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
           ) : null}
         </div>
         <ActionFeedback message={notificationNotice} />
+        {pendingInvitations.length > 0 ? (
+          <div className="member-invitation-list">
+            {pendingInvitations.map((invitation) => (
+              <MemberInvitationCard
+                key={invitation.id}
+                invitation={invitation}
+                onRespond={respondMemberInvitation}
+                busyId={memberInvitationBusyId}
+              />
+            ))}
+          </div>
+        ) : null}
         {quietCircleStates.length > 0 ? (
           <div className="notification-circle-status">
             <div className="notification-preference-head">

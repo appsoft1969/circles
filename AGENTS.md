@@ -35,6 +35,7 @@ These rules apply to the whole repository unless a nested `AGENTS.md` adds more 
 
 - Do not turn InCircle into a public social network.
 - Do not add a public feed, follower graph, friend graph, public group discovery, or creator/community platform features unless explicitly requested.
+- Circle membership must remain invitation-based. Direct in-app circle invitations may target existing accounts only by exact Email, phone, or InCircle ID; do not add public user search, fuzzy people discovery, or recommended members.
 - Do not turn InCircle into a public marketplace or professional seller backend.
 - Circle-only member sales are allowed when they behave like a private task inside a trusted circle.
 - Do not start with full e-commerce complexity:
@@ -272,6 +273,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Circle records.
   - Circle memberships.
   - Circle invites / invite codes.
+  - Direct circle member invitations and their accepted/declined/revoked/expired states.
   - Tasks.
   - Task templates.
   - Task options/items.
@@ -332,7 +334,7 @@ docker compose --profile postgres --profile tools --profile storage up -d
   - Technical architecture docs if the data model changes.
 - If the production data model changes, update `supabase/migrations/` and `docs/postgres-schema.md`.
 - Do not add database calls directly inside route handlers. Keep runtime database differences behind the store/data-access layer.
-- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share responses, organizer response/status updates, task announcements, announcement confirmation receipts, comments, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, circle invite/member-management APIs, membership/permission APIs, and Postgres-backed conversation/message/device/notification scaffolding with per-notification and bulk read state. Organizer task operations must require the task creator or active circle `owner` / `admin`. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real provider credentials, RLS/access policy, automated backups, monitoring, push delivery, and operational verification are implemented.
+- `DATA_STORE=postgres` currently supports health, seeded/demo reads, migrated public data reads, share-link reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share responses, organizer response/status updates, task announcements, announcement confirmation receipts, comments, CSV export, Apple/Google/LINE auth scaffolding, cookie sessions, circle invite/member-management APIs, direct in-app circle member invitations for exact existing accounts, membership/permission APIs, and Postgres-backed conversation/message/device/notification scaffolding with per-notification and bulk read state. Organizer task operations must require the task creator or active circle `owner` / `admin`. It is suitable for the current public Mac private-beta path, but do not present it as fully production-ready until real provider credentials, RLS/access policy, automated backups, monitoring, push delivery, and operational verification are implemented.
 - Current session APIs support cookie sessions. Temporary `x-incircle-profile-id` / `x-incircle-profile-email` headers remain only as a development scaffold. Do not treat these headers as a production login mechanism.
 - Do not enable `AUTH_DEV_LOGIN_ENABLED=1` in production launchd.
 - Task announcements, task comments, and Postgres conversations are the current communication layer. Keep them tied to a circle/task workflow; do not turn them into a standalone chat/feed surface.

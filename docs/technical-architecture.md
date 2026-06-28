@@ -243,6 +243,11 @@ Current Postgres store status:
 - `GET /api/circles/:circleId/invites`: implemented for owner/admin invite management.
 - `POST /api/circles/:circleId/invites`: implemented for owner/admin invite creation.
 - `PATCH /api/circles/:circleId/invites/:inviteId`: implemented for owner/admin invite revocation.
+- `GET /api/circles/:circleId/member-invitations`: implemented for owner/admin direct invitation management.
+- `POST /api/circles/:circleId/member-invitations`: implemented for owner/admin direct invitations to exact existing accounts.
+- `PATCH /api/circles/:circleId/member-invitations/:invitationId`: implemented for owner/admin direct invitation revocation.
+- `GET /api/member-invitations`: implemented for pending direct invitations received by the authenticated profile.
+- `PATCH /api/member-invitations/:invitationId`: implemented for accepting or declining a received direct invitation.
 - `GET /api/tasks/:taskId`: implemented with active circle membership requirement. Public task reads must use `/api/share/:token`.
 - `GET /api/tasks/:taskId/permissions`: implemented for read/respond/manage/announce/close/export flags.
 - `POST /api/tasks`: implemented with authenticated owner/admin circle role requirement.
@@ -316,6 +321,11 @@ Circle invite links are separate from task share links. `/invite/:code` is for j
 - `GET /api/circles/:circleId/invites`: requires owner/admin membership and returns active invite links.
 - `POST /api/circles/:circleId/invites`: requires owner/admin membership and creates a member/guest invite.
 - `PATCH /api/circles/:circleId/invites/:inviteId`: requires owner/admin membership and revokes an invite with `{ "revoked": true }`.
+- `GET /api/circles/:circleId/member-invitations`: requires owner/admin membership and returns direct invitation history for existing accounts.
+- `POST /api/circles/:circleId/member-invitations`: requires owner/admin membership, exact Email/phone/InCircle ID match to an existing profile, and creates a pending in-app invitation plus notification.
+- `PATCH /api/circles/:circleId/member-invitations/:invitationId`: requires owner/admin membership and revokes a pending direct invitation.
+- `GET /api/member-invitations`: returns pending direct invitations addressed to the authenticated profile.
+- `PATCH /api/member-invitations/:invitationId`: accepts or declines a pending direct invitation; accepting creates or reactivates the circle membership.
 - `PATCH /api/circles/:circleId/members/:membershipId`: requires owner/admin membership and updates non-owner member display name, contact hint, role, or status.
 
 ### `GET /api/health`

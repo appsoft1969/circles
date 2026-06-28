@@ -5,6 +5,7 @@ This document describes the first production-oriented Postgres schema for `åœˆå…
 Current status:
 
 - Migration file: `supabase/migrations/202606270001_initial_schema.sql`
+- Direct invitation migration: `supabase/migrations/202606280001_circle_member_invitations.sql`
 - Verified against Homebrew Postgres: yes, at `127.0.0.1:5434`
 - Verified against Docker Postgres: yes, as an optional parity path
 - Current public Mac website runtime database: Homebrew Postgres at `127.0.0.1:5434`
@@ -12,7 +13,7 @@ Current status:
 - API data access layer: `website/server/data/storeFactory.js` selecting `sqliteStore.js` or `postgresStore.js`
 - Postgres demo seed: `supabase/seed.sql`
 - Postgres store: implemented in `website/server/data/postgresStore.js`
-- API migration to Postgres: core MVP task reads/writes, task edits, interest-check conversion, share responses, status updates, CSV export, session/membership/permission scaffolding, and conversation/message/device/notification scaffolding are implemented
+- API migration to Postgres: core MVP task reads/writes, task edits, interest-check conversion, share responses, status updates, CSV export, session/membership/permission scaffolding, direct member invitations, and conversation/message/device/notification scaffolding are implemented
 - Auth identity/session migration: `supabase/migrations/202606270002_auth_identity_sessions.sql`
 
 The goal of this schema is to align the product with the future Expo / React Native + Supabase / Postgres architecture while keeping the current website able to run either on Postgres or SQLite through the store layer.
@@ -30,7 +31,7 @@ Postgres should be designed now because it affects:
 
 The public Mac-hosted Express API now uses Postgres for early development and private beta checks. This is still a local-hosted public path, not the final production architecture.
 
-`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, organizer status updates, task announcements, comments, CSV validation, cookie-session/profile-header session context, membership checks, task permissions, circle invites, member management, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
+`DATA_STORE=postgres` is currently useful for connectivity, migrated public data, seeded demo data, task reads, authenticated profile display-name settings, authenticated circle creation/settings, authenticated task creation, task detail/option edits, interest-check conversion, share-link reads, share responses, organizer status updates, task announcements, comments, CSV validation, cookie-session/profile-header session context, membership checks, task permissions, circle invites, direct member invitations, member management, and Postgres-backed conversation/message/device/notification APIs. It should not be treated as fully production-ready until RLS/access policies, push delivery providers, monitoring, and deployment operations are implemented.
 
 ## Schema Groups
 
@@ -48,6 +49,7 @@ Tables:
 - `circle_memberships`
 - `circle_notification_preferences`
 - `circle_invites`
+- `circle_member_invitations`
 
 Notes:
 
@@ -59,6 +61,7 @@ Notes:
 - `devices` is ready for Expo push tokens, Web Push subscription JSON, and notification delivery tracking.
 - `notification_preferences` stores per-profile in-app reminder preferences and future push quiet-hour settings.
 - `circle_notification_preferences` stores per-profile, per-circle reminder overrides such as temporary mute, important-only, announcement reminders, and message reminders.
+- `circle_member_invitations` stores owner/admin direct invitations to exact existing profiles. It is not a public people-search surface.
 
 ### Task Engine
 
@@ -150,7 +153,8 @@ Current API audit writes:
 - `auth.session.created` and `auth.session.revoked`
 - `circle.created` and `circle.updated`
 - `circle_invite.created` and `circle_invite.revoked`
-- `circle_member.joined_by_invite` and `circle_member.updated`
+- `circle_member_invitation.created`, `circle_member_invitation.declined`, and `circle_member_invitation.revoked`
+- `circle_member.joined_by_invite`, `circle_member.joined_by_direct_invite`, and `circle_member.updated`
 - `task.created`, `task.updated`, `task.converted`, and `task.status_updated`
 - `response.updated` and `announcement.created`
 - `device.registered` and `device.revoked`
@@ -230,7 +234,7 @@ The initial migration has been verified locally with:
 - Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
 - Postgres API push scaffolding through device registration, profile-level and circle-level notification preference read/write, notification listing, per-notification read state, and bulk notification read state.
 - Postgres CSV export through `GET /api/tasks/:taskId/export.csv`, requiring task-manager authorization.
-- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, permissions, anonymous authorization rejection, conversations, message reads, notification preferences, notifications, and devices.
+- Automated API smoke coverage through `npm run test:api`, shared with SQLite for core task behavior and extended in Postgres for membership, invite links, direct member invitations, permissions, anonymous authorization rejection, conversations, message reads, notification preferences, notifications, and devices.
 - SQLite-to-Postgres migration through `website/scripts/migrate-sqlite-to-postgres.mjs`.
 - Daily local backup and restore drill through `website/scripts/postgres-backup-restore.mjs`, with verified artifacts copied to iCloud Drive.
 - Public Mac API health verified with `backend: "postgres"`.

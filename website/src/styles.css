@@ -382,7 +382,8 @@ a {
 
 .attention-list,
 .circle-overview-list,
-.profile-shortcut-list {
+.profile-shortcut-list,
+.member-invitation-list {
   display: grid;
   gap: 10px;
 }
@@ -466,6 +467,74 @@ a {
   font-weight: 900;
   padding: 5px 7px;
   white-space: nowrap;
+}
+
+.member-invitation-section {
+  display: grid;
+  gap: 12px;
+}
+
+.member-invitation-card {
+  border: 1px solid #a7d9bd;
+  border-radius: 8px;
+  background: #f4fbf7;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+}
+
+.member-invitation-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #e0f3e9;
+  color: #11965a;
+}
+
+.member-invitation-main {
+  min-width: 0;
+}
+
+.member-invitation-main strong,
+.member-invitation-main small {
+  display: block;
+}
+
+.member-invitation-main strong {
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 900;
+}
+
+.member-invitation-main small {
+  margin-top: 4px;
+  color: #62646b;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.member-invitation-main p {
+  margin: 8px 0 0;
+  color: #3e4148;
+  font-size: 14px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.member-invitation-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.member-invitation-actions .primary-button,
+.member-invitation-actions .secondary-button {
+  width: 100%;
 }
 
 .circle-overview-card {
@@ -1617,6 +1686,99 @@ a {
 
 .invite-guide > .primary-button {
   width: 100%;
+}
+
+.direct-invite-panel {
+  border: 1px solid #c8d7ff;
+  border-radius: 8px;
+  background: #f7faff;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.direct-invite-panel label,
+.direct-invite-options label {
+  display: grid;
+  gap: 7px;
+  color: #3e4148;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.direct-invite-panel label small {
+  color: #85878d;
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 700;
+}
+
+.direct-invite-panel .primary-button {
+  width: 100%;
+}
+
+.direct-invite-options {
+  display: grid;
+  gap: 10px;
+}
+
+.direct-invite-options textarea {
+  min-height: 76px;
+}
+
+.direct-invite-list {
+  display: grid;
+  gap: 8px;
+}
+
+.direct-invite-row {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+}
+
+.direct-invite-row.accepted {
+  border-color: #a7d9bd;
+  background: #f5fbf7;
+}
+
+.direct-invite-row.declined,
+.direct-invite-row.revoked,
+.direct-invite-row.expired {
+  background: #f7f7f5;
+}
+
+.direct-invite-row strong,
+.direct-invite-row small {
+  display: block;
+}
+
+.direct-invite-row strong {
+  font-size: 14px;
+  line-height: 1.25;
+  font-weight: 900;
+}
+
+.direct-invite-row small {
+  margin-top: 3px;
+  color: #74767c;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.direct-invite-status {
+  border-radius: 999px;
+  background: #f1f2f4;
+  color: #62646b;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
 .invite-form {

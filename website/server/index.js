@@ -278,6 +278,43 @@ app.patch("/api/circles/:circleId/invites/:inviteId", route(async (req, res) => 
   res.json({ invite });
 }));
 
+app.get("/api/circles/:circleId/member-invitations", route(async (req, res) => {
+  const invitations = await store.listCircleMemberInvitations(req.params.circleId, actorFromRequest(req));
+  res.json({ invitations });
+}));
+
+app.post("/api/circles/:circleId/member-invitations", route(async (req, res) => {
+  const invitation = await store.createCircleMemberInvitation(req.params.circleId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.status(201).json({ invitation });
+}));
+
+app.patch("/api/circles/:circleId/member-invitations/:invitationId", route(async (req, res) => {
+  if (req.body?.revoked !== true) throw new StoreError(400, "Only direct invitation revocation is supported");
+  const invitation = await store.revokeCircleMemberInvitation(
+    req.params.circleId,
+    req.params.invitationId,
+    actorFromRequest(req),
+  );
+  if (!invitation) return res.status(404).json({ error: "Invitation not found" });
+  res.json({ invitation });
+}));
+
+app.get("/api/member-invitations", route(async (req, res) => {
+  const invitations = await store.listMyCircleMemberInvitations(actorFromRequest(req));
+  res.json({ invitations });
+}));
+
+app.patch("/api/member-invitations/:invitationId", route(async (req, res) => {
+  const result = await store.respondCircleMemberInvitation(req.params.invitationId, {
+    ...(req.body ?? {}),
+    actor: actorFromRequest(req),
+  });
+  res.json(result);
+}));
+
 app.get("/api/tasks/:taskId", route(async (req, res) => {
   const task = await store.getTask(req.params.taskId, actorFromRequest(req));
   if (!task) return res.status(404).json({ error: "Task not found" });

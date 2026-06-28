@@ -120,6 +120,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
   const createdPushTokens = [];
   const createdInviteIds = [];
   let inviteSmokeProfileId = null;
+  let directInviteSmokeProfileId = null;
   let invitedMemberHeaders = null;
 
   try {
@@ -369,6 +370,85 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.ok(
         (await countPostgresAuditEvents("circle_member.updated", updatedMember.body.member.id)) >= 1,
         `${label}: expected circle_member.updated audit event`,
+      );
+
+      const directInviteProfile = await ensurePostgresProfile("direct-invite-smoke@example.com", "站內邀請測試成員");
+      directInviteSmokeProfileId = directInviteProfile.id;
+      const directInvitation = await request(baseUrl, `/api/circles/${officeCircle.id}/member-invitations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({
+          recipient: "direct-invite-smoke@example.com",
+          role: "member",
+          message: "站內直接邀請測試",
+          expireDays: 14,
+        }),
+      });
+      assert.equal(directInvitation.status, 201);
+      assert.equal(directInvitation.body.invitation.circleId, officeCircle.id);
+      assert.equal(directInvitation.body.invitation.invitedProfileId, directInviteSmokeProfileId);
+      assert.equal(directInvitation.body.invitation.status, "pending");
+      assert.ok(
+        (await countPostgresAuditEvents("circle_member_invitation.created", directInvitation.body.invitation.id)) >= 1,
+        `${label}: expected circle_member_invitation.created audit event`,
+      );
+
+      const directInvitationList = await request(baseUrl, `/api/circles/${officeCircle.id}/member-invitations`, {
+        headers: sessionHeaders,
+      });
+      assert.ok(
+        directInvitationList.body.invitations.some((item) => item.id === directInvitation.body.invitation.id),
+        `${label}: expected direct invitation in manager list`,
+      );
+
+      const directJoinerSession = await request(baseUrl, "/api/auth/dev-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "direct-invite-smoke@example.com" }),
+      });
+      const directJoinerCookie = directJoinerSession.headers.get("set-cookie")?.split(";")[0];
+      assert.ok(directJoinerCookie, `${label}: expected direct invite joiner Set-Cookie`);
+      const directJoinerHeaders = { Cookie: directJoinerCookie };
+
+      const receivedInvitations = await request(baseUrl, "/api/member-invitations", { headers: directJoinerHeaders });
+      assert.ok(
+        receivedInvitations.body.invitations.some((item) => item.id === directInvitation.body.invitation.id),
+        `${label}: expected direct invitation for invited profile`,
+      );
+
+      const directInviteNotifications = await request(baseUrl, "/api/notifications", { headers: directJoinerHeaders });
+      const directInviteNotification = directInviteNotifications.body.notifications.find(
+        (notification) => notification.data.memberInvitationId === directInvitation.body.invitation.id,
+      );
+      assert.ok(directInviteNotification, `${label}: expected direct invitation notification`);
+      assert.equal(directInviteNotification.type, "circle_member_invite");
+      assert.equal(directInviteNotification.data.invitationStatus, "pending");
+
+      const directAccepted = await request(baseUrl, `/api/member-invitations/${directInvitation.body.invitation.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...directJoinerHeaders },
+        body: JSON.stringify({ response: "accepted" }),
+      });
+      assert.equal(directAccepted.body.invitation.status, "accepted");
+      assert.equal(directAccepted.body.joined, true);
+      assert.equal(directAccepted.body.membership.circleId, officeCircle.id);
+      assert.equal(directAccepted.body.membership.role, "member");
+      assert.ok(
+        (await countPostgresAuditEvents("circle_member.joined_by_direct_invite", directAccepted.body.membership.id)) >= 1,
+        `${label}: expected circle_member.joined_by_direct_invite audit event`,
+      );
+
+      const directNotificationsAfterAccept = await request(baseUrl, "/api/notifications", { headers: directJoinerHeaders });
+      const acceptedDirectNotification = directNotificationsAfterAccept.body.notifications.find(
+        (notification) => notification.data.memberInvitationId === directInvitation.body.invitation.id,
+      );
+      assert.ok(acceptedDirectNotification.readAt, `${label}: expected direct invitation notification to be read`);
+      assert.equal(acceptedDirectNotification.data.invitationStatus, "accepted");
+
+      const membersAfterDirectInvite = await request(baseUrl, `/api/circles/${officeCircle.id}/members`, { headers: sessionHeaders });
+      assert.ok(
+        membersAfterDirectInvite.body.members.some((member) => member.profileId === directInviteSmokeProfileId),
+        `${label}: expected direct invited member in owner member list`,
       );
 
       const auditEvents = await request(baseUrl, `/api/circles/${officeCircle.id}/audit-events`, { headers: sessionHeaders });
@@ -975,7 +1055,10 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       }
     }
     if (cleanupCreatedInviteData) {
-      await cleanupCreatedInviteData({ profileId: inviteSmokeProfileId, inviteIds: createdInviteIds });
+      await cleanupCreatedInviteData({
+        profileIds: [inviteSmokeProfileId, directInviteSmokeProfileId].filter(Boolean),
+        inviteIds: createdInviteIds,
+      });
     }
   }
 }
@@ -1067,18 +1150,19 @@ async function ensurePostgresProfile(email, displayName) {
   }
 }
 
-async function cleanupPostgresInviteData({ profileId, inviteIds }) {
+async function cleanupPostgresInviteData({ profileId = null, profileIds = [], inviteIds }) {
   const pool = new Pool({ connectionString: postgresUrl });
+  const cleanupProfileIds = [...new Set([profileId, ...profileIds].filter(Boolean))];
   try {
     await pool.query("BEGIN");
     if (inviteIds.length > 0) {
       await pool.query("DELETE FROM circle_invites WHERE id = ANY($1::uuid[])", [inviteIds]);
     }
-    if (profileId) {
-      await pool.query("DELETE FROM auth_sessions WHERE profile_id::text = $1", [profileId]);
-      await pool.query("DELETE FROM circle_memberships WHERE profile_id::text = $1", [profileId]);
-      await pool.query("DELETE FROM auth_identities WHERE profile_id::text = $1", [profileId]);
-      await pool.query("DELETE FROM profiles WHERE id::text = $1", [profileId]);
+    if (cleanupProfileIds.length > 0) {
+      await pool.query("DELETE FROM auth_sessions WHERE profile_id::text = ANY($1::text[])", [cleanupProfileIds]);
+      await pool.query("DELETE FROM circle_memberships WHERE profile_id::text = ANY($1::text[])", [cleanupProfileIds]);
+      await pool.query("DELETE FROM auth_identities WHERE profile_id::text = ANY($1::text[])", [cleanupProfileIds]);
+      await pool.query("DELETE FROM profiles WHERE id::text = ANY($1::text[])", [cleanupProfileIds]);
     }
     await pool.query("COMMIT");
   } catch (error) {

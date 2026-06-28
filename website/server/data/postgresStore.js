@@ -90,6 +90,7 @@ const inviteRoles = new Set(["member", "guest"]);
 const memberRoles = new Set(["admin", "member", "guest"]);
 const membershipStatuses = new Set(["active", "muted", "left", "removed"]);
 const timePattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function groupBy(rows, key) {
   return rows.reduce((groups, row) => {
@@ -251,6 +252,27 @@ function inviteFromRow(row) {
     createdAt: toIso(row.created_at),
     revokedAt: toIso(row.revoked_at),
     available: row.available,
+  };
+}
+
+function memberInvitationFromRow(row) {
+  return {
+    id: row.id,
+    circleId: row.circle_id,
+    circleName: row.circle_name,
+    circleDescription: row.circle_description,
+    invitedProfileId: row.invited_profile_id,
+    invitedName: row.invited_name,
+    invitedEmail: row.invited_email,
+    invitedByProfileId: row.invited_by_profile_id,
+    invitedByName: row.invited_by_name,
+    role: row.role,
+    status: row.status,
+    message: row.message,
+    expiresAt: toIso(row.expires_at),
+    respondedAt: toIso(row.responded_at),
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
   };
 }
 
@@ -466,6 +488,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   let circleNotificationPreferenceSchemaReady = null;
   let deviceSchemaReady = null;
   let deliverySchemaReady = null;
+  let memberInvitationSchemaReady = null;
 
   const taskSelect = `
     SELECT
@@ -690,6 +713,44 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       `);
     }
     await deliverySchemaReady;
+  }
+
+  async function ensureMemberInvitationSchema() {
+    if (!memberInvitationSchemaReady) {
+      memberInvitationSchemaReady = pool.query(`
+        CREATE TABLE IF NOT EXISTS circle_member_invitations (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          circle_id uuid NOT NULL REFERENCES circles(id) ON DELETE CASCADE,
+          invited_profile_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+          invited_by_profile_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+          role circle_role NOT NULL DEFAULT 'member',
+          status text NOT NULL DEFAULT 'pending',
+          message text NOT NULL DEFAULT '',
+          expires_at timestamptz,
+          responded_at timestamptz,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          CHECK (status IN ('pending', 'accepted', 'declined', 'revoked', 'expired'))
+        );
+
+        CREATE INDEX IF NOT EXISTS ix_circle_member_invitations_invited_status
+          ON circle_member_invitations (invited_profile_id, status, created_at DESC);
+
+        CREATE INDEX IF NOT EXISTS ix_circle_member_invitations_circle_status
+          ON circle_member_invitations (circle_id, status, created_at DESC);
+
+        CREATE UNIQUE INDEX IF NOT EXISTS ux_circle_member_invitations_pending
+          ON circle_member_invitations (circle_id, invited_profile_id)
+          WHERE status = 'pending';
+
+        DROP TRIGGER IF EXISTS trg_circle_member_invitations_updated_at ON circle_member_invitations;
+        CREATE TRIGGER trg_circle_member_invitations_updated_at
+        BEFORE UPDATE ON circle_member_invitations
+        FOR EACH ROW
+        EXECUTE FUNCTION set_updated_at();
+      `);
+    }
+    await memberInvitationSchemaReady;
   }
 
   async function getCircleNotificationPreferencesForProfile(profileId, circleId, client = pool) {
@@ -1241,6 +1302,31 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return date.toISOString();
   }
 
+  function normalizeDirectInviteRecipient(value) {
+    const recipient = String(value || "").trim();
+    if (!recipient) throw new StoreError(400, "請輸入對方的 Email、手機或 InCircle ID");
+    if (recipient.length > 160) throw new StoreError(400, "邀請對象欄位太長");
+    return recipient;
+  }
+
+  function normalizeDirectInviteMessage(value) {
+    const message = String(value || "").trim();
+    if (message.length > 240) throw new StoreError(400, "邀請訊息最多 240 個字");
+    return message;
+  }
+
+  function normalizeDirectInviteExpiresAt(body = {}) {
+    if (body.expiresAt !== undefined) {
+      const expiresAt = normalizeNullableDateTime(body.expiresAt);
+      if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+        throw new StoreError(400, "邀請期限要晚於現在");
+      }
+      return expiresAt;
+    }
+    const days = Math.min(positiveInteger(body.expireDays, 14), 365);
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  }
+
   const inviteSelect = `
     SELECT
       ci.id::text,
@@ -1267,6 +1353,30 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     LEFT JOIN profiles creator ON creator.id = ci.created_by_profile_id
   `;
 
+  const memberInvitationSelect = `
+    SELECT
+      cmi.id::text,
+      cmi.circle_id::text,
+      c.name AS circle_name,
+      c.description AS circle_description,
+      cmi.invited_profile_id::text,
+      invited.display_name AS invited_name,
+      invited.email AS invited_email,
+      cmi.invited_by_profile_id::text,
+      inviter.display_name AS invited_by_name,
+      cmi.role::text,
+      cmi.status,
+      cmi.message,
+      cmi.expires_at,
+      cmi.responded_at,
+      cmi.created_at,
+      cmi.updated_at
+    FROM circle_member_invitations cmi
+    JOIN circles c ON c.id = cmi.circle_id
+    JOIN profiles invited ON invited.id = cmi.invited_profile_id
+    LEFT JOIN profiles inviter ON inviter.id = cmi.invited_by_profile_id
+  `;
+
   async function loadCircleInvite(code, client = pool, { lock = false } = {}) {
     const result = await client.query(
       `
@@ -1289,6 +1399,90 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       throw new StoreError(409, "Invite link has reached its usage limit");
     }
     if (!row.available) throw new StoreError(404, "Invite link is not available");
+  }
+
+  async function expirePendingMemberInvitations(client = pool, { circleId = null, profileId = null } = {}) {
+    await ensureMemberInvitationSchema();
+    const filters = ["status = 'pending'", "expires_at IS NOT NULL", "expires_at <= now()"];
+    const params = [];
+    if (circleId) {
+      params.push(circleId);
+      filters.push(`circle_id::text = $${params.length}`);
+    }
+    if (profileId) {
+      params.push(profileId);
+      filters.push(`invited_profile_id::text = $${params.length}`);
+    }
+    await client.query(
+      `
+        UPDATE circle_member_invitations
+        SET status = 'expired',
+            responded_at = COALESCE(responded_at, now())
+        WHERE ${filters.join(" AND ")}
+      `,
+      params,
+    );
+  }
+
+  async function findDirectInviteProfile(identifier, client = pool) {
+    const recipient = normalizeDirectInviteRecipient(identifier);
+    const email = recipient.toLowerCase();
+    const phone = recipient.replace(/[\s().-]/g, "");
+    const result = await client.query(
+      `
+        SELECT DISTINCT
+          p.id::text,
+          p.display_name,
+          p.email,
+          p.phone,
+          p.avatar_url,
+          p.locale,
+          p.timezone,
+          p.status::text
+        FROM profiles p
+        LEFT JOIN auth_identities ai ON ai.profile_id = p.id
+        WHERE p.deleted_at IS NULL
+          AND p.status = 'active'
+          AND (
+            p.id::text = $1
+            OR lower(p.email) = $2
+            OR lower(ai.email) = $2
+            OR regexp_replace(COALESCE(p.phone, ''), '[\\s().-]', '', 'g') = $3
+          )
+        LIMIT 2
+      `,
+      [uuidPattern.test(recipient) ? recipient : "", email, phone],
+    );
+    if (result.rows.length > 1) {
+      throw new StoreError(409, "找到多個相同聯絡資訊的帳號，請改用 InCircle ID");
+    }
+    return profileFromRow(result.rows[0]);
+  }
+
+  async function markMemberInvitationNotifications(invitation, status, client = pool) {
+    await client.query(
+      `
+        UPDATE notifications
+        SET read_at = CASE
+              WHEN $3 IN ('accepted', 'declined') THEN COALESCE(read_at, now())
+              ELSE read_at
+            END,
+            cancelled_at = CASE
+              WHEN $3 IN ('revoked', 'expired') THEN COALESCE(cancelled_at, now())
+              ELSE cancelled_at
+            END,
+            status = CASE
+              WHEN $3 IN ('revoked', 'expired') THEN 'cancelled'::notification_status
+              WHEN status = 'queued' THEN 'read'::notification_status
+              ELSE status
+            END,
+            data = jsonb_set(data, '{invitationStatus}', to_jsonb($3::text), true)
+        WHERE recipient_profile_id::text = $1
+          AND type = 'circle_member_invite'
+          AND data->>'memberInvitationId' = $2
+      `,
+      [invitation.invitedProfileId, invitation.id, status],
+    );
   }
 
   async function createCircle(body = {}) {
@@ -1800,6 +1994,387 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         joined: true,
         alreadyMember: false,
       };
+    });
+  }
+
+  async function listCircleMemberInvitations(circleId, actor = {}) {
+    await ensureMemberInvitationSchema();
+    await requireCircleMember(circleId, actor, { roles: ["owner", "admin"] });
+    await expirePendingMemberInvitations(pool, { circleId });
+    const result = await pool.query(
+      `
+        ${memberInvitationSelect}
+        WHERE cmi.circle_id::text = $1
+        ORDER BY
+          CASE cmi.status
+            WHEN 'pending' THEN 1
+            WHEN 'accepted' THEN 2
+            WHEN 'declined' THEN 3
+            ELSE 4
+          END,
+          cmi.created_at DESC
+        LIMIT 50
+      `,
+      [circleId],
+    );
+    return result.rows.map(memberInvitationFromRow);
+  }
+
+  async function createCircleMemberInvitation(circleId, body = {}) {
+    await ensureMemberInvitationSchema();
+    return withTransaction(async (client) => {
+      const { profile } = await requireCircleMember(circleId, body.actor, { roles: ["owner", "admin"], client });
+      await expirePendingMemberInvitations(client, { circleId });
+
+      const recipientInput = body.recipient ?? body.identifier ?? body.email ?? body.profileId ?? "";
+      const recipient = await findDirectInviteProfile(recipientInput, client);
+      if (!recipient) {
+        throw new StoreError(404, "找不到可直接邀請的帳號，請改用邀請連結");
+      }
+
+      const membershipResult = await client.query(
+        `
+          SELECT id::text, status::text
+          FROM circle_memberships
+          WHERE circle_id::text = $1
+            AND profile_id::text = $2
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [circleId, recipient.id],
+      );
+      if (membershipResult.rows[0]?.status === "active") {
+        throw new StoreError(409, "對方已經在這個圈子內");
+      }
+
+      const existingPending = await client.query(
+        `
+          SELECT id::text
+          FROM circle_member_invitations
+          WHERE circle_id::text = $1
+            AND invited_profile_id::text = $2
+            AND status = 'pending'
+          LIMIT 1
+          FOR UPDATE
+        `,
+        [circleId, recipient.id],
+      );
+      if (existingPending.rows[0]) {
+        throw new StoreError(409, "已經有一則等對方回覆的入圈邀請");
+      }
+
+      const role = normalizeInviteRole(body.role);
+      const message = normalizeDirectInviteMessage(body.message);
+      const expiresAt = normalizeDirectInviteExpiresAt(body);
+      const result = await client.query(
+        `
+          WITH inserted AS (
+            INSERT INTO circle_member_invitations (
+              circle_id,
+              invited_profile_id,
+              invited_by_profile_id,
+              role,
+              message,
+              expires_at
+            )
+            VALUES ($1::uuid, $2::uuid, $3::uuid, $4::circle_role, $5, $6::timestamptz)
+            RETURNING *
+          )
+          ${memberInvitationSelect.replace("FROM circle_member_invitations cmi", "FROM inserted cmi")}
+        `,
+        [circleId, recipient.id, profile.id, role, message, expiresAt],
+      );
+      const invitation = memberInvitationFromRow(result.rows[0]);
+      await client.query(
+        `
+          INSERT INTO notifications (
+            recipient_profile_id,
+            actor_profile_id,
+            circle_id,
+            type,
+            title,
+            body,
+            data
+          )
+          VALUES ($1::uuid, $2::uuid, $3::uuid, 'circle_member_invite', $4, $5, $6::jsonb)
+        `,
+        [
+          recipient.id,
+          profile.id,
+          circleId,
+          `${profile.displayName || "圈內成員"} 邀請你加入「${invitation.circleName}」`,
+          message || "加入後就能看到圈內事項、公告與討論。",
+          json({
+            memberInvitationId: invitation.id,
+            invitationStatus: invitation.status,
+            role: invitation.role,
+            priority: "important",
+            action: "circle_member_invite",
+            url: "/notifications",
+          }),
+        ],
+      );
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId,
+        action: "circle_member_invitation.created",
+        entityTable: "circle_member_invitations",
+        entityId: invitation.id,
+        metadata: {
+          invitedProfileId: recipient.id,
+          role,
+          expiresAt,
+        },
+        ...auditSource(body.actor),
+      }, client);
+      return invitation;
+    });
+  }
+
+  async function listMyCircleMemberInvitations(actor = {}) {
+    await ensureMemberInvitationSchema();
+    const profile = await requireProfile(actor);
+    await expirePendingMemberInvitations(pool, { profileId: profile.id });
+    const result = await pool.query(
+      `
+        ${memberInvitationSelect}
+        WHERE cmi.invited_profile_id::text = $1
+          AND cmi.status = 'pending'
+          AND (cmi.expires_at IS NULL OR cmi.expires_at > now())
+        ORDER BY cmi.created_at DESC
+        LIMIT 20
+      `,
+      [profile.id],
+    );
+    return result.rows.map(memberInvitationFromRow);
+  }
+
+  async function respondCircleMemberInvitation(invitationId, body = {}) {
+    await ensureMemberInvitationSchema();
+    const response = String(body.response || "").trim();
+    if (!["accepted", "declined"].includes(response)) {
+      throw new StoreError(400, "請選擇加入或婉拒");
+    }
+
+    return withTransaction(async (client) => {
+      const profile = await requireProfile(body.actor, client);
+      await expirePendingMemberInvitations(client, { profileId: profile.id });
+      const invitationResult = await client.query(
+        `
+          ${memberInvitationSelect}
+          WHERE cmi.id::text = $1
+          LIMIT 1
+          FOR UPDATE OF cmi
+        `,
+        [invitationId],
+      );
+      const invitation = invitationResult.rows[0] ? memberInvitationFromRow(invitationResult.rows[0]) : null;
+      if (!invitation) throw new StoreError(404, "入圈邀請不存在");
+      if (invitation.invitedProfileId !== profile.id) throw new StoreError(403, "只能回覆自己的入圈邀請");
+      if (invitation.status !== "pending") {
+        throw new StoreError(409, "這則入圈邀請已經回覆或失效");
+      }
+      if (invitation.expiresAt && new Date(invitation.expiresAt).getTime() <= Date.now()) {
+        const expiredResult = await client.query(
+          `
+            WITH updated AS (
+              UPDATE circle_member_invitations
+              SET status = 'expired',
+                  responded_at = COALESCE(responded_at, now())
+              WHERE id::text = $1
+              RETURNING *
+            )
+            ${memberInvitationSelect.replace("FROM circle_member_invitations cmi", "FROM updated cmi")}
+          `,
+          [invitation.id],
+        );
+        const expiredInvitation = memberInvitationFromRow(expiredResult.rows[0]);
+        await markMemberInvitationNotifications(expiredInvitation, "expired", client);
+        throw new StoreError(410, "這則入圈邀請已過期");
+      }
+
+      if (response === "declined") {
+        const declinedResult = await client.query(
+          `
+            WITH updated AS (
+              UPDATE circle_member_invitations
+              SET status = 'declined',
+                  responded_at = now()
+              WHERE id::text = $1
+              RETURNING *
+            )
+            ${memberInvitationSelect.replace("FROM circle_member_invitations cmi", "FROM updated cmi")}
+          `,
+          [invitation.id],
+        );
+        const declinedInvitation = memberInvitationFromRow(declinedResult.rows[0]);
+        await markMemberInvitationNotifications(declinedInvitation, "declined", client);
+        await recordAuditEvent({
+          actorProfileId: profile.id,
+          circleId: invitation.circleId,
+          action: "circle_member_invitation.declined",
+          entityTable: "circle_member_invitations",
+          entityId: invitation.id,
+          metadata: { invitedByProfileId: invitation.invitedByProfileId },
+          ...auditSource(body.actor),
+        }, client);
+        return { invitation: declinedInvitation, membership: null, joined: false, declined: true };
+      }
+
+      const existingResult = await client.query(
+        `
+          SELECT
+            cm.id::text,
+            cm.circle_id::text,
+            c.name AS circle_name,
+            cm.profile_id::text,
+            cm.display_name,
+            cm.contact_hint,
+            cm.role::text,
+            cm.status::text,
+            cm.joined_at
+          FROM circle_memberships cm
+          JOIN circles c ON c.id = cm.circle_id
+          WHERE cm.circle_id::text = $1
+            AND cm.profile_id::text = $2
+          LIMIT 1
+          FOR UPDATE OF cm
+        `,
+        [invitation.circleId, profile.id],
+      );
+      const existing = existingResult.rows[0] ?? null;
+      const nextRole = existing && ["owner", "admin"].includes(existing.role) ? existing.role : invitation.role;
+      const contactHint = "接受站內入圈邀請";
+      const membershipResult = existing
+        ? await client.query(
+            `
+              UPDATE circle_memberships
+              SET display_name = $2,
+                  contact_hint = COALESCE(NULLIF(contact_hint, ''), $3),
+                  role = $4::circle_role,
+                  status = 'active',
+                  invited_by_profile_id = COALESCE(invited_by_profile_id, $5),
+                  joined_at = COALESCE(joined_at, now()),
+                  removed_at = NULL
+              WHERE id::text = $1
+              RETURNING
+                id::text,
+                circle_id::text,
+                $6::text AS circle_name,
+                profile_id::text,
+                display_name,
+                contact_hint,
+                role::text,
+                status::text,
+                joined_at
+            `,
+            [existing.id, profile.displayName, contactHint, nextRole, invitation.invitedByProfileId, invitation.circleName],
+          )
+        : await client.query(
+            `
+              INSERT INTO circle_memberships (
+                circle_id,
+                profile_id,
+                display_name,
+                contact_hint,
+                role,
+                status,
+                invited_by_profile_id,
+                joined_at
+              )
+              VALUES ($1::uuid, $2::uuid, $3, $4, $5::circle_role, 'active', $6::uuid, now())
+              RETURNING
+                id::text,
+                circle_id::text,
+                $7::text AS circle_name,
+                profile_id::text,
+                display_name,
+                contact_hint,
+                role::text,
+                status::text,
+                joined_at
+            `,
+            [
+              invitation.circleId,
+              profile.id,
+              profile.displayName,
+              contactHint,
+              nextRole,
+              invitation.invitedByProfileId,
+              invitation.circleName,
+            ],
+          );
+      const membership = membershipFromRow(membershipResult.rows[0]);
+      const acceptedResult = await client.query(
+        `
+          WITH updated AS (
+            UPDATE circle_member_invitations
+            SET status = 'accepted',
+                responded_at = now()
+            WHERE id::text = $1
+            RETURNING *
+          )
+          ${memberInvitationSelect.replace("FROM circle_member_invitations cmi", "FROM updated cmi")}
+        `,
+        [invitation.id],
+      );
+      const acceptedInvitation = memberInvitationFromRow(acceptedResult.rows[0]);
+      await markMemberInvitationNotifications(acceptedInvitation, "accepted", client);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId: invitation.circleId,
+        action: "circle_member.joined_by_direct_invite",
+        entityTable: "circle_memberships",
+        entityId: membership.id,
+        metadata: {
+          memberInvitationId: invitation.id,
+          invitedByProfileId: invitation.invitedByProfileId,
+          role: membership.role,
+          previousStatus: existing?.status || null,
+        },
+        ...auditSource(body.actor),
+      }, client);
+      return {
+        invitation: acceptedInvitation,
+        membership,
+        joined: existing?.status !== "active",
+        alreadyMember: existing?.status === "active",
+      };
+    });
+  }
+
+  async function revokeCircleMemberInvitation(circleId, invitationId, actor = {}) {
+    await ensureMemberInvitationSchema();
+    return withTransaction(async (client) => {
+      const { profile } = await requireCircleMember(circleId, actor, { roles: ["owner", "admin"], client });
+      const result = await client.query(
+        `
+          WITH updated AS (
+            UPDATE circle_member_invitations
+            SET status = 'revoked',
+                responded_at = COALESCE(responded_at, now())
+            WHERE id::text = $1
+              AND circle_id::text = $2
+              AND status = 'pending'
+            RETURNING *
+          )
+          ${memberInvitationSelect.replace("FROM circle_member_invitations cmi", "FROM updated cmi")}
+        `,
+        [invitationId, circleId],
+      );
+      if (!result.rows[0]) return null;
+      const invitation = memberInvitationFromRow(result.rows[0]);
+      await markMemberInvitationNotifications(invitation, "revoked", client);
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId,
+        action: "circle_member_invitation.revoked",
+        entityTable: "circle_member_invitations",
+        entityId: invitation.id,
+        metadata: { invitedProfileId: invitation.invitedProfileId },
+        ...auditSource(actor),
+      }, client);
+      return invitation;
     });
   }
 
@@ -3939,6 +4514,11 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     createCircleInvite,
     revokeCircleInvite,
     acceptCircleInvite,
+    listCircleMemberInvitations,
+    createCircleMemberInvitation,
+    listMyCircleMemberInvitations,
+    respondCircleMemberInvitation,
+    revokeCircleMemberInvitation,
     updateCircleMember,
     getTaskPermissions,
     createOAuthState,
