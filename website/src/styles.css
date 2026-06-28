@@ -533,6 +533,22 @@ a {
   white-space: nowrap;
 }
 
+.notification-action-feedback {
+  border: 1px solid #b8dabe;
+  border-radius: 8px;
+  background: #eef9f2;
+  color: #0f7d4c;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
 .notification-preferences {
   border: 1px solid #d6d6d1;
   border-radius: 8px;

@@ -2038,6 +2038,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const [enablingPush, setEnablingPush] = useState(false);
   const [sendingTestPush, setSendingTestPush] = useState(false);
   const [revokingPush, setRevokingPush] = useState(false);
+  const [notificationNotice, setNotificationNotice] = useState("");
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
   const priorityNotifications = notifications.filter((notification) => notificationPriority(notification));
@@ -2160,12 +2161,36 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
     try {
       const data = await api("/api/notifications/read-all", { method: "PATCH" });
       await refresh();
-      setToast(data.count > 0 ? "這些通知都先標成已讀了" : "目前沒有未讀通知");
+      const message = data.count > 0 ? "這些通知都先標成已讀了" : "目前沒有未讀通知";
+      setNotificationNotice(message);
+      setToast(message);
     } catch (error) {
       setToast(error.message);
     } finally {
       setMarkingAll(false);
     }
+  }
+
+  function preferenceNoticeFor(patch, nextPreferences) {
+    if (Object.prototype.hasOwnProperty.call(patch, "inAppEnabled")) {
+      return patch.inAppEnabled ? "通知中心提醒已打開" : "通知中心提醒已關閉";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "importantOnly")) {
+      return patch.importantOnly ? "之後會先保留重要提醒" : "之後一般提醒也會放進通知中心";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "announcementEnabled")) {
+      return patch.announcementEnabled ? "主揪公告會提醒你" : "主揪公告先不提醒你";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "messageEnabled")) {
+      return patch.messageEnabled ? "圈內討論會提醒你" : "圈內討論先不提醒你";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "quietHoursEnabled")) {
+      return patch.quietHoursEnabled ? "晚上安靜時段已打開" : "晚上安靜時段已關閉";
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, "quietHoursStart") || Object.prototype.hasOwnProperty.call(patch, "quietHoursEnd")) {
+      return `安靜時段已更新為 ${nextPreferences.quietHoursStart} - ${nextPreferences.quietHoursEnd}`;
+    }
+    return "通知偏好已更新";
   }
 
   async function updatePreferences(patch) {
@@ -2179,7 +2204,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
         body: JSON.stringify(patch),
       });
       setPreferences(data.preferences);
-      setToast("通知偏好已更新");
+      const message = preferenceNoticeFor(patch, data.preferences);
+      setNotificationNotice(message);
+      setToast(message);
     } catch (error) {
       setPreferences(preferences);
       setToast(error.message);
@@ -2191,12 +2218,16 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   async function enableWebPush() {
     if (enablingPush) return;
     if (!browserPushSupported()) {
-      setToast("這個瀏覽器暫時不支援手機提醒");
+      const message = "這個瀏覽器暫時不支援手機提醒，通知中心仍可使用";
+      setNotificationNotice(message);
+      setToast(message);
       setPushStatus("unsupported");
       return;
     }
     if (!pushConfig?.publicKey) {
-      setToast("推播金鑰尚未設定，先保留通知中心提醒");
+      const message = "推播金鑰尚未設定，先保留通知中心提醒";
+      setNotificationNotice(message);
+      setToast(message);
       setPushStatus("unavailable");
       return;
     }
@@ -2205,7 +2236,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       const permission = await Notification.requestPermission();
       if (permission !== "granted") {
         setPushStatus(permission === "denied" ? "denied" : "idle");
-        setToast("你還沒有允許這台裝置收提醒");
+        const message = "你還沒有允許這台裝置收提醒";
+        setNotificationNotice(message);
+        setToast(message);
         return;
       }
       const registration = await navigator.serviceWorker.getRegistration() ?? await navigator.serviceWorker.register("/sw.js");
@@ -2229,7 +2262,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
         }),
       });
       setPushStatus("registered");
-      setToast("這台裝置已登記，之後可用測試提醒確認推播");
+      const message = "這台裝置已登記，之後可用測試提醒確認推播";
+      setNotificationNotice(message);
+      setToast(message);
     } catch (error) {
       setPushStatus("unavailable");
       setToast(error.message);
@@ -2248,7 +2283,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       });
       setNotificationFilter("unread");
       await refresh();
-      setToast("已放一則測試提醒，已登記的裝置稍後也會收到推播");
+      const message = "已放一則測試提醒，已登記的裝置稍後也會收到推播";
+      setNotificationNotice(message);
+      setToast(message);
     } catch (error) {
       setToast(error.message);
     } finally {
@@ -2264,7 +2301,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       const subscription = await registration?.pushManager.getSubscription();
       if (!subscription) {
         setPushStatus("idle");
-        setToast("這台裝置目前沒有登記推播");
+        const message = "這台裝置目前沒有登記推播";
+        setNotificationNotice(message);
+        setToast(message);
         return;
       }
       const subscriptionJson = subscription.toJSON();
@@ -2274,7 +2313,9 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
       });
       await subscription.unsubscribe().catch(() => {});
       setPushStatus("idle");
-      setToast("已停止這台裝置的手機提醒");
+      const message = "已停止這台裝置的手機提醒";
+      setNotificationNotice(message);
+      setToast(message);
     } catch (error) {
       setToast(error.message);
     } finally {
@@ -2316,6 +2357,12 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
             </button>
           ) : null}
         </div>
+        {notificationNotice ? (
+          <div className="notification-action-feedback" role="status">
+            <Check size={17} />
+            <span>{notificationNotice}</span>
+          </div>
+        ) : null}
         {quietCircleStates.length > 0 ? (
           <div className="notification-circle-status">
             <div className="notification-preference-head">
