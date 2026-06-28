@@ -13,6 +13,7 @@ Current status:
 - `POST /api/push/test` creates a user-triggered self test notification; the notification center shows a test button after the browser subscription is registered.
 - `DELETE /api/devices` revokes the current user's browser subscription; the notification center shows a stop button after registration.
 - The notification center shows a device-specific setup hint, including the iPhone home-screen step when the page is not running as an installed web app.
+- Clicking a Web Push notification opens the target page and best-effort marks that notification read through the existing API.
 - In-app rows and foreground polling remain the primary MVP behavior; Web Push is an additional delivery channel after a user registers a supported browser.
 
 ## Mobile Setup Notes

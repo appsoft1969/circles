@@ -79,6 +79,7 @@ self.addEventListener("push", (event) => {
     body: payload.body || fallback.body,
     data: {
       url: payload.url || fallback.url,
+      notificationId: payload.notificationId || null,
     },
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
@@ -91,12 +92,23 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = new URL(event.notification.data?.url || "/notifications", self.location.origin).href;
+  const notificationId = event.notification.data?.notificationId;
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      const matchingClient = clients.find((client) => client.url === targetUrl);
-      if (matchingClient) return matchingClient.focus();
-      return self.clients.openWindow(targetUrl);
-    }),
+    Promise.allSettled([
+      notificationId
+        ? fetch(`/api/notifications/${notificationId}/read`, {
+            method: "PATCH",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: "{}",
+          })
+        : Promise.resolve(),
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+        const matchingClient = clients.find((client) => client.url === targetUrl);
+        if (matchingClient) return matchingClient.focus();
+        return self.clients.openWindow(targetUrl);
+      }),
+    ]),
   );
 });
