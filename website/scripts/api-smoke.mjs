@@ -701,6 +701,15 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(typeof pushStatus.body.status.deliveries, "object");
       assert.ok(Array.isArray(pushStatus.body.status.recentFailures), `${label}: expected recent push failures array`);
 
+      const testPush = await request(baseUrl, "/api/push/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...sessionHeaders },
+        body: JSON.stringify({}),
+      });
+      assert.equal(testPush.status, 201);
+      assert.equal(testPush.body.notification.type, "test");
+      assert.equal(testPush.body.notification.data.priority, "important");
+
       const notifications = await request(baseUrl, "/api/notifications", { headers: sessionHeaders });
       assert.ok(Array.isArray(notifications.body.notifications), `${label}: expected notifications array`);
 

@@ -404,6 +404,11 @@ app.get("/api/push/status", route(async (req, res) => {
   res.json({ status });
 }));
 
+app.post("/api/push/test", route(async (req, res) => {
+  const notification = await store.createTestPushNotification(actorFromRequest(req));
+  res.status(201).json({ notification });
+}));
+
 app.post("/api/devices", route(async (req, res) => {
   const device = await store.registerDevice({
     ...(req.body ?? {}),

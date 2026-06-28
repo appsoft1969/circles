@@ -3373,6 +3373,48 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return result.rows.map(notificationFromRow);
   }
 
+  async function createTestPushNotification(actor = {}) {
+    const profile = await requireProfile(actor);
+    const result = await pool.query(
+      `
+        INSERT INTO notifications (
+          recipient_profile_id,
+          actor_profile_id,
+          type,
+          title,
+          body,
+          data
+        )
+        VALUES (
+          $1::uuid,
+          $1::uuid,
+          'test',
+          '圈內測試提醒',
+          '如果這台裝置已登記推播，等等也會收到手機提醒。',
+          $2::jsonb
+        )
+        RETURNING
+          id::text,
+          recipient_profile_id::text,
+          actor_profile_id::text,
+          circle_id::text,
+          task_id::text,
+          announcement_id::text,
+          message_id::text,
+          type,
+          title,
+          body,
+          status::text,
+          data,
+          created_at,
+          read_at
+      `,
+      [profile.id, json({ url: "/notifications", priority: "important", test: true })],
+    );
+
+    return notificationFromRow(result.rows[0]);
+  }
+
   async function markNotificationRead(notificationId, actor = {}) {
     const profile = await requireProfile(actor);
     const result = await pool.query(
@@ -3515,6 +3557,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     registerDevice,
     getWebPushStatus,
     listNotifications,
+    createTestPushNotification,
     markNotificationRead,
     markAllNotificationsRead,
     buildTaskCsv,

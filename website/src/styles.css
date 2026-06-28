@@ -592,6 +592,12 @@ a {
   line-height: 1.45;
 }
 
+.device-push-note {
+  color: #74767c;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .device-push-panel .secondary-button {
   width: 100%;
 }

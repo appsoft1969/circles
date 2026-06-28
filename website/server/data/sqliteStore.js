@@ -1248,6 +1248,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     registerDevice: postgresOnlyRealtime,
     getWebPushStatus: postgresOnlyRealtime,
     listNotifications: postgresOnlyRealtime,
+    createTestPushNotification: postgresOnlyRealtime,
     markNotificationRead: postgresOnlyRealtime,
     markAllNotificationsRead: postgresOnlyRealtime,
     buildTaskCsv,

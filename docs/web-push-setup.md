@@ -10,7 +10,8 @@ Current status:
 - The notification center can register the current browser/device when Web Push is configured and supported.
 - `npm run push:send` can deliver queued unread notification rows to registered Web Push devices.
 - `GET /api/push/status` and `/ops/push` expose a station-admin delivery report for device counts, delivery counts, and recent failures.
-- Notifications still rely on in-app rows and foreground polling as the primary MVP behavior until push delivery is scheduled and monitored.
+- `POST /api/push/test` creates a user-triggered self test notification; the notification center shows a test button after the browser subscription is registered.
+- In-app rows and foreground polling remain the primary MVP behavior; Web Push is an additional delivery channel after a user registers a supported browser.
 
 ## Generate VAPID Keys
 

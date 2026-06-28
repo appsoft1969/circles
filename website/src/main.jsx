@@ -1658,6 +1658,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
   const [pushConfig, setPushConfig] = useState(null);
   const [pushStatus, setPushStatus] = useState("checking");
   const [enablingPush, setEnablingPush] = useState(false);
+  const [sendingTestPush, setSendingTestPush] = useState(false);
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
   const priorityNotifications = notifications.filter((notification) => notificationPriority(notification));
@@ -1849,7 +1850,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
         }),
       });
       setPushStatus("registered");
-      setToast("這台裝置已登記，之後接上推播發送就能收到提醒");
+      setToast("這台裝置已登記，之後可用測試提醒確認推播");
     } catch (error) {
       setPushStatus("unavailable");
       setToast(error.message);
@@ -1858,10 +1859,28 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
     }
   }
 
+  async function sendTestPush() {
+    if (sendingTestPush) return;
+    setSendingTestPush(true);
+    try {
+      await api("/api/push/test", {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      setNotificationFilter("unread");
+      await refresh();
+      setToast("已放一則測試提醒，已登記的裝置稍後也會收到推播");
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setSendingTestPush(false);
+    }
+  }
+
   const pushStatusText = {
     checking: "正在確認這台裝置是否能收提醒...",
     idle: pushConfig?.configured ? "可以登記這台裝置，之後就能接手機提醒。" : "推播金鑰還沒設定，現在先使用通知中心提醒。",
-    registered: "這台裝置已經登記好，等後端發送流程接上就能收到提醒。",
+    registered: "這台裝置已經登記好，可以傳一則測試提醒確認。",
     denied: "這台裝置目前拒絕通知，之後要到瀏覽器或系統設定裡打開。",
     unsupported: "這個瀏覽器暫時不支援手機提醒，通知中心仍可正常使用。",
     unavailable: "目前還不能登記這台裝置，通知中心仍可正常使用。",
@@ -2038,7 +2057,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
               <span className="notification-icon"><Smartphone size={18} /></span>
               <div>
                 <strong>這台裝置要收手機提醒嗎？</strong>
-                <small>先把瀏覽器推播訂閱準備好，真正發送會在下一階段接上。</small>
+                <small>登記後，圈內會依你的提醒設定與安靜時段送手機推播。</small>
               </div>
             </div>
             <div className="device-push-panel">
@@ -2047,6 +2066,20 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
                 {enablingPush ? <Loader2 className="spin" size={16} /> : <BellDot size={16} />}
                 {pushActionLabel}
               </button>
+              {pushStatus === "registered" ? (
+                <button
+                  className="secondary-button compact"
+                  type="button"
+                  onClick={sendTestPush}
+                  disabled={sendingTestPush || !preferences?.inAppEnabled}
+                >
+                  {sendingTestPush ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
+                  傳一則測試提醒
+                </button>
+              ) : null}
+              {pushStatus === "registered" && preferences && !preferences.inAppEnabled ? (
+                <small className="device-push-note">你目前關掉通知中心提醒，先打開後再測試手機提醒。</small>
+              ) : null}
             </div>
           </div>
         ) : null}
