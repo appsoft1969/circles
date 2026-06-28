@@ -74,11 +74,14 @@ Postgres writes operational audit rows to `audit_events` for high-value actions 
 - circle creation and settings updates
 - circle invite creation, revocation, and accepted joins
 - circle member role/status/profile-note updates
+- task creation, settings updates, interest-check conversion, status changes, response status updates, and announcements
 - push device registration and revocation
 
 Audit rows include actor profile, related circle/task when available, action, entity table/id, source IP/user agent when available, and structured metadata. This is a foundation for support/debugging, not a full admin console yet.
 
 Circle owners/admins can read recent circle-scoped audit events through `GET /api/circles/:circleId/audit-events`. The current web UI surfaces these as `最近管理紀錄` on the member management screen.
+
+Task managers can also read recent task-scoped audit events through `GET /api/tasks/:taskId/audit-events`. The task management screen uses the same `最近管理紀錄` pattern.
 
 ## Database Tables
 

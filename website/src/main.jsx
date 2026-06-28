@@ -1065,6 +1065,18 @@ function auditEventTitle(event) {
       return `${actor} 開啟了通知裝置`;
     case "device.revoked":
       return `${actor} 停用了通知裝置`;
+    case "task.created":
+      return `${actor} 建立了事項`;
+    case "task.updated":
+      return `${actor} 更新了事項設定`;
+    case "task.converted":
+      return `${actor} 把意願調查轉成下一步`;
+    case "task.status_updated":
+      return `${actor} 調整了事項狀態`;
+    case "response.updated":
+      return `${actor} 更新了回覆狀態`;
+    case "announcement.created":
+      return `${actor} 發布了公告`;
     default:
       return `${actor} 做了一次更新`;
   }
@@ -1090,7 +1102,46 @@ function auditEventDetail(event) {
   if (event.action === "device.registered" || event.action === "device.revoked") {
     return metadata.platform ? `裝置：${metadata.platform}` : "通知裝置設定";
   }
+  if (event.action === "task.created") {
+    const template = templateMeta[metadata.template]?.label ?? metadata.template ?? "事項";
+    return `${metadata.title || event.taskTitle || "新事項"} · ${template}`;
+  }
+  if (event.action === "task.updated") return metadata.after?.title || event.taskTitle || "事項設定已更新";
+  if (event.action === "task.converted") {
+    const template = templateMeta[metadata.targetTemplate]?.label ?? metadata.targetTemplate ?? "後續事項";
+    return `${metadata.targetTitle || "已建立後續事項"} · ${template}`;
+  }
+  if (event.action === "task.status_updated") return metadata.status === "open" ? "事項已重新開放" : "事項已關閉";
+  if (event.action === "response.updated") {
+    const payment = paymentLabels[metadata.after?.paymentStatus] ?? metadata.after?.paymentStatus;
+    const fulfillment = fulfillmentLabels[metadata.after?.fulfillmentStatus] ?? metadata.after?.fulfillmentStatus;
+    return [metadata.participantName, payment, fulfillment].filter(Boolean).join(" · ");
+  }
+  if (event.action === "announcement.created") {
+    const priority = notificationBadgeLabel({ type: "announcement", data: { priority: metadata.priority } });
+    return `${metadata.title || "事項公告"} · ${priority}`;
+  }
   return event.taskTitle || event.entityTable || "";
+}
+
+function AuditEventList({ events = [] }) {
+  return (
+    <div className="audit-list">
+      {events.length === 0 ? <p className="empty-note">目前還沒有管理紀錄。</p> : null}
+      {events.map((event) => {
+        const detail = auditEventDetail(event);
+        return (
+          <article className="audit-row" key={event.id}>
+            <span className="audit-icon"><ShieldCheck size={18} /></span>
+            <div>
+              <strong>{auditEventTitle(event)}</strong>
+              <small>{[detail, formatDateTime(event.createdAt)].filter(Boolean).join(" · ")}</small>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
 }
 
 function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
@@ -1538,21 +1589,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
           {canManage ? (
             <section className="section audit-section">
               <SectionTitle title="最近管理紀錄" />
-              <div className="audit-list">
-                {auditEvents.length === 0 ? <p className="empty-note">目前還沒有管理紀錄。</p> : null}
-                {auditEvents.map((event) => {
-                  const detail = auditEventDetail(event);
-                  return (
-                    <article className="audit-row" key={event.id}>
-                      <span className="audit-icon"><ShieldCheck size={18} /></span>
-                      <div>
-                        <strong>{auditEventTitle(event)}</strong>
-                        <small>{[detail, formatDateTime(event.createdAt)].filter(Boolean).join(" · ")}</small>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
+              <AuditEventList events={auditEvents} />
             </section>
           ) : null}
         </>
@@ -3163,7 +3200,7 @@ function buildTaskEditDraft(task) {
   };
 }
 
-function TaskEditPanel({ task, setToast, updateTask }) {
+function TaskEditPanel({ task, setToast, updateTask, onAuditChange }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -3237,6 +3274,7 @@ function TaskEditPanel({ task, setToast, updateTask }) {
         }),
       });
       updateTask(data.task);
+      onAuditChange?.();
       setEditing(false);
       setShowDetails(false);
       setShowOptions(false);
@@ -3361,7 +3399,7 @@ function TaskEditPanel({ task, setToast, updateTask }) {
   );
 }
 
-function InterestConversionPanel({ task, go, setToast, updateTask }) {
+function InterestConversionPanel({ task, go, setToast, updateTask, onAuditChange }) {
   const [targetTemplate, setTargetTemplate] = useState("");
   const [draft, setDraft] = useState(() => buildConversionDraft(task, "activity", getInterestSummary(task)));
   const [busy, setBusy] = useState(false);
@@ -3441,6 +3479,7 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
       });
       updateTask(data.sourceTask);
       updateTask(data.task);
+      onAuditChange?.();
       setToast(`已轉成${templateMeta[data.task.template]?.label ?? "新事項"}`);
       go("manage", { taskId: data.task.id });
     } catch (error) {
@@ -3596,6 +3635,8 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   const [announcementBody, setAnnouncementBody] = useState("");
   const [announcementPriority, setAnnouncementPriority] = useState("normal");
   const [announcementRequiresConfirmation, setAnnouncementRequiresConfirmation] = useState(false);
+  const [auditEvents, setAuditEvents] = useState([]);
+  const [auditRefreshKey, setAuditRefreshKey] = useState(0);
   const [conversationBusy, setConversationBusy] = useState(false);
   const [permissions, setPermissions] = useState(null);
   const [permissionError, setPermissionError] = useState("");
@@ -3638,6 +3679,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       body: JSON.stringify(patch),
     });
     updateTask(data.task);
+    refreshTaskAudit();
   }
 
   async function toggleStatus() {
@@ -3651,6 +3693,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       body: JSON.stringify({ status: next }),
     });
     updateTask(data.task);
+    refreshTaskAudit();
     setToast(next === "open" ? "事項已重新開放" : "事項已關閉");
   }
 
@@ -3670,6 +3713,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       }),
     });
     updateTask(data.task);
+    refreshTaskAudit();
     setAnnouncementBody("");
     setAnnouncementPriority("normal");
     setAnnouncementRequiresConfirmation(false);
@@ -3715,6 +3759,32 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   const canExport = Boolean(permissions?.canExport);
   const modeLabel = !permissionReady ? "確認權限" : canManage ? "管理模式" : "成員查看";
 
+  function refreshTaskAudit() {
+    setAuditRefreshKey((current) => current + 1);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!canManage) {
+      setAuditEvents([]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    api(`/api/tasks/${task.id}/audit-events?limit=20`)
+      .then((data) => {
+        if (!cancelled) setAuditEvents(data.events ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setAuditEvents([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task.id, canManage, auditRefreshKey]);
+
   return (
     <>
       <Topbar title={task.title} subtitle={`${task.circleName} · ${meta.label}`} onBack={() => go("dashboard")} />
@@ -3748,9 +3818,9 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
         <Metric value={task.stats.unpaid + task.stats.review} label="待付款" alert />
         <Metric value={task.stats.pending} label={task.template === "activity" ? "待確認/參加" : "待處理"} />
       </section>
-      {canManage ? <TaskEditPanel task={task} setToast={setToast} updateTask={updateTask} /> : null}
+      {canManage ? <TaskEditPanel task={task} setToast={setToast} updateTask={updateTask} onAuditChange={refreshTaskAudit} /> : null}
       {canManage && task.template === "interest_check" ? (
-        <InterestConversionPanel task={task} go={go} setToast={setToast} updateTask={updateTask} />
+        <InterestConversionPanel task={task} go={go} setToast={setToast} updateTask={updateTask} onAuditChange={refreshTaskAudit} />
       ) : null}
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
@@ -3857,6 +3927,12 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
           </article>
         ))}
       </section>
+      {canManage ? (
+        <section className="section audit-section">
+          <SectionTitle title="最近管理紀錄" />
+          <AuditEventList events={auditEvents} />
+        </section>
+      ) : null}
       {!permissionReady ? (
         <div className="sticky-actions">
           <button className="primary-button" type="button" disabled><Loader2 className="spin" size={18} />確認權限</button>

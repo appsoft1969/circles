@@ -1551,6 +1551,38 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     return result.rows.map(auditEventFromRow);
   }
 
+  async function listTaskAuditEvents(taskId, actor = {}, options = {}) {
+    await requireTaskManager(taskId, actor);
+    await ensureAuditSchema();
+    const limit = Math.min(Math.max(Number(options.limit || 20), 1), 50);
+    const result = await pool.query(
+      `
+        SELECT
+          ae.id::text,
+          ae.actor_profile_id::text,
+          p.display_name AS actor_name,
+          ae.circle_id::text,
+          ae.task_id::text,
+          t.title AS task_title,
+          ae.action,
+          ae.entity_table,
+          ae.entity_id::text,
+          ae.metadata,
+          ae.ip_address::text,
+          ae.user_agent,
+          ae.created_at
+        FROM audit_events ae
+        LEFT JOIN profiles p ON p.id = ae.actor_profile_id
+        LEFT JOIN tasks t ON t.id = ae.task_id
+        WHERE ae.task_id::text = $1
+        ORDER BY ae.created_at DESC
+        LIMIT $2
+      `,
+      [taskId, limit],
+    );
+    return result.rows.map(auditEventFromRow);
+  }
+
   async function getCircleInvite(code) {
     const row = await loadCircleInvite(code);
     assertAvailableInvite(row);
@@ -2217,6 +2249,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       if (!circle) throw new StoreError(403, "Circle owner/admin role required");
 
       const metadata = body.metadata ?? {};
+      const title = body.title || `新的${templateLabels[template] ?? "事項"}`;
       const options =
         Array.isArray(body.options) && body.options.length > 0
           ? body.options
@@ -2242,15 +2275,15 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           VALUES ($1, $2, $3, $4, $5, $6, 'open', $7, $8, $9, $10, $11::jsonb, now())
           RETURNING id::text
         `,
-        [
-          circle.id,
-          template,
-          profile.id,
-          body.sellerDisplayName || metadata.seller || null,
-          body.title || `新的${templateLabels[template] ?? "事項"}`,
-          body.description || "",
-          body.deadlineAt || null,
-          shareToken(),
+          [
+            circle.id,
+            template,
+            profile.id,
+            body.sellerDisplayName || metadata.seller || null,
+            title,
+            body.description || "",
+            body.deadlineAt || null,
+            shareToken(),
           body.paymentInstructions || "",
           body.pickupInstructions || "",
           json(metadata),
@@ -2287,6 +2320,17 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         );
       }
 
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId: circle.id,
+        taskId: createdTaskId,
+        action: "task.created",
+        entityTable: "tasks",
+        entityId: createdTaskId,
+        metadata: { title, template, optionCount: options.length },
+        ...auditSource(body.actor),
+      }, client);
+
       return createdTaskId;
     });
 
@@ -2295,7 +2339,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
 
   async function updateTaskDetails(taskId, body = {}) {
     const updatedTaskId = await withTransaction(async (client) => {
-      await requireTaskManager(taskId, body.actor, client);
+      const { profile, task: managedTask } = await requireTaskManager(taskId, body.actor, client);
       const existingResult = await client.query(
         `
           SELECT
@@ -2434,6 +2478,29 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         );
       }
 
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId: managedTask.circle_id,
+        taskId: existing.id,
+        action: "task.updated",
+        entityTable: "tasks",
+        entityId: existing.id,
+        metadata: {
+          before: {
+            title: existing.title,
+            description: existing.description,
+            deadlineAt: toIso(existing.deadline_at),
+          },
+          after: {
+            title: nextTitle,
+            description: body.description == null ? existing.description : String(body.description),
+            deadlineAt: Object.hasOwn(body, "deadlineAt") ? body.deadlineAt || null : toIso(existing.deadline_at),
+          },
+          optionsChanged: Boolean(options),
+        },
+        ...auditSource(body.actor),
+      }, client);
+
       return existing.id;
     });
 
@@ -2442,7 +2509,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
   }
 
   async function convertInterestCheck(taskId, body = {}) {
-    await requireTaskManager(taskId, body.actor);
+    const { profile, task: managedTask } = await requireTaskManager(taskId, body.actor);
     const sourceTask = await getTask(taskId);
     if (!sourceTask) return null;
     if (sourceTask.template !== "interest_check") {
@@ -2494,6 +2561,21 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       `,
       [json(nextSourceMetadata), sourceTask.id],
     );
+
+    await recordAuditEvent({
+      actorProfileId: profile.id,
+      circleId: managedTask.circle_id,
+      taskId: sourceTask.id,
+      action: "task.converted",
+      entityTable: "tasks",
+      entityId: sourceTask.id,
+      metadata: {
+        targetTaskId: createdTask.id,
+        targetTemplate,
+        targetTitle: createdTask.title,
+      },
+      ...auditSource(body.actor),
+    });
 
     return {
       sourceTask: await getTask(sourceTask.id),
@@ -2636,7 +2718,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     const taskId = await withTransaction(async (client) => {
       const existingResult = await client.query(
         `
-          SELECT id::text, task_id::text, payment_status::text, fulfillment_status::text, note
+          SELECT id::text, task_id::text, participant_name, payment_status::text, fulfillment_status::text, note
           FROM responses
           WHERE id::text = $1
             AND cancelled_at IS NULL
@@ -2647,7 +2729,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       );
       const existing = existingResult.rows[0];
       if (!existing) return null;
-      await requireTaskManager(existing.task_id, patch.actor, client);
+      const { profile, task: managedTask } = await requireTaskManager(existing.task_id, patch.actor, client);
 
       const nextPaymentStatus = patch.paymentStatus ?? existing.payment_status;
       const nextFulfillmentStatus = patch.fulfillmentStatus ?? existing.fulfillment_status;
@@ -2668,6 +2750,27 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         [nextPaymentStatus, nextFulfillmentStatus, patch.note ?? existing.note, existing.id],
       );
 
+      await recordAuditEvent({
+        actorProfileId: profile.id,
+        circleId: managedTask.circle_id,
+        taskId: existing.task_id,
+        action: "response.updated",
+        entityTable: "responses",
+        entityId: existing.id,
+        metadata: {
+          participantName: existing.participant_name,
+          before: {
+            paymentStatus: existing.payment_status,
+            fulfillmentStatus: existing.fulfillment_status,
+          },
+          after: {
+            paymentStatus: nextPaymentStatus,
+            fulfillmentStatus: nextFulfillmentStatus,
+          },
+        },
+        ...auditSource(patch.actor),
+      }, client);
+
       return existing.task_id;
     });
 
@@ -2679,7 +2782,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     if (!taskStatuses.has(status)) throw new StoreError(400, `Invalid task status: ${status}`);
 
     const updatedTaskId = await withTransaction(async (client) => {
-      await requireTaskManager(taskId, actor, client);
+      const { profile, task: managedTask } = await requireTaskManager(taskId, actor, client);
       const result = await client.query(
         `
           UPDATE tasks
@@ -2700,6 +2803,19 @@ export function createPostgresStore({ connectionString = defaultConnectionString
         `,
         [status, taskId],
       );
+
+      if (result.rows[0]) {
+        await recordAuditEvent({
+          actorProfileId: profile.id,
+          circleId: managedTask.circle_id,
+          taskId,
+          action: "task.status_updated",
+          entityTable: "tasks",
+          entityId: taskId,
+          metadata: { status },
+          ...auditSource(actor),
+        }, client);
+      }
 
       return result.rows[0]?.id ?? null;
     });
@@ -2892,6 +3008,21 @@ export function createPostgresStore({ connectionString = defaultConnectionString
           priority,
         ],
       );
+
+      await recordAuditEvent({
+        actorProfileId: authorProfileId,
+        circleId: task.circle_id,
+        taskId: managedTask.id,
+        action: "announcement.created",
+        entityTable: "announcements",
+        entityId: announcementId,
+        metadata: {
+          title: body.title || "事項公告",
+          priority,
+          requiresConfirmation: Boolean(body.requiresConfirmation),
+        },
+        ...auditSource(body.actor),
+      }, client);
 
       return task.id;
     });
@@ -3797,6 +3928,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     updateCircle,
     listCircleMembers,
     listCircleAuditEvents,
+    listTaskAuditEvents,
     getCircleInvite,
     listCircleInvites,
     createCircleInvite,

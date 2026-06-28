@@ -1170,6 +1170,15 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     return [];
   }
 
+  function listTaskAuditEvents(taskId, actor = {}) {
+    const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
+    if (!task) throw new StoreError(404, "Task not found");
+    const circle = db.prepare("SELECT * FROM circles WHERE id = ?").get(task.circle_id);
+    const user = requireUser(actor);
+    if (circle?.owner_user_id !== user.id) throw new StoreError(403, "Task manager role required");
+    return [];
+  }
+
   function getTaskPermissions(taskId, actor = {}) {
     const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(taskId);
     if (!task) return null;
@@ -1220,6 +1229,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     updateCircle,
     listCircleMembers,
     listCircleAuditEvents,
+    listTaskAuditEvents,
     getCircleInvite: postgresOnlyCircleInvites,
     listCircleInvites: postgresOnlyCircleInvites,
     createCircleInvite: postgresOnlyCircleInvites,

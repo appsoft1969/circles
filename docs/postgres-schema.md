@@ -151,11 +151,15 @@ Current API audit writes:
 - `circle.created` and `circle.updated`
 - `circle_invite.created` and `circle_invite.revoked`
 - `circle_member.joined_by_invite` and `circle_member.updated`
+- `task.created`, `task.updated`, `task.converted`, and `task.status_updated`
+- `response.updated` and `announcement.created`
 - `device.registered` and `device.revoked`
 
 Audit rows store the actor profile, related circle/task when available, action, entity table/id, source IP/user agent when available, and structured metadata for support/debugging. Sensitive push tokens are intentionally not copied into audit metadata.
 
 Circle owners/admins can read recent circle-scoped audit rows through `GET /api/circles/:circleId/audit-events`; the web UI shows these as `最近管理紀錄` on the member management screen.
+
+Task managers can read recent task-scoped audit rows through `GET /api/tasks/:taskId/audit-events`; the task management screen uses the same recent-records UI.
 
 ## Local Homebrew Postgres Commands
 

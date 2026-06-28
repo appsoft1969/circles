@@ -290,6 +290,13 @@ app.get("/api/tasks/:taskId/permissions", route(async (req, res) => {
   res.json({ permissions });
 }));
 
+app.get("/api/tasks/:taskId/audit-events", route(async (req, res) => {
+  const events = await store.listTaskAuditEvents(req.params.taskId, actorFromRequest(req), {
+    limit: req.query.limit,
+  });
+  res.json({ events });
+}));
+
 app.post("/api/tasks", route(async (req, res) => {
   const task = await store.createTask({
     ...(req.body ?? {}),

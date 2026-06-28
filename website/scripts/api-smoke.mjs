@@ -407,6 +407,11 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     createdTaskIds.push(createdTaskId);
 
     if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("task.created", createdTaskId)) >= 1,
+        `${label}: expected task.created audit event`,
+      );
+
       const anonymousPermissions = await fetch(`${baseUrl}/api/tasks/${createdTaskId}/permissions`);
       assert.equal(anonymousPermissions.status, 401, `${label}: anonymous task permissions should require login`);
     }
@@ -450,6 +455,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.ok(!edited.body.task.options.some((option) => option.title === "四季春青茶"), `${label}: removed option should be inactive`);
     const winterMelon = edited.body.task.options.find((option) => option.title === "冬瓜茶");
     assert.ok(winterMelon, `${label}: expected added option`);
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("task.updated", createdTaskId)) >= 1,
+        `${label}: expected task.updated audit event`,
+      );
+    }
 
     const shared = await request(baseUrl, `/api/share/${created.body.task.shareToken}`);
     assert.equal(shared.body.task.id, createdTaskId);
@@ -471,6 +482,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(announced.body.task.announcements.length, 1);
     assert.equal(announced.body.task.announcements[0].priority, "important");
     assert.equal(announced.body.task.announcements[0].requiresConfirmation, true);
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("announcement.created", announced.body.task.announcements[0].id)) >= 1,
+        `${label}: expected announcement.created audit event`,
+      );
+    }
     if (label === "postgres" && invitedMemberHeaders) {
       assert.ok(announced.body.task.announcements[0].receiptSummary.total >= 1);
       const memberNotifications = await request(baseUrl, "/api/notifications", { headers: invitedMemberHeaders });
@@ -821,6 +838,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.equal(patchedResponse.paymentStatus, "paid");
     assert.equal(patchedResponse.fulfillmentStatus, "picked_up");
     assert.equal(patched.body.task.stats.paid, 1);
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("response.updated", response.id)) >= 1,
+        `${label}: expected response.updated audit event`,
+      );
+    }
 
     const closed = await request(baseUrl, `/api/tasks/${createdTaskId}/status`, {
       method: "PATCH",
@@ -828,6 +851,12 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       body: JSON.stringify({ status: "closed" }),
     });
     assert.equal(closed.body.task.status, "closed");
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("task.status_updated", createdTaskId)) >= 1,
+        `${label}: expected task.status_updated audit event`,
+      );
+    }
 
     const reopened = await request(baseUrl, `/api/tasks/${createdTaskId}/status`, {
       method: "PATCH",
@@ -904,6 +933,22 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     assert.ok(converted.body.task.comments[0]?.body.includes("由意願調查"), `${label}: converted task should keep source summary`);
     assert.equal(converted.body.sourceTask.metadata.convertedTo[0].taskId, converted.body.task.id);
     createdTaskIds.push(converted.body.task.id);
+    if (label === "postgres") {
+      assert.ok(
+        (await countPostgresAuditEvents("task.converted", interestTaskId)) >= 1,
+        `${label}: expected task.converted audit event`,
+      );
+      const taskAuditEvents = await request(baseUrl, `/api/tasks/${createdTaskId}/audit-events`, { headers: sessionHeaders });
+      assert.ok(Array.isArray(taskAuditEvents.body.events), `${label}: expected task audit events array`);
+      assert.ok(
+        taskAuditEvents.body.events.some((event) => event.action === "task.created"),
+        `${label}: expected task.created in task audit API`,
+      );
+      assert.ok(
+        taskAuditEvents.body.events.some((event) => event.action === "response.updated"),
+        `${label}: expected response.updated in task audit API`,
+      );
+    }
 
     if (label === "postgres") {
       await request(baseUrl, "/api/auth/logout", {
