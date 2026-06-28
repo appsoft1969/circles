@@ -43,7 +43,7 @@ const templateMeta = {
   group_buy: { label: "團購", icon: Package, accent: "green", description: "商品、數量、付款、取貨" },
   interest_check: { label: "意願調查", icon: Users, accent: "blue", description: "電影、吃飯、球賽、票券先問人數" },
   claim: { label: "領取登記", icon: Gift, accent: "green", description: "免費票券、名額、好康領取" },
-  member_sale: { label: "圈內小市集", icon: Store, accent: "rose", description: "成員自售、限量、面交" },
+  member_sale: { label: "圈內小市集", contextLabel: "市集登記", icon: Store, accent: "rose", description: "成員自售、限量、面交" },
   meal_order: { label: "訂餐", icon: Utensils, accent: "blue", description: "便當、外食、到餐領取" },
   drink_order: { label: "訂飲料", icon: Coffee, accent: "teal", description: "甜度、冰塊、加料" },
   activity: { label: "活動 / KTV", icon: Mic2, accent: "orange", description: "參加統計、訂金、AA" },
@@ -130,8 +130,9 @@ function taskDeadlineLabel(task) {
 function taskContextLine(task, meta = templateMeta[task?.template] ?? null) {
   const parts = [
     task?.circleName || "圈內",
-    meta?.label || task?.templateLabel || "事項",
+    meta?.contextLabel || meta?.label || task?.templateLabel || "事項",
     `${taskCreatorName(task)}發起`,
+    task?.createdAt ? `建立 ${formatDateTime(task.createdAt)}` : null,
   ].filter(Boolean);
   return parts.filter((part, index) => parts.findIndex((item) => item === part) === index).join(" · ");
 }
