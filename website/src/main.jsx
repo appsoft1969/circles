@@ -1241,6 +1241,7 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
   const [step, setStep] = useState(selectedTemplate ? "circle" : "template");
   const meta = template ? templateMeta[template] : null;
   const selectedCircle = manageableCircles.find((circle) => circle.id === circleId) ?? null;
+  const hasManageableCircles = manageableCircles.length > 0;
   const activeStepIndex = Math.max(0, createTaskSteps.findIndex((item) => item.id === step));
   const templateIsSelected = Boolean(meta) && step !== "template";
   const circleIsSelected = Boolean(selectedCircle) && step === "confirm";
@@ -1335,8 +1336,12 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
           <div className="wizard-step-head">
             <span className="step-pill">2/3</span>
             <div>
-              <h2>{circleIsSelected ? `你已選好圈子：${selectedCircle.name}` : "放在哪個圈子？"}</h2>
-              <p>{circleIsSelected ? "想換圈子的話，點下方卡片就能重選。" : "選一個要放進去的圈子。這裡只會列出你能管理的圈子。"}</p>
+              <h2>{!hasManageableCircles ? "目前還不能建立事項" : circleIsSelected ? `你已選好圈子：${selectedCircle.name}` : "放在哪個圈子？"}</h2>
+              <p>
+                {!hasManageableCircles
+                  ? "要先加入圈子，並由圈主設為圈主或管理，才能在圈內建立事項。"
+                  : circleIsSelected ? "想換圈子的話，點下方卡片就能重選。" : "選一個要放進去的圈子。這裡只會列出你能管理的圈子。"}
+              </p>
             </div>
           </div>
           {step === "confirm" && selectedCircle ? (
@@ -1351,7 +1356,13 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
           ) : (
             <div className="circle-choice-list">
               {manageableCircles.length === 0 ? (
-                <p className="empty-note">你目前沒有可建立事項的圈子。請先登入並加入圈子，或請圈主把你設為管理者。</p>
+                <div className="membership-empty-card">
+                  <ShieldCheck size={20} />
+                  <span>
+                    <strong>你現在還沒有管理權限</strong>
+                    <small>如果只是要填單，打開主揪分享的填單連結就可以。若要建立事項，請圈主在成員頁把你設為管理。</small>
+                  </span>
+                </div>
               ) : null}
               {manageableCircles.map((circle) => (
                 <label key={circle.id} className="radio-row">
@@ -1398,8 +1409,8 @@ function TemplatePicker({ circles, session, go, refresh, setToast, selectedTempl
             </button>
           ) : (
             <button className="primary-button" type="button" onClick={() => setStep("confirm")} disabled={!selectedCircle}>
-              <ChevronRight size={18} />
-              下一步
+              {selectedCircle ? <ChevronRight size={18} /> : <ShieldCheck size={18} />}
+              {selectedCircle ? "下一步" : "需要可管理的圈子"}
             </button>
           )}
         </div>
