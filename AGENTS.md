@@ -118,6 +118,8 @@ Every template should share the same core flow:
 ## Mobile And App Direction
 
 - Primary usage is mobile-first: iPhone, Android, and iPad.
+- Current web MVP has a basic installable-app foundation through `website/public/manifest.json`, generated PNG icons under `website/public/icons/`, and mobile meta tags in `website/index.html`.
+- The current web MVP does not use a service worker yet. Do not add offline caching casually; stale task/notification data would be more harmful than helpful during early validation.
 - The production app should be designed so it can eventually ship through Apple App Store and Google Play.
 - Recommended production direction:
   - Expo / React Native.
@@ -149,6 +151,7 @@ supabase/
 
 - Before public app-store launch, plan for privacy policy, account deletion, notification permissions, content/reporting policy, and payment compliance.
 - For physical goods, meals, drinks, KTV, events, and member sales, normal external payment flows may be acceptable. If selling digital content inside the app, revisit Apple/Google in-app purchase rules.
+- When changing the PWA icon source, update `website/public/icons/incircle.svg`, then run `cd website && npm run icons:pwa` to regenerate the PNG icons.
 
 ## Current Local Implementation
 

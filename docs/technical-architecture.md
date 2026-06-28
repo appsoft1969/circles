@@ -7,6 +7,7 @@ It is intentionally simple:
 - Frontend: React + Vite.
 - Backend: Express.
 - Data access: `website/server/data/storeFactory.js`, with SQLite and Postgres store implementations.
+- Mobile web shell: basic PWA manifest and app icons in `website/public/`, without a service worker.
 - Current public Mac database: Homebrew Postgres at `127.0.0.1:5434`, database `incircle_local`.
 - SQLite fallback: `website/data/circles.sqlite`.
 - Runtime API: `http://127.0.0.1:8787`.
@@ -45,6 +46,24 @@ Template boundary:
 - `claim` records actual claims for tickets, seats, quotas, freebies, or perks after the organizer decides to distribute them.
 - `poll` chooses between options.
 - `activity` manages confirmed attendance, deposits, AA, or final logistics.
+
+## Mobile Web Shell
+
+The web MVP is mobile-first and has a basic installable-app foundation:
+
+- `website/index.html` defines theme color, mobile app title, Apple home-screen metadata, SVG favicon, and manifest link.
+- `website/public/manifest.json` defines the app name, start URL, standalone display mode, language, theme colors, and required PNG icons.
+- `website/public/icons/incircle.svg` is the source icon.
+- `website/scripts/generate-pwa-icons.mjs` generates `icon-192.png`, `icon-512.png`, and `maskable-512.png`.
+
+Regenerate icon PNGs with:
+
+```bash
+cd website
+npm run icons:pwa
+```
+
+There is intentionally no service worker yet. During early validation, stale task counts, payment status, and notifications would create more product risk than a small offline benefit.
 
 ## Database Tables
 

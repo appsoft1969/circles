@@ -135,7 +135,7 @@ Improve retention and organizer management once the workflow is proven.
 
 Options:
 
-- Installable PWA.
+- Installable PWA. The first manifest/icon foundation is already in place; service worker and offline behavior should wait until cache correctness is designed.
 - Native iOS app for organizers.
 - Push notifications.
 - Home-screen organizer dashboard.
