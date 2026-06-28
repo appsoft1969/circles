@@ -160,6 +160,44 @@ function shareCircleInvite(invite, setToast) {
   });
 }
 
+function resolveAppRoute(pathname, data = {}) {
+  if (pathname === "/notifications") return { name: "notifications" };
+  if (pathname === "/create") return { name: "templates" };
+  if (pathname === "/circles/new") return { name: "createCircle" };
+
+  const taskMatch = pathname.match(/^\/tasks\/([^/]+)/);
+  if (taskMatch && data.tasks?.some((task) => task.id === taskMatch[1])) {
+    return { name: "manage", taskId: taskMatch[1] };
+  }
+
+  const circleChatMatch = pathname.match(/^\/circles\/([^/]+)\/chat/);
+  if (circleChatMatch && data.circles?.some((circle) => circle.id === circleChatMatch[1])) {
+    return { name: "circleChat", circleId: circleChatMatch[1] };
+  }
+
+  const circleMembersMatch = pathname.match(/^\/circles\/([^/]+)\/members/);
+  if (circleMembersMatch && data.circles?.some((circle) => circle.id === circleMembersMatch[1])) {
+    return { name: "members", circleId: circleMembersMatch[1] };
+  }
+
+  return { name: "dashboard" };
+}
+
+function pathForRoute(name, extra = {}, state = {}) {
+  if (name === "dashboard") return "/";
+  if (name === "notifications") return "/notifications";
+  if (name === "templates") return "/create";
+  if (name === "createCircle") return "/circles/new";
+  if (name === "manage" && extra.taskId) return `/tasks/${extra.taskId}`;
+  if (name === "circleChat" && extra.circleId) return `/circles/${extra.circleId}/chat`;
+  if (name === "members" && extra.circleId) return `/circles/${extra.circleId}/members`;
+  if (name === "join" && extra.taskId) {
+    const task = state.tasks?.find((item) => item.id === extra.taskId);
+    if (task?.shareToken) return `/join/${task.shareToken}`;
+  }
+  return null;
+}
+
 function App() {
   const [state, setState] = useState({ loading: true, circles: [], tasks: [], notifications: [], session: null, authProviders: [] });
   const [route, setRoute] = useState({ name: "dashboard" });
@@ -212,10 +250,20 @@ function App() {
         return;
       }
       setState(data);
+      setRoute(resolveAppRoute(window.location.pathname, data));
     }
 
     load().catch((error) => setState((current) => ({ ...current, loading: false, error: error.message })));
   }, []);
+
+  useEffect(() => {
+    if (state.loading) return undefined;
+    function handlePopState() {
+      setRoute(resolveAppRoute(window.location.pathname, state));
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [state.loading, state.tasks, state.circles]);
 
   const selectedTask = useMemo(() => {
     if (route.taskId) return state.tasks.find((task) => task.id === route.taskId);
@@ -223,7 +271,12 @@ function App() {
   }, [route.taskId, state.tasks]);
 
   function go(name, extra = {}) {
-    setRoute({ name, ...extra });
+    const nextRoute = { name, ...extra };
+    setRoute(nextRoute);
+    const nextPath = pathForRoute(name, extra, state);
+    if (nextPath && window.location.pathname !== nextPath) {
+      window.history.pushState(nextRoute, "", nextPath);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
