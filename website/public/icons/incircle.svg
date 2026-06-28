@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="圈內 InCircle">
+  <rect width="512" height="512" rx="112" fill="#11965a"/>
+  <circle cx="250" cy="226" r="142" fill="#f6f6f3"/>
+  <circle cx="250" cy="226" r="78" fill="#11965a"/>
+  <circle cx="332" cy="332" r="63" fill="#2e62d4"/>
+  <circle cx="332" cy="332" r="27" fill="#f6f6f3"/>
+</svg>

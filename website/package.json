@@ -16,6 +16,7 @@
     "launchd:api:reload": "node --no-warnings scripts/install-local-api-launchagent.mjs --reload",
     "membership:grant": "node --no-warnings scripts/grant-circle-access.mjs",
     "test:api": "node --no-warnings scripts/api-smoke.mjs",
+    "icons:pwa": "node --no-warnings scripts/generate-pwa-icons.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

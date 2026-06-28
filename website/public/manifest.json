@@ -1,0 +1,30 @@
+{
+  "name": "圈內 InCircle",
+  "short_name": "圈內",
+  "description": "圈內 InCircle，熟人圈的生活辦事空間。把群裡的 +1，變成清楚的名單與統計。",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f6f3",
+  "theme_color": "#11965a",
+  "lang": "zh-Hant",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
