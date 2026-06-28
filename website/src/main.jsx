@@ -1052,15 +1052,15 @@ function auditEventTitle(event) {
     case "circle.created":
       return `${actor} 建立了圈子`;
     case "circle.updated":
-      return `${actor} 更新了圈子設定`;
+      return `${actor} 改了圈子設定`;
     case "circle_invite.created":
-      return `${actor} 建立了邀請連結`;
+      return `${actor} 開了一組邀請連結`;
     case "circle_invite.revoked":
       return `${actor} 停用了邀請連結`;
     case "circle_member.joined_by_invite":
       return `${actor} 透過邀請加入`;
     case "circle_member.updated":
-      return `${actor} 更新了成員設定`;
+      return `${actor} 調整了成員資料`;
     case "device.registered":
       return `${actor} 開啟了通知裝置`;
     case "device.revoked":
@@ -1068,15 +1068,15 @@ function auditEventTitle(event) {
     case "task.created":
       return `${actor} 建立了事項`;
     case "task.updated":
-      return `${actor} 更新了事項設定`;
+      return `${actor} 改了事項設定`;
     case "task.converted":
       return `${actor} 把意願調查轉成下一步`;
     case "task.status_updated":
-      return `${actor} 調整了事項狀態`;
+      return event.metadata?.status === "open" ? `${actor} 重新開放了這件事` : `${actor} 關閉了這件事`;
     case "response.updated":
-      return `${actor} 更新了回覆狀態`;
+      return `${actor} 更新了付款或領取狀態`;
     case "announcement.created":
-      return `${actor} 發布了公告`;
+      return `${actor} 發了一則公告`;
     default:
       return `${actor} 做了一次更新`;
   }
@@ -1124,23 +1124,128 @@ function auditEventDetail(event) {
   return event.taskTitle || event.entityTable || "";
 }
 
+function auditEventCategory(event) {
+  if (event.action?.startsWith("circle_member.") || event.action?.startsWith("circle_invite.")) return "member";
+  if (event.action === "circle.created" || event.action === "circle.updated") return "member";
+  if (event.action === "response.updated") return "payment";
+  if (event.action === "announcement.created") return "announcement";
+  if (event.action?.startsWith("task.")) return "task";
+  return "system";
+}
+
+function auditEventFilterCategory(event) {
+  const category = auditEventCategory(event);
+  return category === "announcement" ? "task" : category;
+}
+
+const auditFilterOptions = [
+  { id: "all", label: "全部" },
+  { id: "member", label: "成員/邀請" },
+  { id: "task", label: "事項" },
+  { id: "payment", label: "付款/領取" },
+];
+
+const auditCategoryLabels = {
+  member: "成員/邀請",
+  task: "事項",
+  payment: "付款/領取",
+  announcement: "公告",
+  system: "系統",
+};
+
+const auditCategoryIcons = {
+  member: Users,
+  task: ClipboardList,
+  payment: ReceiptText,
+  announcement: Megaphone,
+  system: ShieldCheck,
+};
+
+function auditDateGroupLabel(value) {
+  if (!value) return "較早";
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "較早";
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diffDays = Math.round((startOfToday - startOfDate) / (24 * 60 * 60 * 1000));
+  if (diffDays === 0) return "今天";
+  if (diffDays === 1) return "昨天";
+  return date.toLocaleDateString("zh-TW", { month: "2-digit", day: "2-digit" });
+}
+
 function AuditEventList({ events = [] }) {
+  const [activeFilter, setActiveFilter] = useState("all");
+  const counts = useMemo(
+    () =>
+      events.reduce((nextCounts, event) => {
+        const category = auditEventFilterCategory(event);
+        nextCounts.all += 1;
+        if (Object.hasOwn(nextCounts, category)) nextCounts[category] += 1;
+        return nextCounts;
+      }, { all: 0, member: 0, task: 0, payment: 0 }),
+    [events],
+  );
+  const filteredEvents = useMemo(
+    () => (activeFilter === "all" ? events : events.filter((event) => auditEventFilterCategory(event) === activeFilter)),
+    [activeFilter, events],
+  );
+  const groupedEvents = useMemo(() => {
+    const groups = [];
+    for (const event of filteredEvents) {
+      const label = auditDateGroupLabel(event.createdAt);
+      const existing = groups.find((group) => group.label === label);
+      if (existing) {
+        existing.events.push(event);
+      } else {
+        groups.push({ label, events: [event] });
+      }
+    }
+    return groups;
+  }, [filteredEvents]);
+
   return (
-    <div className="audit-list">
-      {events.length === 0 ? <p className="empty-note">目前還沒有管理紀錄。</p> : null}
-      {events.map((event) => {
-        const detail = auditEventDetail(event);
-        return (
-          <article className="audit-row" key={event.id}>
-            <span className="audit-icon"><ShieldCheck size={18} /></span>
-            <div>
-              <strong>{auditEventTitle(event)}</strong>
-              <small>{[detail, formatDateTime(event.createdAt)].filter(Boolean).join(" · ")}</small>
-            </div>
-          </article>
-        );
-      })}
-    </div>
+    <>
+      <div className="audit-filter-bar" aria-label="管理紀錄篩選">
+        {auditFilterOptions.map((option) => (
+          <button
+            className={activeFilter === option.id ? "active" : ""}
+            type="button"
+            key={option.id}
+            onClick={() => setActiveFilter(option.id)}
+          >
+            {option.label}
+            <small>{counts[option.id]}</small>
+          </button>
+        ))}
+      </div>
+      <div className="audit-list">
+        {events.length === 0 ? <p className="empty-note">目前還沒有管理紀錄。</p> : null}
+        {events.length > 0 && filteredEvents.length === 0 ? <p className="empty-note">這一類目前還沒有紀錄。</p> : null}
+        {groupedEvents.map((group) => (
+          <div className="audit-day-group" key={group.label}>
+            <span className="audit-date-label">{group.label}</span>
+            {group.events.map((event) => {
+              const category = auditEventCategory(event);
+              const Icon = auditCategoryIcons[category] ?? ShieldCheck;
+              const detail = auditEventDetail(event);
+              return (
+                <article className="audit-row" key={event.id}>
+                  <span className={`audit-icon ${category}`}><Icon size={18} /></span>
+                  <div className="audit-row-main">
+                    <div className="audit-row-head">
+                      <strong>{auditEventTitle(event)}</strong>
+                      <span className={`audit-badge ${category}`}>{auditCategoryLabels[category] ?? "紀錄"}</span>
+                    </div>
+                    <small>{[detail, formatDateTime(event.createdAt)].filter(Boolean).join(" · ")}</small>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
