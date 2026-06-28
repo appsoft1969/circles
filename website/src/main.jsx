@@ -1045,7 +1045,6 @@ function HomeTopbar({ session, circleCount, unreadCount, go }) {
 }
 
 function Dashboard({ circles, tasks, notifications, session, authProviders, go, refresh, setToast }) {
-  const activeTasks = tasks.filter((task) => task.status === "open");
   const unreadCount = notifications.filter((notification) => !notification.readAt).length;
   const circleSummaries = buildCircleSummaries({ circles, tasks, notifications, session });
 
@@ -1068,21 +1067,6 @@ function Dashboard({ circles, tasks, notifications, session, authProviders, go, 
           setToast={setToast}
         />
       ) : null}
-
-      <section className="home-status-strip">
-        <span>
-          <strong>{circleSummaries.length}</strong>
-          圈子
-        </span>
-        <span>
-          <strong>{activeTasks.length}</strong>
-          進行中
-        </span>
-        <span className={unreadCount > 0 ? "alert" : ""}>
-          <strong>{unreadCount}</strong>
-          未讀
-        </span>
-      </section>
 
       <section className="section circle-overview-section">
         <SectionTitle title="我的圈子" action="建立圈子" onClick={() => go("createCircle")} />
