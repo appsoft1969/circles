@@ -1488,12 +1488,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
           </p>
         </div>
       </section>
-      {actionNotice ? (
-        <section className="member-action-feedback" role="status">
-          <Check size={17} />
-          <span>{actionNotice}</span>
-        </section>
-      ) : null}
+      <ActionFeedback message={actionNotice} className="member-action-feedback" />
 
       {loading ? (
         <section className="section"><p className="empty-note">讀取成員資料...</p></section>
@@ -2357,12 +2352,7 @@ function NotificationCenter({ notifications = [], circles = [], session, go, ref
             </button>
           ) : null}
         </div>
-        {notificationNotice ? (
-          <div className="notification-action-feedback" role="status">
-            <Check size={17} />
-            <span>{notificationNotice}</span>
-          </div>
-        ) : null}
+        <ActionFeedback message={notificationNotice} />
         {quietCircleStates.length > 0 ? (
           <div className="notification-circle-status">
             <div className="notification-preference-head">
@@ -2843,12 +2833,10 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
               </small>
             </div>
           </div>
-          {savingCirclePreferences || circlePreferenceNotice ? (
-            <div className={`circle-preference-feedback ${savingCirclePreferences ? "saving" : ""}`} role="status">
-              {savingCirclePreferences ? <Loader2 className="spin" size={17} /> : <Check size={17} />}
-              <span>{savingCirclePreferences ? circlePreferenceBusyText || "正在更新這個圈子的提醒..." : circlePreferenceNotice}</span>
-            </div>
-          ) : null}
+          <ActionFeedback
+            message={savingCirclePreferences ? circlePreferenceBusyText || "正在更新這個圈子的提醒..." : circlePreferenceNotice}
+            saving={savingCirclePreferences}
+          />
           {loadingCirclePreferences ? <p className="empty-note">我正在讀這個圈子的提醒設定...</p> : null}
           {circlePreferences ? (
             <div className="circle-notification-controls">
@@ -2974,12 +2962,7 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
           {selectedConversation ? (
             <section className="section message-section">
               <SectionTitle title={selectedConversation.title} />
-              {chatNotice ? (
-                <div className="chat-action-feedback" role="status">
-                  <Check size={17} />
-                  <span>{chatNotice}</span>
-                </div>
-              ) : null}
+              <ActionFeedback message={chatNotice} />
               {messagesLoading ? <p className="empty-note">我正在讀這串訊息...</p> : null}
               {!messagesLoading && messages.length === 0 ? (
                 <div className="message-empty">
@@ -3015,6 +2998,16 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
         </>
       )}
     </>
+  );
+}
+
+function ActionFeedback({ message, saving = false, className = "" }) {
+  if (!message) return null;
+  return (
+    <div className={["action-feedback", saving ? "saving" : "", className].filter(Boolean).join(" ")} role="status">
+      {saving ? <Loader2 className="spin" size={17} /> : <Check size={17} />}
+      <span>{message}</span>
+    </div>
   );
 }
 
@@ -4230,12 +4223,7 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
           <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />填寫 / 留言</button>
         )}
       </section>
-      {actionNotice ? (
-        <section className="action-feedback" role="status">
-          <Check size={17} />
-          <span>{actionNotice}</span>
-        </section>
-      ) : null}
+      <ActionFeedback message={actionNotice} className="task-action-feedback" />
       <section className="metric-grid">
         <Metric value={task.stats.responses} label="回覆" />
         <Metric value={money(task.stats.totalAmount)} label="總金額" />
