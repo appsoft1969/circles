@@ -1383,6 +1383,19 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
   const unreadNotifications = notifications.filter((notification) => !notification.readAt);
   const unreadCount = unreadNotifications.length;
   const priorityUnreadCount = unreadNotifications.filter((notification) => notificationPriority(notification)).length;
+  const hasNotifications = notifications.length > 0;
+  const summaryTitle = !hasNotifications
+    ? "這裡會放圈內提醒"
+    : unreadCount > 0
+      ? `還有 ${unreadCount} 則沒看`
+      : "目前都看過了";
+  const summaryBody = !hasNotifications
+    ? "有新的公告、討論或重要提醒時，會出現在這裡。"
+    : priorityUnreadCount > 0
+      ? `其中 ${priorityUnreadCount} 則比較重要，先處理那幾則就好。`
+      : unreadCount > 0
+        ? "點開一則通知，就會帶你回到相關事項或討論串。"
+        : "之後有新消息，這裡會自動更新，不用一直重新整理。";
 
   async function openNotification(notification) {
     try {
@@ -1428,17 +1441,25 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
       <section className="section notification-list-section">
         <div className="notification-summary">
           <div>
-            <strong>{unreadCount > 0 ? `還有 ${unreadCount} 則沒看` : "目前沒有未讀通知"}</strong>
-            <p>{priorityUnreadCount > 0 ? `其中 ${priorityUnreadCount} 則是重要或緊急提醒。` : "點開通知就能回到相關圈子、事項或討論串。"}</p>
+            <strong>{summaryTitle}</strong>
+            <p>{summaryBody}</p>
           </div>
           {unreadCount > 0 ? (
             <button className="secondary-button compact" type="button" onClick={markAllRead} disabled={markingAll}>
               {markingAll ? <Loader2 className="spin" size={16} /> : <Check size={16} />}
-              全部已讀
+              先都標成已讀
             </button>
           ) : null}
         </div>
-        {notifications.length === 0 ? <p className="empty-note">目前沒有通知。有新的公告或討論時會出現在這裡。</p> : null}
+        {!hasNotifications ? (
+          <div className="notification-empty">
+            <span className="notification-icon"><Bell size={18} /></span>
+            <div>
+              <strong>現在沒有需要你處理的提醒</strong>
+              <small>等主揪發布公告，或圈內有人回覆討論時，會放到這裡。</small>
+            </div>
+          </div>
+        ) : null}
         <div className="notification-list">
           {notifications.map((notification) => {
             const priority = notificationPriority(notification);
@@ -1458,6 +1479,7 @@ function NotificationCenter({ notifications = [], circles = [], go, refresh, set
                     <b className={`notification-badge ${priority || notification.type}`}>{badgeLabel}</b>
                   </span>
                   <em>{notification.body}</em>
+                  {notification.readAt ? <small className="notification-read-note">已看過</small> : null}
                 </span>
               </button>
             );

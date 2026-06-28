@@ -463,7 +463,7 @@ a {
   border-radius: 8px;
   background: #fff;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 12px;
@@ -480,6 +480,38 @@ a {
   margin: 5px 0 0;
   color: #62646b;
   font-size: 13px;
+  line-height: 1.4;
+}
+
+.notification-summary .secondary-button {
+  white-space: nowrap;
+}
+
+.notification-empty {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+}
+
+.notification-empty strong,
+.notification-empty small {
+  display: block;
+}
+
+.notification-empty strong {
+  font-weight: 900;
+  line-height: 1.3;
+}
+
+.notification-empty small {
+  margin-top: 4px;
+  color: #74767c;
+  font-size: 14px;
   line-height: 1.4;
 }
 
@@ -548,6 +580,23 @@ a {
   font-style: normal;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.notification-read-note {
+  display: block;
+  margin-top: 5px;
+  color: #85878d;
+  font-size: 13px;
+}
+
+@media (max-width: 360px) {
+  .notification-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-summary .secondary-button {
+    width: 100%;
+  }
 }
 
 .conversation-row.active {
