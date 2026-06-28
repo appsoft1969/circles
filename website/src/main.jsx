@@ -92,6 +92,12 @@ function formatDateTime(value) {
   return new Date(value).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
 
+function shortText(value, maxLength = 32) {
+  const text = String(value || "").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}...`;
+}
+
 async function api(path, options) {
   const response = await fetch(path, {
     ...options,
@@ -815,24 +821,35 @@ function CommunicationPanel({ notifications = [], session, go }) {
   if (!session?.authenticated || memberships.length === 0) return null;
 
   const uniqueMemberships = memberships.filter(
-    (membership, index, list) => list.findIndex((item) => item.circleName === membership.circleName) === index,
+    (membership, index, list) => list.findIndex((item) => item.circleId === membership.circleId) === index,
   );
   const visibleMemberships = uniqueMemberships.slice(0, 4);
-  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
-  const priorityUnreadCount = notifications.filter((notification) => !notification.readAt && notificationPriority(notification)).length;
+  const unreadNotifications = notifications.filter((notification) => !notification.readAt);
+  const unreadCount = unreadNotifications.length;
+  const priorityUnreadNotifications = unreadNotifications.filter((notification) => notificationPriority(notification));
+  const priorityUnreadCount = priorityUnreadNotifications.length;
+  const featuredNotification = priorityUnreadNotifications[0] ?? unreadNotifications[0] ?? notifications[0];
+  const featuredBadge = featuredNotification ? notificationBadgeLabel(featuredNotification) : "";
+  const notificationCardTitle = unreadCount > 0 ? `${unreadCount} 則還沒看` : featuredNotification ? "最近的圈內提醒" : "通知中心";
+  const notificationCardBody = priorityUnreadCount > 0
+    ? `先看 ${priorityUnreadCount} 則重要提醒`
+    : featuredNotification
+      ? `${featuredBadge}：${shortText(featuredNotification.title || featuredNotification.body, 28)}`
+      : "有新的公告或討論，會放在這裡";
 
   return (
     <section className="section communication-section">
       <SectionTitle
         title="通知與討論"
-        action={unreadCount > 0 ? `未讀 ${unreadCount}` : "看通知"}
+        action={unreadCount > 0 ? "先看通知" : "看全部"}
         onClick={() => go("notifications")}
       />
       <div className="communication-grid">
         <button className={`communication-card ${unreadCount > 0 ? "unread" : ""}`} type="button" onClick={() => go("notifications")}>
           <span className="communication-icon">{unreadCount > 0 ? <BellDot size={20} /> : <Bell size={20} />}</span>
-          <strong>{unreadCount > 0 ? `${unreadCount} 則未讀` : "通知中心"}</strong>
-          <small>{priorityUnreadCount > 0 ? `有 ${priorityUnreadCount} 則重要提醒` : "圈內訊息與提醒"}</small>
+          <strong>{notificationCardTitle}</strong>
+          <small>{notificationCardBody}</small>
+          {featuredNotification?.createdAt ? <em>{formatDateTime(featuredNotification.createdAt)}</em> : null}
         </button>
         {visibleMemberships.map((membership) => (
           <button
@@ -843,7 +860,7 @@ function CommunicationPanel({ notifications = [], session, go }) {
           >
             <span className="communication-icon"><MessageCircle size={20} /></span>
             <strong>{membership.circleName}</strong>
-            <small>{membershipRoleLabels[membership.role] ?? membership.role} · 討論</small>
+            <small>{membershipRoleLabels[membership.role] ?? membership.role} · 點一下進去討論</small>
           </button>
         ))}
       </div>

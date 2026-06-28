@@ -447,7 +447,14 @@ a {
 .notification-row small,
 .conversation-row small {
   color: #74767c;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.communication-card em {
+  color: #85878d;
   font-size: 12px;
+  font-style: normal;
   line-height: 1.35;
 }
 
