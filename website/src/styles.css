@@ -1297,6 +1297,12 @@ a {
   padding-left: 12px;
 }
 
+.editor-panel-content label {
+  display: grid;
+  gap: 7px;
+  font-weight: 850;
+}
+
 .secondary-button.compact {
   min-height: 36px;
   padding: 0 10px;
@@ -1477,6 +1483,41 @@ select {
   min-height: 44px;
 }
 
+.join-summary-list {
+  border: 1px solid #d6d6d1;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.join-summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid #ececea;
+}
+
+.join-summary-row:last-child {
+  border-bottom: 0;
+}
+
+.join-summary-row strong,
+.join-summary-row small {
+  display: block;
+}
+
+.join-summary-row small {
+  margin-top: 3px;
+  color: #74767c;
+  font-size: 12px;
+}
+
+.join-summary-row b {
+  white-space: nowrap;
+}
+
 .discussion-list {
   display: grid;
   gap: 10px;
@@ -1573,6 +1614,10 @@ select {
   padding: 14px;
   display: grid;
   gap: 4px;
+}
+
+.total-box.compact {
+  margin: 0;
 }
 
 .total-box strong {

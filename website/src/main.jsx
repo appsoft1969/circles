@@ -2287,18 +2287,42 @@ function TaskDiscussion({ task, compact = false }) {
 }
 
 function JoinTask({ task, go, refresh, setToast, updateTask }) {
+  const [step, setStep] = useState("items");
   const [name, setName] = useState("王小明");
   const [note, setNote] = useState("");
   const [commentBody, setCommentBody] = useState("");
+  const [showComment, setShowComment] = useState(false);
   const [quantities, setQuantities] = useState(() => Object.fromEntries(task.options.map((option, index) => [option.id, index === 0 ? 1 : 0])));
+  const selectedItems = task.options
+    .map((option) => ({ ...option, quantity: Number(quantities[option.id] || 0) }))
+    .filter((option) => option.quantity > 0);
+  const selectedQuantity = selectedItems.reduce((sum, option) => sum + option.quantity, 0);
   const total = task.options.reduce((sum, option) => sum + Number(quantities[option.id] || 0) * option.unitPrice, 0);
 
+  useEffect(() => {
+    setStep("items");
+    setNote("");
+    setCommentBody("");
+    setShowComment(false);
+    setQuantities(Object.fromEntries(task.options.map((option, index) => [option.id, index === 0 ? 1 : 0])));
+  }, [task.id]);
+
   async function submit() {
+    if (!name.trim()) {
+      setToast("請先填寫姓名");
+      setStep("details");
+      return;
+    }
+    if (selectedItems.length === 0) {
+      setToast("請先選擇至少一個項目");
+      setStep("items");
+      return;
+    }
     await api(`/api/share/${task.shareToken}/responses`, {
       method: "POST",
       body: JSON.stringify({
-        participantName: name,
-        note,
+        participantName: name.trim(),
+        note: note.trim(),
         items: Object.entries(quantities).map(([optionId, quantity]) => ({ optionId, quantity })),
       }),
     });
@@ -2321,6 +2345,22 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
     setToast("已留言，主揪會在事項中看到");
   }
 
+  function continueToDetails() {
+    if (selectedItems.length === 0) {
+      setToast("請先選擇至少一個項目");
+      return;
+    }
+    setStep("details");
+  }
+
+  function continueToConfirm() {
+    if (!name.trim()) {
+      setToast("請先填寫姓名");
+      return;
+    }
+    setStep("confirm");
+  }
+
   return (
     <>
       <Topbar title="成員填單" subtitle="不用安裝 App" onBack={() => go("manage", { taskId: task.id })} />
@@ -2332,48 +2372,138 @@ function JoinTask({ task, go, refresh, setToast, updateTask }) {
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
         <TaskDiscussion task={task} compact />
+        <button className="editor-panel-toggle" type="button" onClick={() => setShowComment((current) => !current)}>
+          <span>
+            <strong>留言給主揪</strong>
+            <small>有臨時問題或補充再打開留言</small>
+          </span>
+          <ChevronRight className={showComment ? "open" : ""} size={18} />
+        </button>
+        {showComment ? (
+          <div className="editor-panel-content">
+            <label>
+              留言
+              <textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="例如：我會晚點到、可否幫我先留一份？" />
+            </label>
+            <button className="secondary-button" type="button" onClick={sendComment}>
+              <MessageSquare size={18} />
+              送出留言
+            </button>
+          </div>
+        ) : null}
       </section>
-      <section className="section">
-        <h2>選擇項目</h2>
-        <div className="option-list">
-          {task.options.map((option) => (
-            <div className="option-row" key={option.id}>
-              <div>
-                <strong>{option.title}</strong>
-                <small>{option.subtitle}</small>
-              </div>
-              <b>{option.unitPrice > 0 ? money(option.unitPrice) : "不計費"}</b>
-              <div className="stepper">
-                <button type="button" onClick={() => setQuantities({ ...quantities, [option.id]: Math.max(0, Number(quantities[option.id] || 0) - 1) })}>-</button>
-                <span>{quantities[option.id] || 0}</span>
-                <button type="button" onClick={() => setQuantities({ ...quantities, [option.id]: Number(quantities[option.id] || 0) + 1 })}>+</button>
-              </div>
-            </div>
-          ))}
+
+      <section className="section wizard-section">
+        <div className="wizard-step-head">
+          <span className="step-pill">1/3</span>
+          <div>
+            <h2>選擇項目</h2>
+            <p>先選你要的項目與數量，下一步再填姓名與備註。</p>
+          </div>
         </div>
+        {step === "items" ? (
+          <div className="option-list">
+            {task.options.map((option) => (
+              <div className="option-row" key={option.id}>
+                <div>
+                  <strong>{option.title}</strong>
+                  <small>{option.subtitle}</small>
+                </div>
+                <b>{option.unitPrice > 0 ? money(option.unitPrice) : "不計費"}</b>
+                <div className="stepper">
+                  <button type="button" onClick={() => setQuantities({ ...quantities, [option.id]: Math.max(0, Number(quantities[option.id] || 0) - 1) })}>-</button>
+                  <span>{quantities[option.id] || 0}</span>
+                  <button type="button" onClick={() => setQuantities({ ...quantities, [option.id]: Number(quantities[option.id] || 0) + 1 })}>+</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <button className="selected-summary" type="button" onClick={() => setStep("items")}>
+            <ReceiptText size={20} />
+            <span>
+              <strong>{selectedQuantity} 份 / {money(total)}</strong>
+              <small>{selectedItems.map((item) => `${item.title} x ${item.quantity}`).join("、") || "尚未選擇項目"}</small>
+            </span>
+            <ChevronRight size={18} />
+          </button>
+        )}
       </section>
-      <section className="section form-section">
-        <label>姓名<input value={name} onChange={(event) => setName(event.target.value)} /></label>
-        <label>備註<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：不要辣、微糖少冰、可到時間..." /></label>
-      </section>
-      <section className="section form-section">
-        <h2>留言給主揪</h2>
-        <label>留言<textarea value={commentBody} onChange={(event) => setCommentBody(event.target.value)} placeholder="例如：我會晚點到、可否幫我先留一份？" /></label>
-        <button className="secondary-button" type="button" onClick={sendComment}>
-          <MessageSquare size={18} />
-          送出留言
-        </button>
-      </section>
-      <section className="total-box">
-        <span>預估總額</span>
-        <strong>{money(total)}</strong>
-        <small>{task.paymentInstructions || "付款方式由團主通知。"}</small>
-      </section>
+
+      {step !== "items" ? (
+        <section className="section wizard-section form-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">2/3</span>
+            <div>
+              <h2>填寫資料</h2>
+              <p>只需要主揪辨識得出你是誰；備註有需要再填。</p>
+            </div>
+          </div>
+          {step === "details" ? (
+            <>
+              <label>姓名<input value={name} onChange={(event) => setName(event.target.value)} /></label>
+              <label>備註<textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="例如：不要辣、微糖少冰、可到時間..." /></label>
+            </>
+          ) : (
+            <button className="selected-summary" type="button" onClick={() => setStep("details")}>
+              <UserCircle size={20} />
+              <span>
+                <strong>{name || "未填姓名"}</strong>
+                <small>{note || "沒有備註"}</small>
+              </span>
+              <ChevronRight size={18} />
+            </button>
+          )}
+        </section>
+      ) : null}
+
+      {step === "confirm" ? (
+        <section className="section wizard-section">
+          <div className="wizard-step-head">
+            <span className="step-pill">3/3</span>
+            <div>
+              <h2>確認送出</h2>
+              <p>送出後主揪會在圈內看到統計與名單。</p>
+            </div>
+          </div>
+          <div className="join-summary-list">
+            {selectedItems.map((item) => (
+              <div className="join-summary-row" key={item.id}>
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.unitPrice > 0 ? money(item.unitPrice) : "不計費"}</small>
+                </span>
+                <b>x {item.quantity}</b>
+              </div>
+            ))}
+          </div>
+          <div className="total-box compact">
+            <span>預估總額</span>
+            <strong>{money(total)}</strong>
+            <small>{task.paymentInstructions || "付款方式由團主通知。"}</small>
+          </div>
+        </section>
+      ) : null}
+
       <div className="sticky-actions">
-        <button className="primary-button green" type="button" onClick={submit}>
-          <Send size={18} />
-          送出
-        </button>
+        {step === "items" ? (
+          <button className="primary-button green" type="button" onClick={continueToDetails} disabled={selectedItems.length === 0}>
+            <ChevronRight size={18} />
+            下一步
+          </button>
+        ) : null}
+        {step === "details" ? (
+          <button className="primary-button green" type="button" onClick={continueToConfirm}>
+            <ChevronRight size={18} />
+            查看確認
+          </button>
+        ) : null}
+        {step === "confirm" ? (
+          <button className="primary-button green" type="button" onClick={submit}>
+            <Send size={18} />
+            送出
+          </button>
+        ) : null}
       </div>
     </>
   );
