@@ -422,6 +422,11 @@ function resolveAppRoute(pathname, data = {}) {
     };
   }
 
+  const circleNotificationSettingsMatch = pathname.match(/^\/circles\/([^/]+)\/chat\/settings$/);
+  if (circleNotificationSettingsMatch && data.circles?.some((circle) => circle.id === circleNotificationSettingsMatch[1])) {
+    return { name: "circleNotificationSettings", circleId: circleNotificationSettingsMatch[1] };
+  }
+
   const circleChatMatch = pathname.match(/^\/circles\/([^/]+)\/chat/);
   if (circleChatMatch && data.circles?.some((circle) => circle.id === circleChatMatch[1])) {
     return { name: "circleChat", circleId: circleChatMatch[1] };
@@ -470,6 +475,7 @@ function pathForRoute(name, extra = {}, state = {}) {
     return panelSegment ? `/tasks/${extra.taskId}/${panelSegment}` : `/tasks/${extra.taskId}`;
   }
   if (name === "circleChat" && extra.circleId) return `/circles/${extra.circleId}/chat`;
+  if (name === "circleNotificationSettings" && extra.circleId) return `/circles/${extra.circleId}/chat/settings`;
   if (name === "circleSettings" && extra.circleId) return `/circles/${extra.circleId}/settings`;
   if (name === "circleAudit" && extra.circleId) return `/circles/${extra.circleId}/audit`;
   if (name === "memberInvite" && extra.circleId) return `/circles/${extra.circleId}/members/invite`;
@@ -802,6 +808,15 @@ function App() {
         setToast={setToast}
       />
     ),
+    circleNotificationSettings: (
+      <CircleNotificationSettings
+        circle={state.circles.find((circle) => circle.id === route.circleId)}
+        circleId={route.circleId}
+        session={state.session}
+        go={go}
+        setToast={setToast}
+      />
+    ),
     circleHome: selectedCircle ? (
       <CircleHome
         circle={selectedCircle}
@@ -916,6 +931,7 @@ function BottomNav({ routeName, unreadCount = 0, onNavigate }) {
   const activeGroup = {
     circleHome: "dashboard",
     circleChat: "dashboard",
+    circleNotificationSettings: "dashboard",
     members: "dashboard",
     memberInvite: "dashboard",
     circleSettings: "dashboard",
@@ -3242,7 +3258,7 @@ function NotificationSettings({ session, go, refresh, setToast }) {
                     className="circle-status-row"
                     type="button"
                     key={membership.id}
-                    onClick={() => go("circleChat", { circleId: membership.circleId })}
+                    onClick={() => go("circleNotificationSettings", { circleId: membership.circleId })}
                   >
                     <span>
                       <strong>{membership.circleName}</strong>
@@ -3613,161 +3629,34 @@ function NotificationCenter({
   );
 }
 
-function CircleChat({ circle, circleId, initialConversationId, session, go, refresh, setToast }) {
+function CircleNotificationSettings({ circle, circleId, session, go, setToast }) {
   const membership = session?.memberships?.find((item) => item.circleId === circleId);
-  const circleName = circle?.name ?? membership?.circleName ?? "圈內討論";
-  const [conversations, setConversations] = useState([]);
-  const [selectedConversationId, setSelectedConversationId] = useState(initialConversationId ?? "");
-  const [messages, setMessages] = useState([]);
-  const [messageBody, setMessageBody] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [messagesLoading, setMessagesLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [creatingConversation, setCreatingConversation] = useState(false);
-  const [chatNotice, setChatNotice] = useState("");
+  const circleName = circle?.name ?? membership?.circleName ?? "圈子提醒";
   const [circlePreferences, setCirclePreferences] = useState(null);
   const [loadingCirclePreferences, setLoadingCirclePreferences] = useState(false);
   const [savingCirclePreferences, setSavingCirclePreferences] = useState(false);
   const [circlePreferenceNotice, setCirclePreferenceNotice] = useState("");
   const [circlePreferenceBusyText, setCirclePreferenceBusyText] = useState("");
-  const [error, setError] = useState("");
-
-  const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
   const circleMuted = isFutureTime(circlePreferences?.mutedUntil);
 
-  async function loadConversations(preferredConversationId = initialConversationId) {
-    if (!circleId) return;
-    setLoading(true);
-    setError("");
-    try {
-      const data = await api(`/api/circles/${circleId}/conversations`);
-      const nextConversations = data.conversations ?? [];
-      setConversations(nextConversations);
-      const nextSelected =
-        nextConversations.find((conversation) => conversation.id === preferredConversationId) ??
-        nextConversations.find((conversation) => conversation.id === selectedConversationId) ??
-        nextConversations[0] ??
-        null;
-      setSelectedConversationId(nextSelected?.id ?? "");
-    } catch (loadError) {
-      setError(loadError.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function loadMessages(conversationId = selectedConversationId, options = {}) {
-    const silent = Boolean(options.silent);
-    if (!conversationId) {
-      if (!silent) setMessages([]);
-      return;
-    }
-    if (!silent) setMessagesLoading(true);
-    try {
-      const data = await api(`/api/conversations/${conversationId}/messages`);
-      const nextMessages = data.messages ?? [];
-      setMessages(nextMessages);
-      const latestOtherMessage = [...nextMessages].reverse().find((message) => message.authorProfileId !== session?.profile?.id);
-      if (latestOtherMessage) {
-        await api(`/api/messages/${latestOtherMessage.id}/read`, {
-          method: "POST",
-          body: JSON.stringify({}),
-        }).catch(() => {});
-      }
-    } catch (loadError) {
-      if (!silent) setToast(loadError.message);
-    } finally {
-      if (!silent) setMessagesLoading(false);
-    }
-  }
-
-  async function loadCirclePreferences() {
-    if (!circleId || !session?.authenticated) return;
-    setLoadingCirclePreferences(true);
-    try {
-      const data = await api(`/api/circles/${circleId}/notification-preferences`);
-      setCirclePreferences(data.preferences);
-    } catch {
-      setCirclePreferences(null);
-    } finally {
-      setLoadingCirclePreferences(false);
-    }
-  }
-
   useEffect(() => {
-    loadConversations(initialConversationId);
-  }, [circleId, initialConversationId]);
-
-  useEffect(() => {
-    loadCirclePreferences();
-  }, [circleId, session?.profile?.id]);
-
-  useEffect(() => {
-    loadMessages(selectedConversationId);
-  }, [selectedConversationId]);
-
-  useEffect(() => {
-    if (!selectedConversationId) return undefined;
+    if (!circleId || !session?.authenticated) return undefined;
     let cancelled = false;
-    const syncVisibleMessages = () => {
-      if (cancelled || document.visibilityState !== "visible") return;
-      loadMessages(selectedConversationId, { silent: true });
-    };
-    const intervalId = window.setInterval(syncVisibleMessages, 8000);
-    window.addEventListener("focus", syncVisibleMessages);
-    document.addEventListener("visibilitychange", syncVisibleMessages);
+    setLoadingCirclePreferences(true);
+    api(`/api/circles/${circleId}/notification-preferences`)
+      .then((data) => {
+        if (!cancelled) setCirclePreferences(data.preferences);
+      })
+      .catch(() => {
+        if (!cancelled) setCirclePreferences(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingCirclePreferences(false);
+      });
     return () => {
       cancelled = true;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", syncVisibleMessages);
-      document.removeEventListener("visibilitychange", syncVisibleMessages);
     };
-  }, [selectedConversationId, session?.profile?.id]);
-
-  async function createConversation() {
-    if (creatingConversation) return;
-    setCreatingConversation(true);
-    try {
-      const data = await api(`/api/circles/${circleId}/conversations`, {
-        method: "POST",
-        body: JSON.stringify({
-          type: "circle",
-          title: `${circleName} 討論`,
-        }),
-      });
-      setConversations((current) => [data.conversation, ...current]);
-      setSelectedConversationId(data.conversation.id);
-      const message = "已開一串討論，可以直接留言";
-      setChatNotice(message);
-      setToast(message);
-    } catch (createError) {
-      setToast(createError.message);
-    } finally {
-      setCreatingConversation(false);
-    }
-  }
-
-  async function sendMessage() {
-    if (!selectedConversationId || !messageBody.trim() || sending) return;
-    setSending(true);
-    try {
-      const data = await api(`/api/conversations/${selectedConversationId}/messages`, {
-        method: "POST",
-        body: JSON.stringify({ body: messageBody.trim() }),
-      });
-      setMessages((current) => [...current, data.message]);
-      setMessageBody("");
-      setConversations((current) =>
-        current.map((conversation) => (conversation.id === data.conversation.id ? data.conversation : conversation)),
-      );
-      setChatNotice("訊息已送出");
-      await refresh();
-    } catch (sendError) {
-      setToast(sendError.message);
-    } finally {
-      setSending(false);
-    }
-  }
+  }, [circleId, session?.authenticated, session?.profile?.id]);
 
   function circlePreferenceNoticeFor(patch, nextPreferences) {
     if (Object.prototype.hasOwnProperty.call(patch, "inAppEnabled")) {
@@ -3823,8 +3712,18 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
 
   return (
     <>
-      <Topbar title="圈內討論" subtitle={circleName} onBack={() => go("dashboard")} />
-      {session?.authenticated ? (
+      <Topbar title="圈子提醒" subtitle={circleName} onBack={() => go("circleChat", { circleId })} />
+      {!session?.authenticated ? (
+        <section className="section">
+          <EmptyState
+            icon={Bell}
+            title="先登入，再調整圈子提醒"
+            body="登入後就能調整這個圈子的公告、討論與靜音設定。"
+            centered
+            className="notification-empty"
+          />
+        </section>
+      ) : (
         <section className="section circle-notification-section">
           <div className="circle-notification-head">
             <span className="notification-icon"><Bell size={18} /></span>
@@ -3916,7 +3815,156 @@ function CircleChat({ circle, circleId, initialConversationId, session, go, refr
             </div>
           ) : null}
         </section>
-      ) : null}
+      )}
+    </>
+  );
+}
+
+function CircleChat({ circle, circleId, initialConversationId, session, go, refresh, setToast }) {
+  const membership = session?.memberships?.find((item) => item.circleId === circleId);
+  const circleName = circle?.name ?? membership?.circleName ?? "圈內討論";
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversationId, setSelectedConversationId] = useState(initialConversationId ?? "");
+  const [messages, setMessages] = useState([]);
+  const [messageBody, setMessageBody] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [creatingConversation, setCreatingConversation] = useState(false);
+  const [chatNotice, setChatNotice] = useState("");
+  const [error, setError] = useState("");
+
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
+
+  async function loadConversations(preferredConversationId = initialConversationId) {
+    if (!circleId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api(`/api/circles/${circleId}/conversations`);
+      const nextConversations = data.conversations ?? [];
+      setConversations(nextConversations);
+      const nextSelected =
+        nextConversations.find((conversation) => conversation.id === preferredConversationId) ??
+        nextConversations.find((conversation) => conversation.id === selectedConversationId) ??
+        nextConversations[0] ??
+        null;
+      setSelectedConversationId(nextSelected?.id ?? "");
+    } catch (loadError) {
+      setError(loadError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMessages(conversationId = selectedConversationId, options = {}) {
+    const silent = Boolean(options.silent);
+    if (!conversationId) {
+      if (!silent) setMessages([]);
+      return;
+    }
+    if (!silent) setMessagesLoading(true);
+    try {
+      const data = await api(`/api/conversations/${conversationId}/messages`);
+      const nextMessages = data.messages ?? [];
+      setMessages(nextMessages);
+      const latestOtherMessage = [...nextMessages].reverse().find((message) => message.authorProfileId !== session?.profile?.id);
+      if (latestOtherMessage) {
+        await api(`/api/messages/${latestOtherMessage.id}/read`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }).catch(() => {});
+      }
+    } catch (loadError) {
+      if (!silent) setToast(loadError.message);
+    } finally {
+      if (!silent) setMessagesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadConversations(initialConversationId);
+  }, [circleId, initialConversationId]);
+
+  useEffect(() => {
+    loadMessages(selectedConversationId);
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    if (!selectedConversationId) return undefined;
+    let cancelled = false;
+    const syncVisibleMessages = () => {
+      if (cancelled || document.visibilityState !== "visible") return;
+      loadMessages(selectedConversationId, { silent: true });
+    };
+    const intervalId = window.setInterval(syncVisibleMessages, 8000);
+    window.addEventListener("focus", syncVisibleMessages);
+    document.addEventListener("visibilitychange", syncVisibleMessages);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", syncVisibleMessages);
+      document.removeEventListener("visibilitychange", syncVisibleMessages);
+    };
+  }, [selectedConversationId, session?.profile?.id]);
+
+  async function createConversation() {
+    if (creatingConversation) return;
+    setCreatingConversation(true);
+    try {
+      const data = await api(`/api/circles/${circleId}/conversations`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "circle",
+          title: `${circleName} 討論`,
+        }),
+      });
+      setConversations((current) => [data.conversation, ...current]);
+      setSelectedConversationId(data.conversation.id);
+      const message = "已開一串討論，可以直接留言";
+      setChatNotice(message);
+      setToast(message);
+    } catch (createError) {
+      setToast(createError.message);
+    } finally {
+      setCreatingConversation(false);
+    }
+  }
+
+  async function sendMessage() {
+    if (!selectedConversationId || !messageBody.trim() || sending) return;
+    setSending(true);
+    try {
+      const data = await api(`/api/conversations/${selectedConversationId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ body: messageBody.trim() }),
+      });
+      setMessages((current) => [...current, data.message]);
+      setMessageBody("");
+      setConversations((current) =>
+        current.map((conversation) => (conversation.id === data.conversation.id ? data.conversation : conversation)),
+      );
+      setChatNotice("訊息已送出");
+      await refresh();
+    } catch (sendError) {
+      setToast(sendError.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <>
+      <Topbar
+        title="圈內討論"
+        subtitle={circleName}
+        onBack={() => go("dashboard")}
+        action={session?.authenticated ? (
+          <button className="icon-button" type="button" aria-label="圈子提醒設定" onClick={() => go("circleNotificationSettings", { circleId })}>
+            <Settings size={21} />
+          </button>
+        ) : null}
+      />
       {loading ? (
         <section className="section"><p className="empty-note">我正在幫你讀取討論...</p></section>
       ) : error ? (
