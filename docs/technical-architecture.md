@@ -7,7 +7,7 @@ It is intentionally simple:
 - Frontend: React + Vite.
 - Backend: Express.
 - Data access: `website/server/data/storeFactory.js`, with SQLite and Postgres store implementations.
-- Mobile web shell: basic PWA manifest and app icons in `website/public/`, without a service worker.
+- Mobile web shell: PWA manifest, app icons, and a conservative service worker in `website/public/`.
 - Current public Mac database: Homebrew Postgres at `127.0.0.1:5434`, database `incircle_local`.
 - SQLite fallback: `website/data/circles.sqlite`.
 - Runtime API: `http://127.0.0.1:8787`.
@@ -53,6 +53,7 @@ The web MVP is mobile-first and has a basic installable-app foundation:
 
 - `website/index.html` defines theme color, mobile app title, Apple home-screen metadata, SVG favicon, and manifest link.
 - `website/public/manifest.json` defines the app name, start URL, standalone display mode, language, theme colors, and required PNG icons.
+- `website/public/sw.js` registers a conservative app-shell service worker: it may cache the web shell and icons, but it deliberately does not cache `/api/*` data.
 - `website/public/icons/incircle.svg` is the source icon.
 - `website/scripts/generate-pwa-icons.mjs` generates `icon-192.png`, `icon-512.png`, and `maskable-512.png`.
 
@@ -63,7 +64,7 @@ cd website
 npm run icons:pwa
 ```
 
-There is intentionally no service worker yet. During early validation, stale task counts, payment status, and notifications would create more product risk than a small offline benefit.
+The service worker is intentionally conservative. Task counts, payment status, chat messages, and notifications still come from the network so the app does not show stale operational data as if it were current. The service worker also contains the browser-side `push` and `notificationclick` handlers for future Web Push delivery, but APNS/FCM/Web Push provider delivery is not wired yet.
 
 ## Database Tables
 

@@ -143,6 +143,15 @@ async function api(path, options) {
   return response.json();
 }
 
+function registerAppServiceWorker() {
+  if (import.meta.env.DEV || !("serviceWorker" in navigator)) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((error) => {
+      console.warn("Service worker registration failed", error);
+    });
+  }, { once: true });
+}
+
 function canUseNativeShare(shareData) {
   if (!navigator.share) return false;
   if (!navigator.canShare) return true;
@@ -3707,3 +3716,5 @@ createRoot(document.getElementById("root")).render(
     <App />
   </React.StrictMode>,
 );
+
+registerAppServiceWorker();
