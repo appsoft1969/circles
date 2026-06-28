@@ -2160,6 +2160,23 @@ a {
   grid-column: 1 / -1;
 }
 
+.action-feedback {
+  margin: 0 20px 14px;
+  border: 1px solid #b8dabe;
+  border-radius: 8px;
+  background: #eef9f2;
+  color: #0f7d4c;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 11px;
+  font-size: 14px;
+  font-weight: 850;
+  line-height: 1.35;
+}
+
 .filter-bar {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2237,12 +2254,19 @@ a {
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
 }
 
 .pill.read-only {
   cursor: default;
-  display: inline-grid;
-  place-items: center;
+}
+
+.pill:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .pill.paid,
@@ -2721,6 +2745,11 @@ select {
 .publish-actions button,
 .form-section .secondary-button {
   min-height: 44px;
+}
+
+.publish-actions button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .confirmation-toggle {

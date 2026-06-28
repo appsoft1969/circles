@@ -3817,6 +3817,10 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   const [auditEvents, setAuditEvents] = useState([]);
   const [auditRefreshKey, setAuditRefreshKey] = useState(0);
   const [conversationBusy, setConversationBusy] = useState(false);
+  const [responseBusyId, setResponseBusyId] = useState("");
+  const [statusBusy, setStatusBusy] = useState(false);
+  const [announcementBusy, setAnnouncementBusy] = useState(false);
+  const [actionNotice, setActionNotice] = useState("");
   const [permissions, setPermissions] = useState(null);
   const [permissionError, setPermissionError] = useState("");
 
@@ -3853,12 +3857,27 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       setToast("只有主揪或管理者可以更新狀態");
       return;
     }
-    const data = await api(`/api/responses/${response.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(patch),
-    });
-    updateTask(data.task);
-    refreshTaskAudit();
+    const busyKey = patch.paymentStatus ? `${response.id}:payment` : `${response.id}:fulfillment`;
+    if (responseBusyId) return;
+    setResponseBusyId(busyKey);
+    try {
+      const data = await api(`/api/responses/${response.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      updateTask(data.task);
+      refreshTaskAudit();
+      const nextLabel = patch.paymentStatus
+        ? paymentLabels[patch.paymentStatus] ?? patch.paymentStatus
+        : fulfillmentLabels[patch.fulfillmentStatus] ?? patch.fulfillmentStatus;
+      const message = `已把 ${response.participantName} 標成「${nextLabel}」`;
+      setActionNotice(message);
+      setToast(message);
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setResponseBusyId("");
+    }
   }
 
   async function toggleStatus() {
@@ -3866,14 +3885,26 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       setToast("只有主揪或管理者可以關閉事項");
       return;
     }
+    if (statusBusy) return;
     const next = task.status === "open" ? "closed" : "open";
-    const data = await api(`/api/tasks/${task.id}/status`, {
-      method: "PATCH",
-      body: JSON.stringify({ status: next }),
-    });
-    updateTask(data.task);
-    refreshTaskAudit();
-    setToast(next === "open" ? "事項已重新開放" : "事項已關閉");
+    setStatusBusy(true);
+    try {
+      const data = await api(`/api/tasks/${task.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: next }),
+      });
+      updateTask(data.task);
+      refreshTaskAudit();
+      const message = next === "open"
+        ? "這件事已重新開放，成員可以繼續填寫"
+        : "這件事已關閉，名單與統計會先保留下來";
+      setActionNotice(message);
+      setToast(message);
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setStatusBusy(false);
+    }
   }
 
   async function publishAnnouncement() {
@@ -3881,22 +3912,40 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       setToast("只有主揪或管理者可以發布公告");
       return;
     }
-    if (!announcementBody.trim()) return;
-    const data = await api(`/api/tasks/${task.id}/announcements`, {
-      method: "POST",
-      body: JSON.stringify({
-        title: task.template === "activity" ? "活動提醒" : "事項公告",
-        body: announcementBody.trim(),
-        priority: announcementPriority,
-        requiresConfirmation: announcementRequiresConfirmation,
-      }),
-    });
-    updateTask(data.task);
-    refreshTaskAudit();
-    setAnnouncementBody("");
-    setAnnouncementPriority("normal");
-    setAnnouncementRequiresConfirmation(false);
-    setToast("公告已發布");
+    if (!announcementBody.trim()) {
+      setToast("先打公告內容，再幫你發布");
+      return;
+    }
+    if (announcementBusy) return;
+    const selectedPriority = announcementPriority;
+    setAnnouncementBusy(true);
+    try {
+      const data = await api(`/api/tasks/${task.id}/announcements`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: task.template === "activity" ? "活動提醒" : "事項公告",
+          body: announcementBody.trim(),
+          priority: announcementPriority,
+          requiresConfirmation: announcementRequiresConfirmation,
+        }),
+      });
+      updateTask(data.task);
+      refreshTaskAudit();
+      setAnnouncementBody("");
+      setAnnouncementPriority("normal");
+      setAnnouncementRequiresConfirmation(false);
+      const message = selectedPriority === "urgent"
+        ? "緊急公告已發布，圈內成員會收到提醒"
+        : selectedPriority === "important"
+          ? "重要公告已發布，圈內成員會收到提醒"
+          : "公告已發布，圈內成員會收到提醒";
+      setActionNotice(message);
+      setToast(message);
+    } catch (error) {
+      setToast(error.message);
+    } finally {
+      setAnnouncementBusy(false);
+    }
   }
 
   function changeAnnouncementPriority(priority) {
@@ -3991,6 +4040,12 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
           <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />填寫 / 留言</button>
         )}
       </section>
+      {actionNotice ? (
+        <section className="action-feedback" role="status">
+          <Check size={17} />
+          <span>{actionNotice}</span>
+        </section>
+      ) : null}
       <section className="metric-grid">
         <Metric value={task.stats.responses} label="回覆" />
         <Metric value={money(task.stats.totalAmount)} label="總金額" />
@@ -4023,9 +4078,9 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
                 <option value="important">重要</option>
                 <option value="urgent">緊急</option>
               </select>
-              <button type="button" onClick={publishAnnouncement}>
-                <Megaphone size={18} />
-                發布公告
+              <button type="button" onClick={publishAnnouncement} disabled={!announcementBody.trim() || announcementBusy}>
+                {announcementBusy ? <Loader2 className="spin" size={18} /> : <Megaphone size={18} />}
+                {announcementBusy ? "發布中" : "發布公告"}
               </button>
             </div>
             <label className="confirmation-toggle">
@@ -4061,50 +4116,58 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
         <Filter size={18} />
       </section>
       <section className="response-list">
-        {visibleResponses.map((response) => (
-          <article className="response-row" key={response.id}>
-            <div className="response-main">
-              <strong>{response.participantName}</strong>
-              <span>{response.items.map((item) => `${item.title} x ${item.quantity}`).join("、")}</span>
-              <b>{money(response.totalAmount)}</b>
-              {response.note ? <small>{response.note}</small> : null}
-            </div>
-            <div className="status-controls">
-              {canManage ? (
-                <>
-                  <button
-                    className={`pill ${response.paymentStatus}`}
-                    type="button"
-                    onClick={() =>
-                      patchResponse(response, {
-                        paymentStatus:
-                          response.paymentStatus === "unpaid" ? "review" : response.paymentStatus === "review" ? "paid" : "unpaid",
-                      })
-                    }
-                  >
-                    {paymentLabels[response.paymentStatus] ?? response.paymentStatus}
-                  </button>
-                  <button
-                    className={`pill ${response.fulfillmentStatus}`}
-                    type="button"
-                    onClick={() =>
-                      patchResponse(response, {
-                        fulfillmentStatus: response.fulfillmentStatus === "picked_up" || response.fulfillmentStatus === "completed" ? "pending" : task.template === "activity" ? "completed" : "picked_up",
-                      })
-                    }
-                  >
-                    {fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className={`pill read-only ${response.paymentStatus}`}>{paymentLabels[response.paymentStatus] ?? response.paymentStatus}</span>
-                  <span className={`pill read-only ${response.fulfillmentStatus}`}>{fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}</span>
-                </>
-              )}
-            </div>
-          </article>
-        ))}
+        {visibleResponses.map((response) => {
+          const paymentBusy = responseBusyId === `${response.id}:payment`;
+          const fulfillmentBusy = responseBusyId === `${response.id}:fulfillment`;
+          return (
+            <article className="response-row" key={response.id}>
+              <div className="response-main">
+                <strong>{response.participantName}</strong>
+                <span>{response.items.map((item) => `${item.title} x ${item.quantity}`).join("、")}</span>
+                <b>{money(response.totalAmount)}</b>
+                {response.note ? <small>{response.note}</small> : null}
+              </div>
+              <div className="status-controls">
+                {canManage ? (
+                  <>
+                    <button
+                      className={`pill ${response.paymentStatus}`}
+                      type="button"
+                      disabled={Boolean(responseBusyId)}
+                      onClick={() =>
+                        patchResponse(response, {
+                          paymentStatus:
+                            response.paymentStatus === "unpaid" ? "review" : response.paymentStatus === "review" ? "paid" : "unpaid",
+                        })
+                      }
+                    >
+                      {paymentBusy ? <Loader2 className="spin" size={13} /> : null}
+                      {paymentLabels[response.paymentStatus] ?? response.paymentStatus}
+                    </button>
+                    <button
+                      className={`pill ${response.fulfillmentStatus}`}
+                      type="button"
+                      disabled={Boolean(responseBusyId)}
+                      onClick={() =>
+                        patchResponse(response, {
+                          fulfillmentStatus: response.fulfillmentStatus === "picked_up" || response.fulfillmentStatus === "completed" ? "pending" : task.template === "activity" ? "completed" : "picked_up",
+                        })
+                      }
+                    >
+                      {fulfillmentBusy ? <Loader2 className="spin" size={13} /> : null}
+                      {fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className={`pill read-only ${response.paymentStatus}`}>{paymentLabels[response.paymentStatus] ?? response.paymentStatus}</span>
+                    <span className={`pill read-only ${response.fulfillmentStatus}`}>{fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}</span>
+                  </>
+                )}
+              </div>
+            </article>
+          );
+        })}
       </section>
       {canManage ? (
         <section className="section audit-section">
@@ -4119,9 +4182,9 @@ function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
       ) : canManage ? (
         <div className="sticky-actions two">
           <button className="secondary-button" type="button" onClick={() => go("join", { taskId: task.id })}>預覽成員填單</button>
-          <button className="primary-button orange" type="button" onClick={toggleStatus}>
-            <CalendarClock size={18} />
-            {task.status === "open" ? "關閉事項" : "重新開放"}
+          <button className="primary-button orange" type="button" onClick={toggleStatus} disabled={statusBusy}>
+            {statusBusy ? <Loader2 className="spin" size={18} /> : <CalendarClock size={18} />}
+            {statusBusy ? "處理中" : task.status === "open" ? "關閉事項" : "重新開放"}
           </button>
         </div>
       ) : (
