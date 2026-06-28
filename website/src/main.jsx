@@ -730,6 +730,7 @@ function App() {
         setToast={setToast}
         updateTask={updateTask}
         selectedTemplate={route.selectedTemplate}
+        selectedCircleId={route.selectedCircleId}
       />
     ),
     createCircle: (
@@ -1345,6 +1346,47 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   const canManage = ["owner", "admin"].includes(membership?.role);
   const canEditCircle = membership?.role === "owner";
+  const firstActiveTask = activeTasks[0] ?? null;
+  const nextStepActions = [
+    canManage
+      ? {
+          id: "invite",
+          title: (circle.memberCount ?? 0) <= 1 ? "先邀請熟人進來" : "要加人進來嗎？",
+          body: "分享邀請連結，或直接送站內入圈邀請。",
+          icon: UserPlus,
+          onClick: () => go("memberInvite", { circleId: circle.id }),
+        }
+      : {
+          id: "members",
+          title: "先看看圈內有哪些人",
+          body: "熟人圈裡的成員名單會整理在這裡。",
+          icon: Users,
+          onClick: () => go("members", { circleId: circle.id }),
+        },
+    firstActiveTask
+      ? {
+          id: "active-task",
+          title: "看看正在辦的事",
+          body: `${firstActiveTask.title} · ${templateMeta[firstActiveTask.template]?.label ?? "事項"}`,
+          icon: templateMeta[firstActiveTask.template]?.icon ?? ClipboardList,
+          onClick: () => go("manage", { taskId: firstActiveTask.id, taskPanel: taskAttentionPanel(firstActiveTask) }),
+        }
+      : canManage
+        ? {
+            id: "create-task",
+            title: "建立第一件事項",
+            body: "訂飲料、揪活動、團購或意願調查，都從這裡開始。",
+            icon: Plus,
+            onClick: () => go("templates", { selectedCircleId: circle.id }),
+          }
+        : {
+            id: "chat",
+            title: "到圈內討論打聲招呼",
+            body: "臨時通知、約時間或問大家意見，可以先開一串討論。",
+            icon: MessageCircle,
+            onClick: () => go("circleChat", { circleId: circle.id }),
+          },
+  ];
   return (
     <>
       <Topbar title={circle.name} subtitle="圈子首頁" onBack={() => go("dashboard")} />
@@ -1373,6 +1415,24 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
           <strong>{unreadCount}</strong>
           未讀
         </span>
+      </section>
+      <section className="section circle-next-step-section">
+        <SectionTitle title="下一步可以先做什麼" />
+        <div className="circle-next-step-list">
+          {nextStepActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <button className="selected-summary" type="button" key={action.id} onClick={action.onClick}>
+                <Icon size={20} />
+                <span>
+                  <strong>{action.title}</strong>
+                  <small>{action.body}</small>
+                </span>
+                <ChevronRight size={18} />
+              </button>
+            );
+          })}
+        </div>
       </section>
       <section className="section circle-home-actions">
         <div className="success-action-grid">
@@ -1428,7 +1488,7 @@ function CircleHome({ circle, membership, tasks, notifications, go, shareTask })
         )}
       </section>
       <section className="section">
-        <SectionTitle title="進行中的事項" action="建立事項" onClick={() => go("templates")} />
+        <SectionTitle title="進行中的事項" action="建立事項" onClick={() => go("templates", { selectedCircleId: circle.id })} />
         {activeTasks.length > 0 ? (
           <div className="task-list">
             {activeTasks.map((task) => (
@@ -4177,14 +4237,15 @@ function TaskRow({ task, onOpen, onShare }) {
   );
 }
 
-function TemplatePicker({ circles, tasks = [], session, go, refresh, setToast, updateTask, selectedTemplate = "" }) {
+function TemplatePicker({ circles, tasks = [], session, go, refresh, setToast, updateTask, selectedTemplate = "", selectedCircleId = "" }) {
   const manageableCircleIds = new Set(
     (session?.memberships ?? [])
       .filter((membership) => ["owner", "admin"].includes(membership.role))
       .map((membership) => membership.circleId),
   );
   const manageableCircles = circles.filter((circle) => manageableCircleIds.has(circle.id));
-  const initialCircle = selectedTemplate ? getDefaultCircleForTemplate(manageableCircles, selectedTemplate) : null;
+  const routeCircle = manageableCircles.find((circle) => circle.id === selectedCircleId) ?? null;
+  const initialCircle = routeCircle ?? (selectedTemplate ? getDefaultCircleForTemplate(manageableCircles, selectedTemplate) : null);
   const [template, setTemplate] = useState(selectedTemplate);
   const [circleId, setCircleId] = useState(initialCircle?.id ?? "");
   const [step, setStep] = useState(selectedTemplate ? "circle" : "template");
