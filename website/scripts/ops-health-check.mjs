@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,10 +25,16 @@ const alertsEnabled = process.env.OPS_ALERTS_ENABLED === "1";
 const alertCooldownMinutes = Number(process.env.OPS_ALERT_COOLDOWN_MINUTES || 60);
 const requestTimeoutMs = Number(process.env.OPS_REQUEST_TIMEOUT_MS || 8000);
 const maxBackupAgeHours = Number(process.env.MAX_BACKUP_AGE_HOURS || 36);
+const maxPushLogAgeMinutes = Number(process.env.MAX_PUSH_LOG_AGE_MINUTES || 10);
 const minCircles = Number(process.env.MIN_BOOTSTRAP_CIRCLES || 1);
 const minTasks = Number(process.env.MIN_BOOTSTRAP_TASKS || 1);
 const minTemplates = Number(process.env.MIN_BOOTSTRAP_TEMPLATES || 9);
 const opsProfileEmail = process.env.OPS_PROFILE_EMAIL || "appsoft.1969@gmail.com";
+const pushLaunchdLabel = process.env.PUSH_LAUNCHD_LABEL || "com.useincircle.web-push";
+const pushOutLogPath =
+  process.env.PUSH_OUT_LOG_PATH || join(websiteDir, "artifacts", "incircle-web-push.out.log");
+const pushErrLogPath =
+  process.env.PUSH_ERR_LOG_PATH || join(websiteDir, "artifacts", "incircle-web-push.err.log");
 
 function log(message) {
   console.log(`[ops-health] ${message}`);
@@ -414,6 +420,68 @@ async function checkBackupStatus(failures) {
   }
 }
 
+async function checkPushDeliveryStatus(failures) {
+  const status = {
+    ok: true,
+    label: pushLaunchdLabel,
+    loaded: false,
+    state: null,
+    lastExitCode: null,
+    runIntervalSeconds: null,
+    outLogPath: pushOutLogPath,
+    outLogAgeMinutes: null,
+    lastOutput: "",
+    errLogPath: pushErrLogPath,
+    lastError: "",
+  };
+
+  try {
+    const target = `gui/${process.getuid()}/${pushLaunchdLabel}`;
+    const printed = await run("/bin/launchctl", ["print", target]);
+    status.loaded = true;
+    status.state = printed.stdout.match(/state = ([^\n]+)/)?.[1]?.trim() || null;
+    const exitCode = printed.stdout.match(/last exit code = (-?\d+)/)?.[1];
+    status.lastExitCode = exitCode === undefined ? null : Number(exitCode);
+    const interval = printed.stdout.match(/run interval = (\d+) seconds/)?.[1];
+    status.runIntervalSeconds = interval === undefined ? null : Number(interval);
+    if (status.lastExitCode !== null && status.lastExitCode !== 0) {
+      pushFailure(failures, `push delivery last exit code is ${status.lastExitCode}`);
+      status.ok = false;
+    }
+  } catch (error) {
+    pushFailure(failures, `push delivery launchd check failed: ${error.message}`);
+    status.ok = false;
+  }
+
+  try {
+    const outLog = await stat(pushOutLogPath);
+    status.outLogAgeMinutes = Number(((Date.now() - outLog.mtimeMs) / (60 * 1000)).toFixed(2));
+    status.lastOutput = (await readFile(pushOutLogPath, "utf8")).trim().split(/\r?\n/).slice(-3).join("\n");
+    if (status.outLogAgeMinutes > maxPushLogAgeMinutes) {
+      pushFailure(failures, `push delivery log is too old: ${status.outLogAgeMinutes} minutes`);
+      status.ok = false;
+    }
+  } catch (error) {
+    pushFailure(failures, `push delivery output log check failed: ${error.message}`);
+    status.ok = false;
+  }
+
+  try {
+    status.lastError = existsSync(pushErrLogPath)
+      ? (await readFile(pushErrLogPath, "utf8")).trim().split(/\r?\n/).slice(-3).join("\n")
+      : "";
+    if (status.lastError) {
+      pushFailure(failures, "push delivery error log is not empty");
+      status.ok = false;
+    }
+  } catch (error) {
+    pushFailure(failures, `push delivery error log check failed: ${error.message}`);
+    status.ok = false;
+  }
+
+  return status;
+}
+
 async function writeStatus(status) {
   await mkdir(dirname(opsStatusPath), { recursive: true });
   await writeFile(opsStatusPath, `${JSON.stringify(status, null, 2)}\n`);
@@ -422,6 +490,7 @@ async function writeStatus(status) {
 async function main() {
   assertPositiveNumber("OPS_REQUEST_TIMEOUT_MS", requestTimeoutMs);
   assertPositiveNumber("MAX_BACKUP_AGE_HOURS", maxBackupAgeHours);
+  assertPositiveNumber("MAX_PUSH_LOG_AGE_MINUTES", maxPushLogAgeMinutes);
 
   const failures = [];
   const site = await checkSite(failures);
@@ -430,6 +499,7 @@ async function main() {
   const bootstrap = await checkBootstrap(failures);
   const shareLink = await checkShareLink(bootstrap.firstShareToken, failures);
   const backupStatus = await checkBackupStatus(failures);
+  const pushDelivery = await checkPushDeliveryStatus(failures);
 
   const status = {
     ok: failures.length === 0,
@@ -439,6 +509,7 @@ async function main() {
     thresholds: {
       requestTimeoutMs,
       maxBackupAgeHours,
+      maxPushLogAgeMinutes,
       alertCooldownMinutes,
       minCircles,
       minTasks,
@@ -451,6 +522,7 @@ async function main() {
       bootstrap,
       shareLink,
       backupStatus,
+      pushDelivery,
     },
     alert: {
       enabled: alertsEnabled,

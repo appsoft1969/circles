@@ -78,5 +78,6 @@ The delivery script:
 
 The next implementation step is scheduling and monitoring:
 
-- Include push-delivery health in `npm run ops:status`.
 - Decide retry policy for transient failed deliveries.
+
+`npm run ops:status` now checks that the local `com.useincircle.web-push` launchd job is loaded, exits cleanly, and has recent output.
