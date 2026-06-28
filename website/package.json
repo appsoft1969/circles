@@ -21,6 +21,7 @@
     "icons:pwa": "node --no-warnings scripts/generate-pwa-icons.mjs",
     "push:vapid": "node --no-warnings scripts/generate-web-push-vapid.mjs",
     "push:send": "node --no-warnings scripts/send-web-push-notifications.mjs",
+    "push:status": "node --no-warnings scripts/web-push-status.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

@@ -391,6 +391,7 @@ npm run ops:status
 npm run launchd:push:reload
 npm run push:vapid
 npm run push:send -- --dry-run
+npm run push:status
 npm run build
 ```
 
@@ -422,6 +423,8 @@ Set `SKIP_POSTGRES_SMOKE=1` only when local Postgres is intentionally unavailabl
 `npm run push:vapid` generates a Web Push VAPID key pair for the private local production env. Do not commit the generated private key.
 
 `npm run push:send` sends queued unread notification rows to registered Web Push browser subscriptions and records delivery status in `notification_deliveries`. Use `npm run push:send -- --dry-run` before scheduling or manual delivery checks.
+
+`npm run push:status` writes `website/artifacts/web-push-status.json` with Web Push device counts, delivery counts, and recent failure details.
 
 `npm run launchd:push:reload` installs/reloads the local Mac `com.useincircle.web-push` launch agent, which runs the Web Push delivery script on a short interval.
 

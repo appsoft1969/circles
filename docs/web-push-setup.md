@@ -59,6 +59,13 @@ cd website
 npm run push:send
 ```
 
+Check delivery/device status:
+
+```bash
+cd website
+npm run push:status
+```
+
 Install or reload the local Mac scheduled delivery job:
 
 ```bash
@@ -79,6 +86,6 @@ The delivery script:
 
 The next implementation step is delivery observability:
 
-- Add a small admin-only delivery report for failed/revoked push attempts.
+- Add a small admin-only in-app delivery report for failed/revoked push attempts.
 
 `npm run ops:status` now checks that the local `com.useincircle.web-push` launchd job is loaded, exits cleanly, and has recent output.
