@@ -290,6 +290,7 @@ function App() {
       <JoinTask
         task={selectedTask}
         session={state.session}
+        providers={state.authProviders}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -2291,7 +2292,7 @@ function participantNameFromSession(session) {
   return session?.authenticated ? (session.profile?.displayName || "").trim() : "";
 }
 
-function JoinTask({ task, session, go, refresh, setToast, updateTask }) {
+function JoinTask({ task, session, providers = [], go, refresh, setToast, updateTask }) {
   const suggestedParticipantName = participantNameFromSession(session);
   const [step, setStep] = useState("items");
   const [name, setName] = useState(() => suggestedParticipantName);
@@ -2306,6 +2307,7 @@ function JoinTask({ task, session, go, refresh, setToast, updateTask }) {
     .filter((option) => option.quantity > 0);
   const selectedQuantity = selectedItems.reduce((sum, option) => sum + option.quantity, 0);
   const total = task.options.reduce((sum, option) => sum + Number(quantities[option.id] || 0) * option.unitPrice, 0);
+  const redirectAfter = encodeURIComponent(`/join/${task.shareToken}`);
 
   useEffect(() => {
     setStep("items");
@@ -2459,6 +2461,33 @@ function JoinTask({ task, session, go, refresh, setToast, updateTask }) {
         <h1>{task.title}</h1>
         <p>由 {task.circleName} 發起。這個連結可以貼在聊天群，大家填完就會自動統計。</p>
       </section>
+      {!session?.authenticated ? (
+        <section className="section auth-section">
+          <div className="auth-heading">
+            <Smartphone size={22} />
+            <span>
+              <strong>登入後自動帶入姓名</strong>
+              <small>也可以直接填；若先用手機帳號登入，回來這張填單時會帶入會員名稱。</small>
+            </span>
+          </div>
+          <div className="provider-list">
+            {providers.map((provider) => (
+              provider.configured ? (
+                <a className="provider-button" href={`${provider.startUrl}?redirectAfter=${redirectAfter}`} key={provider.id}>
+                  <span>{provider.shortLabel}</span>
+                  <small>{provider.platformHint}</small>
+                </a>
+              ) : (
+                <button className="provider-button disabled" type="button" key={provider.id} disabled>
+                  <span>{provider.shortLabel}</span>
+                  <small>待設定</small>
+                </button>
+              )
+            ))}
+          </div>
+          <p className="auth-note">不登入也可以繼續填單。</p>
+        </section>
+      ) : null}
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
         <TaskDiscussion task={task} compact />
