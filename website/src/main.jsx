@@ -1046,12 +1046,60 @@ function notificationBadgeLabel(notification) {
   return "通知";
 }
 
+function auditEventTitle(event) {
+  const actor = event.actorName || "圈內成員";
+  switch (event.action) {
+    case "circle.created":
+      return `${actor} 建立了圈子`;
+    case "circle.updated":
+      return `${actor} 更新了圈子設定`;
+    case "circle_invite.created":
+      return `${actor} 建立了邀請連結`;
+    case "circle_invite.revoked":
+      return `${actor} 停用了邀請連結`;
+    case "circle_member.joined_by_invite":
+      return `${actor} 透過邀請加入`;
+    case "circle_member.updated":
+      return `${actor} 更新了成員設定`;
+    case "device.registered":
+      return `${actor} 開啟了通知裝置`;
+    case "device.revoked":
+      return `${actor} 停用了通知裝置`;
+    default:
+      return `${actor} 做了一次更新`;
+  }
+}
+
+function auditEventDetail(event) {
+  const metadata = event.metadata || {};
+  if (event.action === "circle.updated" && metadata.name) return `圈子：${metadata.name}`;
+  if (event.action === "circle_invite.created") {
+    const role = membershipRoleLabels[metadata.role] ?? metadata.role ?? "成員";
+    return `${role}邀請 · 可用 ${metadata.maxUses ?? "多"} 次`;
+  }
+  if (event.action === "circle_invite.revoked") return "這組邀請已不能再使用";
+  if (event.action === "circle_member.joined_by_invite") {
+    const role = membershipRoleLabels[metadata.role] ?? metadata.role ?? "成員";
+    return `加入後角色：${role}`;
+  }
+  if (event.action === "circle_member.updated") {
+    const name = metadata.after?.displayName || metadata.before?.displayName;
+    const role = membershipRoleLabels[metadata.after?.role] ?? metadata.after?.role;
+    return [name ? `成員：${name}` : "", role ? `角色：${role}` : ""].filter(Boolean).join(" · ");
+  }
+  if (event.action === "device.registered" || event.action === "device.revoked") {
+    return metadata.platform ? `裝置：${metadata.platform}` : "通知裝置設定";
+  }
+  return event.taskTitle || event.entityTable || "";
+}
+
 function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const currentMembership = session?.memberships?.find((membership) => membership.circleId === circleId);
   const canManage = ["owner", "admin"].includes(currentMembership?.role);
   const canEditCircle = currentMembership?.role === "owner";
   const [members, setMembers] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [auditEvents, setAuditEvents] = useState([]);
   const [inviteRole, setInviteRole] = useState("member");
   const [maxUses, setMaxUses] = useState(30);
   const [expireDays, setExpireDays] = useState(30);
@@ -1073,6 +1121,19 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const inviteSettingsSummary = `${membershipRoleLabels[inviteRole] ?? inviteRole} · ${Math.max(1, Number(maxUses || 30))} 次 · ${Math.max(1, Number(expireDays || 30))} 天`;
   const onlyOwnerSoFar = canManage && members.length <= 1;
 
+  async function loadAuditEvents() {
+    if (!circleId || !canManage) {
+      setAuditEvents([]);
+      return;
+    }
+    try {
+      const data = await api(`/api/circles/${circleId}/audit-events?limit=20`);
+      setAuditEvents(data.events ?? []);
+    } catch {
+      setAuditEvents([]);
+    }
+  }
+
   async function loadMembers() {
     if (!circleId) return;
     setLoading(true);
@@ -1081,10 +1142,15 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
       const memberData = await api(`/api/circles/${circleId}/members`);
       setMembers(memberData.members ?? []);
       if (canManage) {
-        const inviteData = await api(`/api/circles/${circleId}/invites`);
+        const [inviteData, auditData] = await Promise.all([
+          api(`/api/circles/${circleId}/invites`),
+          api(`/api/circles/${circleId}/audit-events?limit=20`),
+        ]);
         setInvites(inviteData.invites ?? []);
+        setAuditEvents(auditData.events ?? []);
       } else {
         setInvites([]);
+        setAuditEvents([]);
       }
     } catch (loadError) {
       setError(loadError.message);
@@ -1119,6 +1185,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         }),
       });
       await refresh();
+      await loadAuditEvents();
       setEditingCircle(false);
       setToast(`已更新「${data.circle.name}」`);
     } catch (saveError) {
@@ -1142,6 +1209,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         }),
       });
       setInvites((current) => [data.invite, ...current]);
+      await loadAuditEvents();
       await shareCircleInvite(data.invite, setToast);
     } catch (createError) {
       setToast(createError.message);
@@ -1161,6 +1229,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         body: JSON.stringify({ revoked: true }),
       });
       setInvites((current) => current.filter((item) => item.id !== data.invite.id));
+      await loadAuditEvents();
       setToast("邀請連結已停用");
     } catch (revokeError) {
       setToast(revokeError.message);
@@ -1181,6 +1250,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         setManagingMemberId("");
       }
       await refresh();
+      await loadAuditEvents();
       setToast("成員設定已更新");
     } catch (updateError) {
       setToast(updateError.message);
@@ -1464,6 +1534,27 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
               })}
             </div>
           </section>
+
+          {canManage ? (
+            <section className="section audit-section">
+              <SectionTitle title="最近管理紀錄" />
+              <div className="audit-list">
+                {auditEvents.length === 0 ? <p className="empty-note">目前還沒有管理紀錄。</p> : null}
+                {auditEvents.map((event) => {
+                  const detail = auditEventDetail(event);
+                  return (
+                    <article className="audit-row" key={event.id}>
+                      <span className="audit-icon"><ShieldCheck size={18} /></span>
+                      <div>
+                        <strong>{auditEventTitle(event)}</strong>
+                        <small>{[detail, formatDateTime(event.createdAt)].filter(Boolean).join(" · ")}</small>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
         </>
       )}
     </>

@@ -155,6 +155,8 @@ Current API audit writes:
 
 Audit rows store the actor profile, related circle/task when available, action, entity table/id, source IP/user agent when available, and structured metadata for support/debugging. Sensitive push tokens are intentionally not copied into audit metadata.
 
+Circle owners/admins can read recent circle-scoped audit rows through `GET /api/circles/:circleId/audit-events`; the web UI shows these as `最近管理紀錄` on the member management screen.
+
 ## Local Homebrew Postgres Commands
 
 Start Postgres:

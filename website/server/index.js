@@ -230,6 +230,13 @@ app.get("/api/circles/:circleId/members", route(async (req, res) => {
   res.json({ members });
 }));
 
+app.get("/api/circles/:circleId/audit-events", route(async (req, res) => {
+  const events = await store.listCircleAuditEvents(req.params.circleId, actorFromRequest(req), {
+    limit: req.query.limit,
+  });
+  res.json({ events });
+}));
+
 app.get("/api/circles/:circleId/notification-preferences", route(async (req, res) => {
   const preferences = await store.getCircleNotificationPreferences(req.params.circleId, actorFromRequest(req));
   res.json({ preferences });

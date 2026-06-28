@@ -254,6 +254,24 @@ function inviteFromRow(row) {
   };
 }
 
+function auditEventFromRow(row) {
+  return {
+    id: row.id,
+    actorProfileId: row.actor_profile_id,
+    actorName: row.actor_name,
+    circleId: row.circle_id,
+    taskId: row.task_id,
+    taskTitle: row.task_title,
+    action: row.action,
+    entityTable: row.entity_table,
+    entityId: row.entity_id,
+    metadata: parseJson(row.metadata),
+    ipAddress: row.ip_address,
+    userAgent: row.user_agent,
+    createdAt: toIso(row.created_at),
+  };
+}
+
 function conversationFromRow(row) {
   return {
     id: row.id,
@@ -1499,6 +1517,38 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     );
 
     return result.rows.map(membershipFromRow);
+  }
+
+  async function listCircleAuditEvents(circleId, actor = {}, options = {}) {
+    await requireCircleMember(circleId, actor, { roles: ["owner", "admin"] });
+    await ensureAuditSchema();
+    const limit = Math.min(Math.max(Number(options.limit || 20), 1), 50);
+    const result = await pool.query(
+      `
+        SELECT
+          ae.id::text,
+          ae.actor_profile_id::text,
+          p.display_name AS actor_name,
+          ae.circle_id::text,
+          ae.task_id::text,
+          t.title AS task_title,
+          ae.action,
+          ae.entity_table,
+          ae.entity_id::text,
+          ae.metadata,
+          ae.ip_address::text,
+          ae.user_agent,
+          ae.created_at
+        FROM audit_events ae
+        LEFT JOIN profiles p ON p.id = ae.actor_profile_id
+        LEFT JOIN tasks t ON t.id = ae.task_id
+        WHERE ae.circle_id::text = $1
+        ORDER BY ae.created_at DESC
+        LIMIT $2
+      `,
+      [circleId, limit],
+    );
+    return result.rows.map(auditEventFromRow);
   }
 
   async function getCircleInvite(code) {
@@ -3746,6 +3796,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     createCircle,
     updateCircle,
     listCircleMembers,
+    listCircleAuditEvents,
     getCircleInvite,
     listCircleInvites,
     createCircleInvite,

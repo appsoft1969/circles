@@ -370,6 +370,17 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         (await countPostgresAuditEvents("circle_member.updated", updatedMember.body.member.id)) >= 1,
         `${label}: expected circle_member.updated audit event`,
       );
+
+      const auditEvents = await request(baseUrl, `/api/circles/${officeCircle.id}/audit-events`, { headers: sessionHeaders });
+      assert.ok(Array.isArray(auditEvents.body.events), `${label}: expected audit events array`);
+      assert.ok(
+        auditEvents.body.events.some((event) => event.action === "circle_invite.created"),
+        `${label}: expected circle_invite.created in audit API`,
+      );
+      assert.ok(
+        auditEvents.body.events.some((event) => event.action === "circle_member.updated"),
+        `${label}: expected circle_member.updated in audit API`,
+      );
     }
 
     const created = await request(baseUrl, "/api/tasks", {
