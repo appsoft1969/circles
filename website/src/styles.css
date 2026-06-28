@@ -434,6 +434,12 @@ a {
   font-weight: 900;
 }
 
+.role-badge.manager {
+  color: #234f34;
+  border-color: #a7d9bd;
+  background: #edf8f1;
+}
+
 .secondary-button.danger {
   color: #c73a2f;
   border-color: #efb8b1;
@@ -722,6 +728,22 @@ a {
   background: #f1f2f4;
 }
 
+.permission-note {
+  margin: 8px 20px 0;
+  border: 1px solid #ecc195;
+  border-radius: 8px;
+  background: #fff8ef;
+  color: #8d4d14;
+  min-height: 42px;
+  padding: 9px 11px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .action-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -735,6 +757,12 @@ a {
   background: #fff;
   color: #2b2c31;
   padding: 0 8px;
+}
+
+.action-row button:disabled {
+  color: #8d8f96;
+  background: #f1f2f4;
+  cursor: not-allowed;
 }
 
 .action-row button:last-child {
@@ -818,6 +846,12 @@ a {
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
+}
+
+.pill.read-only {
+  cursor: default;
+  display: inline-grid;
+  place-items: center;
 }
 
 .pill.paid,

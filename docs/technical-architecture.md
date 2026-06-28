@@ -271,7 +271,7 @@ Returns one task with options, responses, and stats for an active member of the 
 
 ### `GET /api/tasks/:taskId/permissions`
 
-Returns task-level capability flags for the temporary profile context.
+Returns task-level capability flags for the authenticated profile context. In Postgres, the caller must be an active member of the task circle; anonymous callers and non-members are rejected.
 
 ### `POST /api/tasks`
 

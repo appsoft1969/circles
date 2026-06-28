@@ -102,6 +102,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
   const createdPushTokens = [];
   const createdInviteIds = [];
   let inviteSmokeProfileId = null;
+  let invitedMemberHeaders = null;
 
   try {
     const health = await waitForHealth(baseUrl, api);
@@ -230,6 +231,7 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       const joinerCookie = joinerSession.headers.get("set-cookie")?.split(";")[0];
       assert.ok(joinerCookie, `${label}: expected invite joiner Set-Cookie`);
       const joinerHeaders = { Cookie: joinerCookie };
+      invitedMemberHeaders = joinerHeaders;
 
       const accepted = await request(baseUrl, `/api/circle-invites/${invite.body.invite.code}/join`, {
         method: "POST",
@@ -282,11 +284,28 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
     createdTaskId = created.body.task.id;
     createdTaskIds.push(createdTaskId);
 
+    if (label === "postgres") {
+      const anonymousPermissions = await fetch(`${baseUrl}/api/tasks/${createdTaskId}/permissions`);
+      assert.equal(anonymousPermissions.status, 401, `${label}: anonymous task permissions should require login`);
+    }
+
     const permissions = await request(baseUrl, `/api/tasks/${createdTaskId}/permissions`, { headers: sessionHeaders });
     assert.equal(permissions.body.permissions.authenticated, true);
     assert.equal(permissions.body.permissions.canManage, true);
     assert.equal(permissions.body.permissions.canAnnounce, true);
     assert.equal(permissions.body.permissions.canExport, true);
+
+    if (label === "postgres" && invitedMemberHeaders) {
+      const memberPermissions = await request(baseUrl, `/api/tasks/${createdTaskId}/permissions`, {
+        headers: invitedMemberHeaders,
+      });
+      assert.equal(memberPermissions.body.permissions.authenticated, true);
+      assert.equal(memberPermissions.body.permissions.canRead, true);
+      assert.equal(memberPermissions.body.permissions.canManage, false);
+      assert.equal(memberPermissions.body.permissions.canAnnounce, false);
+      assert.equal(memberPermissions.body.permissions.canExport, false);
+      assert.equal(memberPermissions.body.permissions.role, "guest");
+    }
 
     const edited = await request(baseUrl, `/api/tasks/${createdTaskId}`, {
       method: "PATCH",

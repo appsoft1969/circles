@@ -1470,6 +1470,27 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   const [query, setQuery] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
   const [announcementPriority, setAnnouncementPriority] = useState("normal");
+  const [permissions, setPermissions] = useState(null);
+  const [permissionError, setPermissionError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setPermissions(null);
+    setPermissionError("");
+
+    api(`/api/tasks/${task.id}/permissions`)
+      .then((data) => {
+        if (!cancelled) setPermissions(data.permissions);
+      })
+      .catch((error) => {
+        if (!cancelled) setPermissionError(error.message);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [task.id]);
+
   const visibleResponses = task.responses.filter((response) => {
     const matchesFilter =
       filter === "all" ||
@@ -1481,6 +1502,10 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   });
 
   async function patchResponse(response, patch) {
+    if (!canManage) {
+      setToast("只有主揪或管理者可以更新狀態");
+      return;
+    }
     const data = await api(`/api/responses/${response.id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -1489,6 +1514,10 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   }
 
   async function toggleStatus() {
+    if (!canManage) {
+      setToast("只有主揪或管理者可以關閉事項");
+      return;
+    }
     const next = task.status === "open" ? "closed" : "open";
     const data = await api(`/api/tasks/${task.id}/status`, {
       method: "PATCH",
@@ -1499,6 +1528,10 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   }
 
   async function publishAnnouncement() {
+    if (!canAnnounce) {
+      setToast("只有主揪或管理者可以發布公告");
+      return;
+    }
     if (!announcementBody.trim()) return;
     const data = await api(`/api/tasks/${task.id}/announcements`, {
       method: "POST",
@@ -1515,18 +1548,38 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   }
 
   const meta = templateMeta[task.template] ?? templateMeta.group_buy;
+  const permissionReady = Boolean(permissions) || Boolean(permissionError);
+  const canManage = Boolean(permissions?.canManage);
+  const canAnnounce = Boolean(permissions?.canAnnounce);
+  const canExport = Boolean(permissions?.canExport);
+  const modeLabel = !permissionReady ? "確認權限" : canManage ? "管理模式" : "成員查看";
 
   return (
     <>
       <Topbar title={task.title} subtitle={`${task.circleName} · ${meta.label}`} onBack={() => go("dashboard")} />
       <section className="manage-head">
         <span className={`status ${task.status}`}>{task.status === "open" ? "進行中" : "已關閉"}</span>
+        <span className={`role-badge ${canManage ? "manager" : ""}`}>{modeLabel}</span>
         <span>截止 {task.deadlineAt ? new Date(task.deadlineAt).toLocaleString("zh-TW", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "未設定"}</span>
       </section>
+      {permissionError ? (
+        <section className="permission-note">
+          <ShieldCheck size={17} />
+          <span>無法讀取管理權限：{permissionError}</span>
+        </section>
+      ) : null}
       <section className="action-row">
-        <button type="button" onClick={() => shareTask(task)}><Share2 size={18} />分享填單連結</button>
-        <a href={`/api/tasks/${task.id}/export.csv`}><Download size={18} />匯出 CSV</a>
-        <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />預覽填單</button>
+        {!permissionReady ? (
+          <button type="button" disabled><Loader2 className="spin" size={18} />確認權限</button>
+        ) : canManage ? (
+          <>
+            <button type="button" onClick={() => shareTask(task)}><Share2 size={18} />分享填單連結</button>
+            {canExport ? <a href={`/api/tasks/${task.id}/export.csv`}><Download size={18} />匯出 CSV</a> : null}
+            <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />預覽填單</button>
+          </>
+        ) : (
+          <button type="button" onClick={() => go("join", { taskId: task.id })}><ExternalLink size={18} />填寫 / 留言</button>
+        )}
       </section>
       <section className="metric-grid">
         <Metric value={task.stats.responses} label="回覆" />
@@ -1534,30 +1587,32 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
         <Metric value={task.stats.unpaid + task.stats.review} label="待付款" alert />
         <Metric value={task.stats.pending} label={task.template === "activity" ? "待確認/參加" : "待處理"} />
       </section>
-      <TaskEditPanel task={task} setToast={setToast} updateTask={updateTask} />
-      {task.template === "interest_check" ? (
+      {canManage ? <TaskEditPanel task={task} setToast={setToast} updateTask={updateTask} /> : null}
+      {canManage && task.template === "interest_check" ? (
         <InterestConversionPanel task={task} go={go} setToast={setToast} updateTask={updateTask} />
       ) : null}
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
-        <div className="publish-box">
-          <textarea
-            value={announcementBody}
-            onChange={(event) => setAnnouncementBody(event.target.value)}
-            placeholder="例如：飲料到了請到前台自取，或今晚 KTV 地點改到西門。"
-          />
-          <div className="publish-actions">
-            <select value={announcementPriority} onChange={(event) => setAnnouncementPriority(event.target.value)} aria-label="公告重要性">
-              <option value="normal">一般</option>
-              <option value="important">重要</option>
-              <option value="urgent">緊急</option>
-            </select>
-            <button type="button" onClick={publishAnnouncement}>
-              <Megaphone size={18} />
-              發布公告
-            </button>
+        {canAnnounce ? (
+          <div className="publish-box">
+            <textarea
+              value={announcementBody}
+              onChange={(event) => setAnnouncementBody(event.target.value)}
+              placeholder="例如：飲料到了請到前台自取，或今晚 KTV 地點改到西門。"
+            />
+            <div className="publish-actions">
+              <select value={announcementPriority} onChange={(event) => setAnnouncementPriority(event.target.value)} aria-label="公告重要性">
+                <option value="normal">一般</option>
+                <option value="important">重要</option>
+                <option value="urgent">緊急</option>
+              </select>
+              <button type="button" onClick={publishAnnouncement}>
+                <Megaphone size={18} />
+                發布公告
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
         <TaskDiscussion task={task} />
       </section>
       <section className="filter-bar">
@@ -1587,40 +1642,59 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
               {response.note ? <small>{response.note}</small> : null}
             </div>
             <div className="status-controls">
-              <button
-                className={`pill ${response.paymentStatus}`}
-                type="button"
-                onClick={() =>
-                  patchResponse(response, {
-                    paymentStatus:
-                      response.paymentStatus === "unpaid" ? "review" : response.paymentStatus === "review" ? "paid" : "unpaid",
-                  })
-                }
-              >
-                {paymentLabels[response.paymentStatus] ?? response.paymentStatus}
-              </button>
-              <button
-                className={`pill ${response.fulfillmentStatus}`}
-                type="button"
-                onClick={() =>
-                  patchResponse(response, {
-                    fulfillmentStatus: response.fulfillmentStatus === "picked_up" || response.fulfillmentStatus === "completed" ? "pending" : task.template === "activity" ? "completed" : "picked_up",
-                  })
-                }
-              >
-                {fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}
-              </button>
+              {canManage ? (
+                <>
+                  <button
+                    className={`pill ${response.paymentStatus}`}
+                    type="button"
+                    onClick={() =>
+                      patchResponse(response, {
+                        paymentStatus:
+                          response.paymentStatus === "unpaid" ? "review" : response.paymentStatus === "review" ? "paid" : "unpaid",
+                      })
+                    }
+                  >
+                    {paymentLabels[response.paymentStatus] ?? response.paymentStatus}
+                  </button>
+                  <button
+                    className={`pill ${response.fulfillmentStatus}`}
+                    type="button"
+                    onClick={() =>
+                      patchResponse(response, {
+                        fulfillmentStatus: response.fulfillmentStatus === "picked_up" || response.fulfillmentStatus === "completed" ? "pending" : task.template === "activity" ? "completed" : "picked_up",
+                      })
+                    }
+                  >
+                    {fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className={`pill read-only ${response.paymentStatus}`}>{paymentLabels[response.paymentStatus] ?? response.paymentStatus}</span>
+                  <span className={`pill read-only ${response.fulfillmentStatus}`}>{fulfillmentLabels[response.fulfillmentStatus] ?? response.fulfillmentStatus}</span>
+                </>
+              )}
             </div>
           </article>
         ))}
       </section>
-      <div className="sticky-actions two">
-        <button className="secondary-button" type="button" onClick={() => go("join", { taskId: task.id })}>預覽成員填單</button>
-        <button className="primary-button orange" type="button" onClick={toggleStatus}>
-          <CalendarClock size={18} />
-          {task.status === "open" ? "關閉事項" : "重新開放"}
-        </button>
-      </div>
+      {!permissionReady ? (
+        <div className="sticky-actions">
+          <button className="primary-button" type="button" disabled><Loader2 className="spin" size={18} />確認權限</button>
+        </div>
+      ) : canManage ? (
+        <div className="sticky-actions two">
+          <button className="secondary-button" type="button" onClick={() => go("join", { taskId: task.id })}>預覽成員填單</button>
+          <button className="primary-button orange" type="button" onClick={toggleStatus}>
+            <CalendarClock size={18} />
+            {task.status === "open" ? "關閉事項" : "重新開放"}
+          </button>
+        </div>
+      ) : (
+        <div className="sticky-actions">
+          <button className="primary-button green" type="button" onClick={() => go("join", { taskId: task.id })}>填寫 / 留言</button>
+        </div>
+      )}
     </>
   );
 }

@@ -1262,7 +1262,9 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     if (!task) return null;
 
     const profile = await resolveProfile(actor);
+    if (!profile) throw new StoreError(401, "Profile authentication required");
     const membership = profile ? await getMembership(task.circle_id, profile.id) : null;
+    if (!membership) throw new StoreError(403, "Circle membership required");
     const canManage =
       Boolean(profile) &&
       (task.created_by_profile_id === profile.id || ["owner", "admin"].includes(membership?.role));
