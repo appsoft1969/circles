@@ -714,6 +714,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [error, setError] = useState("");
   const circleName = circle?.name ?? currentMembership?.circleName ?? "圈子成員";
   const inviteSettingsSummary = `${membershipRoleLabels[inviteRole] ?? inviteRole} · ${Math.max(1, Number(maxUses || 30))} 次 · ${Math.max(1, Number(expireDays || 30))} 天`;
+  const onlyOwnerSoFar = canManage && members.length <= 1;
 
   async function loadMembers() {
     if (!circleId) return;
@@ -811,7 +812,13 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         <span className="member-hero-icon"><Users size={22} /></span>
         <div>
           <h1>{circleName}</h1>
-          <p>{canManage ? "要加人時，先建立邀請連結再分享出去；角色或期限有需要再調整。" : "這裡看得到圈內有哪些人，邀請與角色調整由圈主管理。"}</p>
+          <p>
+            {canManage
+              ? onlyOwnerSoFar
+                ? "圈子已建立。接下來先邀請熟人進來，之後就能在這裡一起建立事項與統計。"
+                : "要加人時，先建立邀請連結再分享出去；角色或期限有需要再調整。"
+              : "這裡看得到圈內有哪些人，邀請與角色調整由圈主管理。"}
+          </p>
         </div>
       </section>
 
@@ -828,8 +835,12 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                 <div className="wizard-step-head">
                   <span className="step-pill">邀請</span>
                   <div>
-                    <h2>要加人進來嗎？</h2>
-                    <p>先用目前設定建立邀請。建立後會直接打開分享面板，方便貼到你常用的群組。</p>
+                    <h2>{onlyOwnerSoFar ? "先邀請熟人進來" : "要加人進來嗎？"}</h2>
+                    <p>
+                      {onlyOwnerSoFar
+                        ? "建立邀請後會直接打開分享面板，你可以貼到常用的群組，讓大家自己加入。"
+                        : "先用目前設定建立邀請。建立後會直接打開分享面板，方便貼到你常用的群組。"}
+                    </p>
                   </div>
                 </div>
                 <button className="primary-button" type="button" onClick={createInvite} disabled={busy}>
