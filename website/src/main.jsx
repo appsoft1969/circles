@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowLeft,
+  Bell,
+  BellDot,
   CalendarClock,
   Check,
   ChevronRight,
@@ -153,7 +155,7 @@ function shareCircleInvite(invite, setToast) {
 }
 
 function App() {
-  const [state, setState] = useState({ loading: true, circles: [], tasks: [], session: null, authProviders: [] });
+  const [state, setState] = useState({ loading: true, circles: [], tasks: [], notifications: [], session: null, authProviders: [] });
   const [route, setRoute] = useState({ name: "dashboard" });
   const [toast, setToast] = useState("");
 
@@ -163,8 +165,18 @@ function App() {
       api("/api/session"),
       api("/api/auth/providers"),
     ]);
+    let notifications = [];
+    if (session.authenticated) {
+      try {
+        const notificationData = await api("/api/notifications");
+        notifications = notificationData.notifications ?? [];
+      } catch {
+        notifications = [];
+      }
+    }
     return {
       ...data,
+      notifications,
       session,
       authProviders: auth.providers ?? [],
       loading: false,
@@ -246,6 +258,7 @@ function App() {
       <Dashboard
         circles={state.circles}
         tasks={state.tasks}
+        notifications={state.notifications}
         session={state.session}
         authProviders={state.authProviders}
         go={go}
@@ -282,6 +295,26 @@ function App() {
         updateTask={updateTask}
       />
     ) : null,
+    notifications: (
+      <NotificationCenter
+        notifications={state.notifications}
+        circles={state.circles}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
+    circleChat: (
+      <CircleChat
+        circle={state.circles.find((circle) => circle.id === route.circleId)}
+        circleId={route.circleId}
+        initialConversationId={route.conversationId}
+        session={state.session}
+        go={go}
+        refresh={refresh}
+        setToast={setToast}
+      />
+    ),
     members: (
       <CircleMembers
         circle={state.circles.find((circle) => circle.id === route.circleId)}
@@ -354,7 +387,7 @@ function Topbar({ title, subtitle, onBack, action }) {
   );
 }
 
-function Dashboard({ circles, tasks, session, authProviders, go, shareTask, refresh, setToast }) {
+function Dashboard({ circles, tasks, notifications, session, authProviders, go, shareTask, refresh, setToast }) {
   const activeTasks = tasks.filter((task) => task.status === "open");
   const unpaid = tasks.reduce((sum, task) => sum + task.stats.unpaid + task.stats.review, 0);
   const templates = Object.entries(templateMeta);
@@ -389,6 +422,12 @@ function Dashboard({ circles, tasks, session, authProviders, go, shareTask, refr
         <Metric value={unpaid} label="待付款/確認" alert />
         <Metric value={tasks.length} label="事項紀錄" />
       </section>
+
+      <CommunicationPanel
+        notifications={notifications}
+        session={session}
+        go={go}
+      />
 
       <section className="section">
         <SectionTitle title="常用模板" action="建立事項" onClick={() => go("templates")} />
@@ -495,6 +534,46 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
               <small>待設定</small>
             </button>
           )
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CommunicationPanel({ notifications = [], session, go }) {
+  const memberships = session?.memberships ?? [];
+  if (!session?.authenticated || memberships.length === 0) return null;
+
+  const uniqueMemberships = memberships.filter(
+    (membership, index, list) => list.findIndex((item) => item.circleName === membership.circleName) === index,
+  );
+  const visibleMemberships = uniqueMemberships.slice(0, 4);
+  const unreadCount = notifications.filter((notification) => !notification.readAt).length;
+
+  return (
+    <section className="section communication-section">
+      <SectionTitle
+        title="通知與討論"
+        action={unreadCount > 0 ? `未讀 ${unreadCount}` : "看通知"}
+        onClick={() => go("notifications")}
+      />
+      <div className="communication-grid">
+        <button className={`communication-card ${unreadCount > 0 ? "unread" : ""}`} type="button" onClick={() => go("notifications")}>
+          <span className="communication-icon">{unreadCount > 0 ? <BellDot size={20} /> : <Bell size={20} />}</span>
+          <strong>{unreadCount > 0 ? `${unreadCount} 則未讀` : "通知中心"}</strong>
+          <small>圈內訊息與提醒</small>
+        </button>
+        {visibleMemberships.map((membership) => (
+          <button
+            className="communication-card"
+            type="button"
+            key={membership.id}
+            onClick={() => go("circleChat", { circleId: membership.circleId })}
+          >
+            <span className="communication-icon"><MessageCircle size={20} /></span>
+            <strong>{membership.circleName}</strong>
+            <small>{membershipRoleLabels[membership.role] ?? membership.role} · 討論</small>
+          </button>
         ))}
       </div>
     </section>
@@ -816,6 +895,240 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
               </button>
             </div>
           )}
+        </>
+      )}
+    </>
+  );
+}
+
+function NotificationCenter({ notifications = [], circles = [], go, refresh, setToast }) {
+  const circleNames = new Map(circles.map((circle) => [circle.id, circle.name]));
+
+  async function openNotification(notification) {
+    try {
+      if (!notification.readAt) {
+        await api(`/api/notifications/${notification.id}/read`, { method: "PATCH" });
+        await refresh();
+      }
+      if (notification.data?.conversationId && notification.circleId) {
+        go("circleChat", { circleId: notification.circleId, conversationId: notification.data.conversationId });
+        return;
+      }
+      if (notification.taskId) {
+        go("manage", { taskId: notification.taskId });
+        return;
+      }
+      if (notification.circleId) {
+        go("circleChat", { circleId: notification.circleId });
+        return;
+      }
+      setToast("通知已讀");
+    } catch (error) {
+      setToast(error.message);
+    }
+  }
+
+  return (
+    <>
+      <Topbar title="通知中心" subtitle="圈內訊息與提醒" onBack={() => go("dashboard")} />
+      <section className="section notification-list-section">
+        {notifications.length === 0 ? <p className="empty-note">目前沒有通知。</p> : null}
+        <div className="notification-list">
+          {notifications.map((notification) => (
+            <button
+              className={`notification-row ${notification.readAt ? "" : "unread"}`}
+              type="button"
+              key={notification.id}
+              onClick={() => openNotification(notification)}
+            >
+              <span className="notification-icon">{notification.readAt ? <Bell size={18} /> : <BellDot size={18} />}</span>
+              <span>
+                <strong>{notification.title}</strong>
+                <small>{circleNames.get(notification.circleId) ?? "圈內"} · {formatDateTime(notification.createdAt)}</small>
+                <em>{notification.body}</em>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </>
+  );
+}
+
+function CircleChat({ circle, circleId, initialConversationId, session, go, refresh, setToast }) {
+  const membership = session?.memberships?.find((item) => item.circleId === circleId);
+  const circleName = circle?.name ?? membership?.circleName ?? "圈內討論";
+  const [conversations, setConversations] = useState([]);
+  const [selectedConversationId, setSelectedConversationId] = useState(initialConversationId ?? "");
+  const [messages, setMessages] = useState([]);
+  const [messageBody, setMessageBody] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  const selectedConversation = conversations.find((conversation) => conversation.id === selectedConversationId) ?? null;
+
+  async function loadConversations(preferredConversationId = initialConversationId) {
+    if (!circleId) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await api(`/api/circles/${circleId}/conversations`);
+      const nextConversations = data.conversations ?? [];
+      setConversations(nextConversations);
+      const nextSelected =
+        nextConversations.find((conversation) => conversation.id === preferredConversationId) ??
+        nextConversations.find((conversation) => conversation.id === selectedConversationId) ??
+        nextConversations[0] ??
+        null;
+      setSelectedConversationId(nextSelected?.id ?? "");
+    } catch (loadError) {
+      setError(loadError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadMessages(conversationId = selectedConversationId) {
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+    setMessagesLoading(true);
+    try {
+      const data = await api(`/api/conversations/${conversationId}/messages`);
+      const nextMessages = data.messages ?? [];
+      setMessages(nextMessages);
+      const latestOtherMessage = [...nextMessages].reverse().find((message) => message.authorProfileId !== session?.profile?.id);
+      if (latestOtherMessage) {
+        await api(`/api/messages/${latestOtherMessage.id}/read`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }).catch(() => {});
+      }
+    } catch (loadError) {
+      setToast(loadError.message);
+    } finally {
+      setMessagesLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadConversations(initialConversationId);
+  }, [circleId, initialConversationId]);
+
+  useEffect(() => {
+    loadMessages(selectedConversationId);
+  }, [selectedConversationId]);
+
+  async function createConversation() {
+    try {
+      const data = await api(`/api/circles/${circleId}/conversations`, {
+        method: "POST",
+        body: JSON.stringify({
+          type: "circle",
+          title: `${circleName} 討論`,
+        }),
+      });
+      setConversations((current) => [data.conversation, ...current]);
+      setSelectedConversationId(data.conversation.id);
+      setToast("已建立圈內討論");
+    } catch (createError) {
+      setToast(createError.message);
+    }
+  }
+
+  async function sendMessage() {
+    if (!selectedConversationId || !messageBody.trim() || sending) return;
+    setSending(true);
+    try {
+      const data = await api(`/api/conversations/${selectedConversationId}/messages`, {
+        method: "POST",
+        body: JSON.stringify({ body: messageBody.trim() }),
+      });
+      setMessages((current) => [...current, data.message]);
+      setMessageBody("");
+      setConversations((current) =>
+        current.map((conversation) => (conversation.id === data.conversation.id ? data.conversation : conversation)),
+      );
+      await refresh();
+    } catch (sendError) {
+      setToast(sendError.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <>
+      <Topbar title="圈內討論" subtitle={circleName} onBack={() => go("dashboard")} />
+      {loading ? (
+        <section className="section"><p className="empty-note">讀取討論...</p></section>
+      ) : error ? (
+        <section className="section"><p className="empty-note">無法讀取討論：{error}</p></section>
+      ) : (
+        <>
+          <section className="section conversation-section">
+            <SectionTitle title="討論串" action="新增" onClick={createConversation} />
+            {conversations.length === 0 ? (
+              <div className="empty-action">
+                <p className="empty-note">目前沒有討論。</p>
+                <button className="primary-button" type="button" onClick={createConversation}>
+                  <MessageCircle size={18} />
+                  建立圈內討論
+                </button>
+              </div>
+            ) : (
+              <div className="conversation-list">
+                {conversations.map((conversation) => (
+                  <button
+                    className={`conversation-row ${conversation.id === selectedConversationId ? "active" : ""}`}
+                    type="button"
+                    key={conversation.id}
+                    onClick={() => setSelectedConversationId(conversation.id)}
+                  >
+                    <span className="conversation-icon"><MessageCircle size={18} /></span>
+                    <span>
+                      <strong>{conversation.title}</strong>
+                      <small>{conversation.type === "task" ? "事項討論" : "圈內討論"} · {formatDateTime(conversation.updatedAt)}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {selectedConversation ? (
+            <section className="section message-section">
+              <SectionTitle title={selectedConversation.title} />
+              {messagesLoading ? <p className="empty-note">讀取訊息...</p> : null}
+              {!messagesLoading && messages.length === 0 ? <p className="empty-note">目前沒有訊息。</p> : null}
+              <div className="message-list">
+                {messages.map((message) => (
+                  <article
+                    className={`message-bubble ${message.authorProfileId === session?.profile?.id ? "mine" : ""}`}
+                    key={message.id}
+                  >
+                    <strong>{message.authorName || "圈內成員"}</strong>
+                    <p>{message.body}</p>
+                    <small>{formatDateTime(message.createdAt)}</small>
+                  </article>
+                ))}
+              </div>
+              <div className="message-composer">
+                <textarea
+                  value={messageBody}
+                  onChange={(event) => setMessageBody(event.target.value)}
+                  placeholder="輸入圈內訊息"
+                />
+                <button className="primary-button" type="button" onClick={sendMessage} disabled={sending || !messageBody.trim()}>
+                  {sending ? <Loader2 className="spin" size={18} /> : <Send size={18} />}
+                  送出
+                </button>
+              </div>
+            </section>
+          ) : null}
         </>
       )}
     </>

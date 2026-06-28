@@ -408,6 +408,23 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.equal(message.status, 201);
       assert.equal(message.body.message.authorName, "Kevin");
 
+      if (invitedMemberHeaders) {
+        const memberNotifications = await request(baseUrl, "/api/notifications", { headers: invitedMemberHeaders });
+        const memberNotification = memberNotifications.body.notifications.find(
+          (notification) => notification.messageId === message.body.message.id,
+        );
+        assert.ok(memberNotification, `${label}: expected invited member notification for new message`);
+        assert.equal(memberNotification.readAt, null);
+
+        const readNotification = await request(baseUrl, `/api/notifications/${memberNotification.id}/read`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+          body: JSON.stringify({}),
+        });
+        assert.equal(readNotification.body.notification.id, memberNotification.id);
+        assert.ok(readNotification.body.notification.readAt, `${label}: expected notification read timestamp`);
+      }
+
       const messages = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {
         headers: sessionHeaders,
       });
