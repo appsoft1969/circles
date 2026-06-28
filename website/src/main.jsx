@@ -597,6 +597,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
   const [maxUses, setMaxUses] = useState(30);
   const [expireDays, setExpireDays] = useState(30);
   const [showInviteSettings, setShowInviteSettings] = useState(false);
+  const [confirmRemoveId, setConfirmRemoveId] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -676,6 +677,7 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
         setMembers((current) => current.map((item) => (item.id === data.member.id ? data.member : item)));
       } else {
         setMembers((current) => current.filter((item) => item.id !== data.member.id));
+        setConfirmRemoveId("");
       }
       await refresh();
       setToast("成員設定已更新");
@@ -798,13 +800,29 @@ function CircleMembers({ circle, circleId, session, go, refresh, setToast }) {
                       <span className="role-badge">{membershipRoleLabels[member.role] ?? member.role}</span>
                     )}
                     {editable ? (
-                      <button
-                        className="secondary-button compact danger"
-                        type="button"
-                        onClick={() => updateMember(member, { status: "removed" })}
-                      >
-                        移除
-                      </button>
+                      confirmRemoveId === member.id ? (
+                        <div className="member-remove-confirm">
+                          <span>確定要把 {member.displayName} 移出圈子嗎？</span>
+                          <button className="secondary-button compact" type="button" onClick={() => setConfirmRemoveId("")}>
+                            先不要
+                          </button>
+                          <button
+                            className="secondary-button compact danger"
+                            type="button"
+                            onClick={() => updateMember(member, { status: "removed" })}
+                          >
+                            確定移除
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="secondary-button compact danger"
+                          type="button"
+                          onClick={() => setConfirmRemoveId(member.id)}
+                        >
+                          移除
+                        </button>
+                      )
                     ) : null}
                   </article>
                 );
