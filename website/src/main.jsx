@@ -295,6 +295,7 @@ function App() {
     manage: selectedTask ? (
       <TaskManage
         task={selectedTask}
+        session={state.session}
         go={go}
         shareTask={shareTask}
         setToast={setToast}
@@ -2435,11 +2436,12 @@ function InterestConversionPanel({ task, go, setToast, updateTask }) {
   );
 }
 
-function TaskManage({ task, go, shareTask, setToast, updateTask }) {
+function TaskManage({ task, session, go, shareTask, setToast, updateTask }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [announcementBody, setAnnouncementBody] = useState("");
   const [announcementPriority, setAnnouncementPriority] = useState("normal");
+  const [announcementRequiresConfirmation, setAnnouncementRequiresConfirmation] = useState(false);
   const [conversationBusy, setConversationBusy] = useState(false);
   const [permissions, setPermissions] = useState(null);
   const [permissionError, setPermissionError] = useState("");
@@ -2510,12 +2512,21 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
         title: task.template === "activity" ? "活動提醒" : "事項公告",
         body: announcementBody.trim(),
         priority: announcementPriority,
+        requiresConfirmation: announcementRequiresConfirmation,
       }),
     });
     updateTask(data.task);
     setAnnouncementBody("");
     setAnnouncementPriority("normal");
+    setAnnouncementRequiresConfirmation(false);
     setToast("公告已發布");
+  }
+
+  function changeAnnouncementPriority(priority) {
+    setAnnouncementPriority(priority);
+    if (priority === "important" || priority === "urgent") {
+      setAnnouncementRequiresConfirmation(true);
+    }
   }
 
   async function openTaskConversation() {
@@ -2604,7 +2615,7 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
               placeholder="例如：飲料到了請到前台自取，或今晚 KTV 地點改到西門。"
             />
             <div className="publish-actions">
-              <select value={announcementPriority} onChange={(event) => setAnnouncementPriority(event.target.value)} aria-label="公告重要性">
+              <select value={announcementPriority} onChange={(event) => changeAnnouncementPriority(event.target.value)} aria-label="公告重要性">
                 <option value="normal">一般</option>
                 <option value="important">重要</option>
                 <option value="urgent">緊急</option>
@@ -2614,9 +2625,20 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
                 發布公告
               </button>
             </div>
+            <label className="confirmation-toggle">
+              <input
+                type="checkbox"
+                checked={announcementRequiresConfirmation}
+                onChange={(event) => setAnnouncementRequiresConfirmation(event.target.checked)}
+              />
+              <span>
+                <strong>要大家按「我知道了」嗎？</strong>
+                <small>適合臨時改地點、取餐通知或重要提醒，主揪可以看到確認進度。</small>
+              </span>
+            </label>
           </div>
         ) : null}
-        <TaskDiscussion task={task} />
+        <TaskDiscussion task={task} session={session} setToast={setToast} updateTask={updateTask} />
       </section>
       <section className="filter-bar">
         {[
@@ -2702,9 +2724,28 @@ function TaskManage({ task, go, shareTask, setToast, updateTask }) {
   );
 }
 
-function TaskDiscussion({ task, compact = false }) {
+function TaskDiscussion({ task, compact = false, session, setToast, updateTask }) {
   const announcements = task.announcements ?? [];
   const comments = task.comments ?? [];
+  const [confirmingId, setConfirmingId] = useState("");
+
+  async function confirmAnnouncement(announcement) {
+    if (!session?.authenticated) {
+      setToast?.("先登入後，就能幫這則公告按收到");
+      return;
+    }
+    if (announcement.viewerReceipt?.confirmedAt || confirmingId) return;
+    setConfirmingId(announcement.id);
+    try {
+      const data = await api(`/api/announcements/${announcement.id}/confirm`, { method: "POST" });
+      updateTask?.(data.task);
+      setToast?.("已幫你確認收到");
+    } catch (error) {
+      setToast?.(error.message);
+    } finally {
+      setConfirmingId("");
+    }
+  }
 
   return (
     <div className={`discussion-list ${compact ? "compact" : ""}`}>
@@ -2723,6 +2764,25 @@ function TaskDiscussion({ task, compact = false }) {
             </header>
             <p>{announcement.body}</p>
             <small>{announcement.authorName || "主揪"} · {formatDateTime(announcement.publishedAt)}</small>
+            {announcement.requiresConfirmation ? (
+              <div className="announcement-confirmation">
+                <span>
+                  已確認 {announcement.receiptSummary?.confirmed ?? 0}/{announcement.receiptSummary?.total ?? 0}
+                </span>
+                {session?.authenticated ? (
+                  <button
+                    type="button"
+                    onClick={() => confirmAnnouncement(announcement)}
+                    disabled={Boolean(announcement.viewerReceipt?.confirmedAt) || confirmingId === announcement.id}
+                  >
+                    {confirmingId === announcement.id ? <Loader2 className="spin" size={15} /> : <Check size={15} />}
+                    {announcement.viewerReceipt?.confirmedAt ? "你已確認" : "我知道了"}
+                  </button>
+                ) : (
+                  <em>登入後可按收到</em>
+                )}
+              </div>
+            ) : null}
           </div>
         </article>
       ))}
@@ -2950,7 +3010,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
       ) : null}
       <section className="section discussion-section">
         <SectionTitle title="公告與討論" />
-        <TaskDiscussion task={task} compact />
+        <TaskDiscussion task={task} compact session={session} setToast={setToast} updateTask={updateTask} />
         <button className="editor-panel-toggle" type="button" onClick={() => setShowComment((current) => !current)}>
           <span>
             <strong>留言給主揪</strong>

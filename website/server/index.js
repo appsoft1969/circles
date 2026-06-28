@@ -286,7 +286,7 @@ app.patch("/api/tasks/:taskId", route(async (req, res) => {
 }));
 
 app.get("/api/share/:token", route(async (req, res) => {
-  const task = await store.getTaskByShareToken(req.params.token);
+  const task = await store.getTaskByShareToken(req.params.token, actorFromRequest(req));
   if (!task) return res.status(404).json({ error: "Share link not found" });
   res.json({ task });
 }));
@@ -318,6 +318,12 @@ app.post("/api/tasks/:taskId/announcements", route(async (req, res) => {
   });
   if (!task) return res.status(404).json({ error: "Task not found" });
   res.status(201).json({ task });
+}));
+
+app.post("/api/announcements/:announcementId/confirm", route(async (req, res) => {
+  const task = await store.confirmAnnouncement(req.params.announcementId, actorFromRequest(req));
+  if (!task) return res.status(404).json({ error: "Announcement not found" });
+  res.json({ task });
 }));
 
 app.post("/api/tasks/:taskId/comments", route(async (req, res) => {

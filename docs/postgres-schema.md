@@ -116,7 +116,7 @@ Phased product mapping:
 
 This keeps the product from becoming a chat app clone while still supporting in-app circle communication.
 
-Current API support has started Phase 2 and Phase 3 at the data/API layer: device registration, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. Real push delivery, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
+Current API support has started Phase 2 and Phase 3 at the data/API layer: announcement confirmation receipts, device registration, notification rows, per-notification and bulk read state, conversations, messages, and read receipts exist in Postgres. Real push delivery, mute rules, and Supabase Realtime/mobile subscriptions are still future work.
 
 ### Attachments And Audit
 
@@ -202,7 +202,8 @@ The initial migration has been verified locally with:
 - Postgres API interest-check conversion through `POST /api/tasks/:taskId/convert`, requiring the task creator or active circle `owner` / `admin`.
 - Postgres API share responses through `POST /api/share/:token/responses`.
 - Postgres API status updates through `PATCH /api/responses/:responseId` and `PATCH /api/tasks/:taskId/status`, requiring task-manager authorization.
-- Postgres API task announcements through `POST /api/tasks/:taskId/announcements`, requiring task-manager authorization and writing announcement receipts, in-app notifications, and a mirrored task-conversation message.
+- Postgres API task announcements through `POST /api/tasks/:taskId/announcements`, requiring task-manager authorization and writing announcement receipts, in-app notifications, optional confirmation requirements, and a mirrored task-conversation message.
+- Postgres API announcement confirmation through `POST /api/announcements/:announcementId/confirm`, requiring active circle membership and updating the matching notification read state.
 - Postgres API task comments through `POST /api/tasks/:taskId/comments`.
 - Postgres API conversation/message scaffolding through circle conversations, conversation messages, and message read receipts.
 - Postgres API push scaffolding through device registration, notification listing, per-notification read state, and bulk notification read state.

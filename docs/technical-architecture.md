@@ -216,6 +216,7 @@ Current Postgres store status:
 - `PATCH /api/responses/:responseId`: implemented for organizer payment/fulfillment updates with task-manager authorization.
 - `PATCH /api/tasks/:taskId/status`: implemented with task-manager authorization.
 - `POST /api/tasks/:taskId/announcements`: implemented with task-manager authorization.
+- `POST /api/announcements/:announcementId/confirm`: implemented in Postgres with active circle-membership requirement.
 - `POST /api/tasks/:taskId/comments`: implemented.
 - `GET /api/tasks/:taskId/export.csv`: implemented with task-manager authorization.
 - `GET /api/circles/:circleId/conversations`: implemented in Postgres.
@@ -318,7 +319,7 @@ Opens or closes a task.
 
 ### `POST /api/tasks/:taskId/announcements`
 
-Publishes a task-level announcement for organizer notices. In Postgres, this also creates announcement receipts, queues in-app notifications for other active circle members, and mirrors the announcement into the task conversation so follow-up discussion has a clear context.
+Publishes a task-level announcement for organizer notices. In Postgres, this also creates announcement receipts, queues in-app notifications for other active circle members, and mirrors the announcement into the task conversation so follow-up discussion has a clear context. Announcements can require member confirmation through `requiresConfirmation`; members confirm with `POST /api/announcements/:announcementId/confirm`, which updates the receipt and marks the matching notification read.
 
 ### `POST /api/tasks/:taskId/comments`
 

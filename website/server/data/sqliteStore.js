@@ -1227,6 +1227,7 @@ export function createSqliteStore({ dbPath = defaultDbPath } = {}) {
     updateResponse,
     updateTaskStatus,
     createTaskAnnouncement,
+    confirmAnnouncement: postgresOnlyRealtime,
     createTaskComment,
     listConversations: postgresOnlyRealtime,
     createConversation: postgresOnlyRealtime,

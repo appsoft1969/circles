@@ -407,12 +407,15 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         title: "取餐提醒",
         body: `${label} 測試公告：飲料到前台後請自取。`,
         priority: "important",
+        requiresConfirmation: true,
       }),
     });
     assert.equal(announced.status, 201);
     assert.equal(announced.body.task.announcements.length, 1);
     assert.equal(announced.body.task.announcements[0].priority, "important");
+    assert.equal(announced.body.task.announcements[0].requiresConfirmation, true);
     if (label === "postgres" && invitedMemberHeaders) {
+      assert.ok(announced.body.task.announcements[0].receiptSummary.total >= 1);
       const memberNotifications = await request(baseUrl, "/api/notifications", { headers: invitedMemberHeaders });
       const announcementNotification = memberNotifications.body.notifications.find(
         (notification) => notification.announcementId === announced.body.task.announcements[0].id,
@@ -422,6 +425,36 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
       assert.ok(announcementNotification.data.conversationId, `${label}: expected announcement notification conversationId`);
       assert.equal(announcementNotification.data.priority, "important");
       assert.equal(announcementNotification.readAt, null);
+
+      const readAllNotifications = await request(baseUrl, "/api/notifications/read-all", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+        body: JSON.stringify({}),
+      });
+      assert.equal(readAllNotifications.status, 200);
+      assert.ok(readAllNotifications.body.count >= 1, `${label}: expected bulk notification read count`);
+      assert.ok(
+        readAllNotifications.body.notifications.some(
+          (notification) => notification.announcementId === announced.body.task.announcements[0].id && notification.readAt,
+        ),
+        `${label}: expected announcement notification to be marked read in bulk`,
+      );
+
+      const confirmedAnnouncement = await request(
+        baseUrl,
+        `/api/announcements/${announced.body.task.announcements[0].id}/confirm`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
+          body: JSON.stringify({}),
+        },
+      );
+      assert.equal(confirmedAnnouncement.status, 200);
+      const confirmed = confirmedAnnouncement.body.task.announcements.find(
+        (announcement) => announcement.id === announced.body.task.announcements[0].id,
+      );
+      assert.ok(confirmed.viewerReceipt.confirmedAt, `${label}: expected viewer confirmation timestamp`);
+      assert.ok(confirmed.receiptSummary.confirmed >= 1, `${label}: expected confirmed receipt count`);
 
       const announcementConversations = await request(baseUrl, `/api/circles/${officeCircle.id}/conversations?taskId=${createdTaskId}`, {
         headers: sessionHeaders,
@@ -516,20 +549,6 @@ async function runApiFlow({ label, env, cleanupCreatedTask, cleanupCreatedPushTo
         });
         assert.equal(readNotification.body.notification.id, memberNotification.id);
         assert.ok(readNotification.body.notification.readAt, `${label}: expected notification read timestamp`);
-
-        const readAllNotifications = await request(baseUrl, "/api/notifications/read-all", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json", ...invitedMemberHeaders },
-          body: JSON.stringify({}),
-        });
-        assert.equal(readAllNotifications.status, 200);
-        assert.ok(readAllNotifications.body.count >= 1, `${label}: expected bulk notification read count`);
-        assert.ok(
-          readAllNotifications.body.notifications.some(
-            (notification) => notification.announcementId === announced.body.task.announcements[0].id && notification.readAt,
-          ),
-          `${label}: expected announcement notification to be marked read in bulk`,
-        );
       }
 
       const messages = await request(baseUrl, `/api/conversations/${conversation.body.conversation.id}/messages`, {

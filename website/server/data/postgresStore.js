@@ -142,6 +142,18 @@ function announcementFromRow(row) {
     publishedAt: toIso(row.published_at),
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
+    receiptSummary: {
+      total: Number(row.receipt_total_count || 0),
+      read: Number(row.receipt_read_count || 0),
+      confirmed: Number(row.receipt_confirmed_count || 0),
+    },
+    viewerReceipt: row.viewer_receipt_id
+      ? {
+          id: row.viewer_receipt_id,
+          readAt: toIso(row.viewer_receipt_read_at),
+          confirmedAt: toIso(row.viewer_receipt_confirmed_at),
+        }
+      : null,
   };
 }
 
@@ -1450,7 +1462,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     };
   }
 
-  async function hydrateTasks(taskRows) {
+  async function hydrateTasks(taskRows, { viewerProfileId = null } = {}) {
     if (taskRows.length === 0) return [];
 
     const taskIds = taskRows.map((task) => task.id);
@@ -1512,14 +1524,31 @@ export function createPostgresStore({ connectionString = defaultConnectionString
             a.pinned_at,
             a.published_at,
             a.created_at,
-            a.updated_at
+            a.updated_at,
+            COALESCE(receipt_counts.total_count, 0)::int AS receipt_total_count,
+            COALESCE(receipt_counts.read_count, 0)::int AS receipt_read_count,
+            COALESCE(receipt_counts.confirmed_count, 0)::int AS receipt_confirmed_count,
+            viewer_receipt.id::text AS viewer_receipt_id,
+            viewer_receipt.read_at AS viewer_receipt_read_at,
+            viewer_receipt.confirmed_at AS viewer_receipt_confirmed_at
           FROM announcements a
           LEFT JOIN profiles p ON p.id = a.author_profile_id
+          LEFT JOIN LATERAL (
+            SELECT
+              COUNT(*)::int AS total_count,
+              COUNT(ar.read_at)::int AS read_count,
+              COUNT(ar.confirmed_at)::int AS confirmed_count
+            FROM announcement_receipts ar
+            WHERE ar.announcement_id = a.id
+          ) receipt_counts ON true
+          LEFT JOIN announcement_receipts viewer_receipt
+            ON viewer_receipt.announcement_id = a.id
+           AND viewer_receipt.profile_id::text = $2
           WHERE a.task_id::text = ANY($1::text[])
             AND a.deleted_at IS NULL
           ORDER BY a.published_at DESC, a.created_at DESC
         `,
-        [taskIds],
+        [taskIds, viewerProfileId],
       ),
       pool.query(
         `
@@ -1604,19 +1633,24 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       `,
       [profile.id],
     );
-    return hydrateTasks(result.rows);
+    return hydrateTasks(result.rows, { viewerProfileId: profile.id });
   }
 
   async function getTask(taskId, actor = null) {
-    if (actor) await requireTaskReader(taskId, actor);
+    let viewerProfileId = null;
+    if (actor) {
+      const { profile } = await requireTaskReader(taskId, actor);
+      viewerProfileId = profile.id;
+    }
     const result = await pool.query(`${taskSelect} AND t.id::text = $1 LIMIT 1`, [taskId]);
-    const tasks = await hydrateTasks(result.rows);
+    const tasks = await hydrateTasks(result.rows, { viewerProfileId });
     return tasks[0] ?? null;
   }
 
-  async function getTaskByShareToken(token) {
+  async function getTaskByShareToken(token, actor = null) {
+    const viewerProfileId = actor ? (await resolveProfile(actor))?.id ?? null : null;
     const result = await pool.query(`${taskSelect} AND t.share_token = $1 LIMIT 1`, [token]);
-    const tasks = await hydrateTasks(result.rows);
+    const tasks = await hydrateTasks(result.rows, { viewerProfileId });
     return tasks[0] ?? null;
   }
 
@@ -2391,7 +2425,66 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     });
 
     if (!updatedTaskId) return null;
-    return getTask(updatedTaskId);
+    return getTask(updatedTaskId, body.actor);
+  }
+
+  async function confirmAnnouncement(announcementId, actor = {}) {
+    const taskId = await withTransaction(async (client) => {
+      const profile = await requireProfile(actor, client);
+      const targetResult = await client.query(
+        `
+          SELECT
+            a.id,
+            a.task_id::text
+          FROM announcements a
+          JOIN circle_memberships cm
+            ON cm.circle_id = a.circle_id
+           AND cm.profile_id = $2::uuid
+           AND cm.status = 'active'
+          WHERE a.id::text = $1
+            AND a.deleted_at IS NULL
+          LIMIT 1
+        `,
+        [announcementId, profile.id],
+      );
+      const target = targetResult.rows[0];
+      if (!target) return null;
+
+      await client.query(
+        `
+          INSERT INTO announcement_receipts (
+            announcement_id,
+            profile_id,
+            read_at,
+            confirmed_at
+          )
+          VALUES ($1, $2, now(), now())
+          ON CONFLICT (announcement_id, profile_id) DO UPDATE
+          SET read_at = COALESCE(announcement_receipts.read_at, now()),
+              confirmed_at = COALESCE(announcement_receipts.confirmed_at, now())
+        `,
+        [target.id, profile.id],
+      );
+      await client.query(
+        `
+          UPDATE notifications
+          SET read_at = COALESCE(read_at, now()),
+              status = CASE
+                WHEN status = 'queued' THEN 'read'::notification_status
+                ELSE status
+              END
+          WHERE announcement_id = $1
+            AND recipient_profile_id = $2
+            AND cancelled_at IS NULL
+        `,
+        [target.id, profile.id],
+      );
+
+      return target.task_id;
+    });
+
+    if (!taskId) return null;
+    return getTask(taskId, actor);
   }
 
   async function createTaskComment(taskId, body = {}) {
@@ -2832,7 +2925,19 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       [notificationId, profile.id],
     );
 
-    return result.rows[0] ? notificationFromRow(result.rows[0]) : null;
+    const notification = result.rows[0] ? notificationFromRow(result.rows[0]) : null;
+    if (notification?.announcementId) {
+      await pool.query(
+        `
+          UPDATE announcement_receipts
+          SET read_at = COALESCE(read_at, now())
+          WHERE announcement_id::text = $1
+            AND profile_id::text = $2
+        `,
+        [notification.announcementId, profile.id],
+      );
+    }
+    return notification;
   }
 
   async function markAllNotificationsRead(actor = {}) {
@@ -2867,7 +2972,21 @@ export function createPostgresStore({ connectionString = defaultConnectionString
       [profile.id],
     );
 
-    return result.rows.map(notificationFromRow);
+    const notifications = result.rows.map(notificationFromRow);
+    const announcementIds = notifications.map((notification) => notification.announcementId).filter(Boolean);
+    if (announcementIds.length > 0) {
+      await pool.query(
+        `
+          UPDATE announcement_receipts
+          SET read_at = COALESCE(read_at, now())
+          WHERE announcement_id::text = ANY($1::text[])
+            AND profile_id::text = $2
+        `,
+        [announcementIds, profile.id],
+      );
+    }
+
+    return notifications;
   }
 
   return {
@@ -2902,6 +3021,7 @@ export function createPostgresStore({ connectionString = defaultConnectionString
     updateResponse,
     updateTaskStatus,
     createTaskAnnouncement,
+    confirmAnnouncement,
     createTaskComment,
     listConversations,
     createConversation,
