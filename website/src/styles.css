@@ -913,6 +913,37 @@ a {
   margin-top: 12px;
 }
 
+.auth-notice {
+  margin-top: 12px;
+  border: 1px solid #f2c17d;
+  border-radius: 8px;
+  background: #fff8ed;
+  color: #8a4b11;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 9px;
+  align-items: start;
+  padding: 10px 12px;
+}
+
+.auth-notice strong,
+.auth-notice small {
+  display: block;
+}
+
+.auth-notice strong {
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.auth-notice small {
+  margin-top: 2px;
+  color: #80521f;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .auth-note {
   margin: 10px 0 0;
   color: #74767c;

@@ -52,6 +52,8 @@ Current Google setup for the local public Mac host:
 - Authorized redirect URI: `https://useincircle.app/api/auth/google/callback`.
 - The real `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` live only in the ignored local file `.env.production.local` and the generated local LaunchAgent plist.
 
+While the Google OAuth app remains in `External` / `Testing`, every Google account used by invited family members or testers must be added under Google Auth Platform test users before they can complete sign-in. If one invited person succeeds and another gets a Google account/access error, first check whether the failing Gmail address is on the test-user list. If the invite link was opened inside LINE and Google sign-in fails, ask the person to open the same link in Safari or Chrome and try again.
+
 ## Provider Priority
 
 Recommended launch order:

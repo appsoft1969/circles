@@ -95,6 +95,24 @@ function safeRedirectPath(value) {
   return value;
 }
 
+function oauthParam(req, key) {
+  return req.method === "POST" ? req.body?.[key] : req.query[key];
+}
+
+function safeAuthReason(value) {
+  return String(value || "oauth_failed")
+    .replace(/[^a-zA-Z0-9_.-]/g, "_")
+    .slice(0, 80) || "oauth_failed";
+}
+
+function authErrorRedirectPath(value, { provider, reason }) {
+  const url = new URL(safeRedirectPath(value), "https://useincircle.app");
+  url.searchParams.set("auth_status", "error");
+  url.searchParams.set("auth_provider", provider);
+  url.searchParams.set("auth_reason", safeAuthReason(reason));
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
 function parseAppleUser(value) {
   if (!value) return null;
   try {
@@ -159,25 +177,47 @@ app.get("/api/auth/:provider/start", route(async (req, res) => {
 
 app.all("/api/auth/:provider/callback", route(async (req, res) => {
   const provider = req.params.provider;
-  const code = req.method === "POST" ? req.body?.code : req.query.code;
-  const state = req.method === "POST" ? req.body?.state : req.query.state;
-  if (!code || !state) throw new StoreError(400, "OAuth callback requires code and state");
+  const code = oauthParam(req, "code");
+  const state = oauthParam(req, "state");
+  const oauthError = oauthParam(req, "error");
+
+  if (oauthError) {
+    const oauthState = state ? await store.consumeOAuthState(provider, state) : null;
+    return res.redirect(authErrorRedirectPath(oauthState?.redirectAfter || "/", {
+      provider,
+      reason: oauthError,
+    }));
+  }
+
+  if (!code || !state) {
+    return res.redirect(authErrorRedirectPath("/", { provider, reason: "missing_callback" }));
+  }
 
   const oauthState = await store.consumeOAuthState(provider, state);
-  if (!oauthState) throw new StoreError(400, "OAuth state is invalid or expired");
+  if (!oauthState) {
+    return res.redirect(authErrorRedirectPath("/", { provider, reason: "expired_state" }));
+  }
 
   const rawUser = provider === "apple" ? parseAppleUser(req.body?.user) : null;
-  const { identity } = await exchangeOAuthCode({
-    provider,
-    req,
-    code,
-    nonce: oauthState.nonce,
-    rawUser,
-  });
-  const { profile } = await store.upsertAuthIdentity(identity);
-  const { token } = await store.createAuthSession(profile.id, requestMetadata(req, provider));
-  setSessionCookie(res, token);
-  res.redirect(safeRedirectPath(oauthState.redirectAfter || "/"));
+  try {
+    const { identity } = await exchangeOAuthCode({
+      provider,
+      req,
+      code,
+      nonce: oauthState.nonce,
+      rawUser,
+    });
+    const { profile } = await store.upsertAuthIdentity(identity);
+    const { token } = await store.createAuthSession(profile.id, requestMetadata(req, provider));
+    setSessionCookie(res, token);
+    res.redirect(safeRedirectPath(oauthState.redirectAfter || "/"));
+  } catch (error) {
+    console.error(error);
+    res.redirect(authErrorRedirectPath(oauthState.redirectAfter || "/", {
+      provider,
+      reason: "login_failed",
+    }));
+  }
 }));
 
 app.post("/api/auth/logout", route(async (req, res) => {

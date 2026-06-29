@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  AlertCircle,
   ArrowLeft,
   Bell,
   BellDot,
@@ -245,6 +246,60 @@ async function api(path, options) {
     throw new Error(error.error || response.statusText);
   }
   return response.json();
+}
+
+const authProviderNames = {
+  apple: "Apple",
+  google: "Google",
+  line: "LINE",
+};
+
+function authNoticeFromLocation(location = window.location) {
+  const params = new URLSearchParams(location.search);
+  if (params.get("auth_status") !== "error") return null;
+
+  const provider = params.get("auth_provider") || "google";
+  const providerName = authProviderNames[provider] ?? "登入";
+  const reason = params.get("auth_reason") || "oauth_failed";
+
+  if (reason === "access_denied") {
+    return {
+      title: `${providerName} 帳號目前不能登入`,
+      body: provider === "google"
+        ? "可能是這個 Google 帳號還沒加入測試名單，或剛剛取消了授權。請換已允許的帳號，或請圈主把這個 Email 加進測試名單。"
+        : "剛剛沒有完成授權。你可以再試一次，或換另一個登入方式。",
+    };
+  }
+
+  if (reason === "disallowed_useragent") {
+    return {
+      title: "請改用手機瀏覽器開啟",
+      body: `${providerName} 不一定允許在 App 內建瀏覽器登入。請用 Safari 或 Chrome 開啟這個連結，再登入一次。`,
+    };
+  }
+
+  if (["expired_state", "missing_callback"].includes(reason)) {
+    return {
+      title: "登入時間太久了",
+      body: "這次登入已經失效，請回到剛剛的頁面再按一次登入。",
+    };
+  }
+
+  return {
+    title: `${providerName} 登入沒有完成`,
+    body: provider === "google"
+      ? "請確認這個 Google 帳號已加入測試名單；如果是從 LINE 點進來，請改用 Safari 或 Chrome 開啟連結。"
+      : "請稍後再試一次，或換另一個登入方式。",
+  };
+}
+
+function clearAuthNoticeFromUrl() {
+  if (!window.location.search.includes("auth_status=error")) return;
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `${window.location.pathname}${window.location.hash}`,
+  );
 }
 
 function registerAppServiceWorker() {
@@ -511,6 +566,7 @@ function App() {
   });
   const [route, setRoute] = useState({ name: "dashboard" });
   const [toast, setToast] = useState("");
+  const [authNotice, setAuthNotice] = useState(() => authNoticeFromLocation());
   const [memberInvitationBusyId, setMemberInvitationBusyId] = useState("");
 
   async function loadAppData() {
@@ -551,6 +607,12 @@ function App() {
 
   useEffect(() => {
     async function load() {
+      const nextAuthNotice = authNoticeFromLocation();
+      if (nextAuthNotice) {
+        setAuthNotice(nextAuthNotice);
+        setToast(nextAuthNotice.body);
+        clearAuthNoticeFromUrl();
+      }
       const data = await loadAppData();
       const joinMatch = window.location.pathname.match(/^\/join\/([^/]+)/);
       if (joinMatch) {
@@ -572,6 +634,12 @@ function App() {
 
     load().catch((error) => setState((current) => ({ ...current, loading: false, error: error.message })));
   }, []);
+
+  useEffect(() => {
+    if (state.session?.authenticated && authNotice) {
+      setAuthNotice(null);
+    }
+  }, [state.session?.authenticated, authNotice]);
 
   useEffect(() => {
     if (state.loading) return undefined;
@@ -714,6 +782,7 @@ function App() {
         memberInvitations={state.memberInvitations}
         session={state.session}
         authProviders={state.authProviders}
+        authNotice={authNotice}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -749,6 +818,7 @@ function App() {
       <CircleCreator
         session={state.session}
         providers={state.authProviders}
+        authNotice={authNotice}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -770,6 +840,7 @@ function App() {
         task={selectedTask}
         session={state.session}
         providers={state.authProviders}
+        authNotice={authNotice}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -887,6 +958,7 @@ function App() {
         code={route.inviteCode}
         session={state.session}
         providers={state.authProviders}
+        authNotice={authNotice}
         go={go}
         refresh={refresh}
         setToast={setToast}
@@ -1090,6 +1162,7 @@ function Dashboard({
   memberInvitations = [],
   session,
   authProviders,
+  authNotice,
   go,
   refresh,
   setToast,
@@ -1114,6 +1187,7 @@ function Dashboard({
         <AuthPanel
           session={session}
           providers={authProviders}
+          authNotice={authNotice}
           go={go}
           refresh={refresh}
           setToast={setToast}
@@ -1506,7 +1580,20 @@ function AuthStatusButton({ session }) {
   );
 }
 
-function AuthPanel({ session, providers, go, refresh, setToast }) {
+function AuthNotice({ notice }) {
+  if (!notice) return null;
+  return (
+    <div className="auth-notice">
+      <AlertCircle size={18} />
+      <span>
+        <strong>{notice.title}</strong>
+        <small>{notice.body}</small>
+      </span>
+    </div>
+  );
+}
+
+function AuthPanel({ session, providers, authNotice, go, refresh, setToast }) {
   const memberships = session?.memberships ?? [];
   const visibleMemberships = memberships.slice(0, 3);
   const extraMemberships = Math.max(0, memberships.length - visibleMemberships.length);
@@ -1636,6 +1723,7 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
           <small>iPhone 用 Apple，Android 用 Google，也可用 LINE。</small>
         </span>
       </div>
+      <AuthNotice notice={authNotice} />
       <div className="provider-list">
         {providers.map((provider) => (
           provider.configured ? (
@@ -1651,11 +1739,12 @@ function AuthPanel({ session, providers, go, refresh, setToast }) {
           )
         ))}
       </div>
+      <p className="auth-note">如果是從 LINE 點連結卻看到 Google 錯誤，請用 Safari 或 Chrome 開啟同一個連結再登入。</p>
     </section>
   );
 }
 
-function CircleCreator({ session, providers, go, refresh, setToast }) {
+function CircleCreator({ session, providers, authNotice, go, refresh, setToast }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1693,7 +1782,7 @@ function CircleCreator({ session, providers, go, refresh, setToast }) {
           <h1>先確認你是誰，再建立圈子</h1>
           <p>圈子不會公開被搜尋。建立後，你會成為圈主，再邀請認識的人加入。</p>
         </section>
-        <AuthPanel session={session} providers={providers} go={go} refresh={refresh} setToast={setToast} />
+        <AuthPanel session={session} providers={providers} authNotice={authNotice} go={go} refresh={refresh} setToast={setToast} />
       </>
     );
   }
@@ -2794,7 +2883,7 @@ function CircleAudit({ circle, circleId, session, go }) {
   );
 }
 
-function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
+function CircleInviteJoin({ code, session, providers, authNotice, go, refresh, setToast }) {
   const [invite, setInvite] = useState(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
@@ -2876,6 +2965,7 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
                   <small>用手機常用帳號登入後，就能把你加進這個圈子。</small>
                 </span>
               </div>
+              <AuthNotice notice={authNotice} />
               <div className="provider-list">
                 {providers.map((provider) => (
                   provider.configured ? (
@@ -2891,6 +2981,7 @@ function CircleInviteJoin({ code, session, providers, go, refresh, setToast }) {
                   )
                 ))}
               </div>
+              <p className="auth-note">如果是從 LINE 點連結卻看到 Google 錯誤，請用 Safari 或 Chrome 開啟同一個連結再登入。</p>
             </section>
           ) : (
             <div className="sticky-actions">
@@ -5835,7 +5926,7 @@ function participantNameFromSession(session) {
   return session?.authenticated ? (session.profile?.displayName || "").trim() : "";
 }
 
-function JoinTask({ task, session, providers = [], go, refresh, setToast, updateTask }) {
+function JoinTask({ task, session, providers = [], authNotice, go, refresh, setToast, updateTask }) {
   const suggestedParticipantName = participantNameFromSession(session);
   const [step, setStep] = useState("items");
   const [name, setName] = useState(() => suggestedParticipantName);
@@ -6086,6 +6177,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
               <small>也可以直接填；若先用手機帳號登入，回來這張填單時會帶入會員名稱。</small>
             </span>
           </div>
+          <AuthNotice notice={authNotice} />
           <div className="provider-list">
             {providers.map((provider) => (
               provider.configured ? (
@@ -6101,7 +6193,7 @@ function JoinTask({ task, session, providers = [], go, refresh, setToast, update
               )
             ))}
           </div>
-          <p className="auth-note">不登入也可以繼續填單。</p>
+          <p className="auth-note">不登入也可以繼續填單；如果是從 LINE 點連結卻看到 Google 錯誤，請用 Safari 或 Chrome 開啟同一個連結再登入。</p>
         </section>
       ) : null}
       <section className="section discussion-section">
